@@ -40,10 +40,7 @@ public sealed class PromptComposer
 
         【特别警告】
         - 输出必须是纯中文。
-        - 如需推进章节，请在回复末尾添加如下脚本（不要用代码块包裹，且单独占一行）：
-          <update>
-          _.set('chapter', 新的章节数);
-          </update>
+        - 坚决不要在此开场白阶段包含任何类似 `_.set('chapter', ...);` 的章节推进脚本。
         """;
     }
 

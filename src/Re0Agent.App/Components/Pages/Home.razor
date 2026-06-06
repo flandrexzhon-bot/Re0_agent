@@ -185,7 +185,7 @@ else
             {
                 <div class="grimoire-entry gm-narrative">
                     <div class="entry-header"><span>@entry.CodeIndex (@entry.TimeSpan)</span></div>
-                    <div class="entry-body">@((MarkupString)(entry.ChronicleText ?? ""))</div>
+                    <div class="entry-body">@((MarkupString)CleanEjsText(entry.ChronicleText))</div>
                 </div>
             }
 
@@ -198,7 +198,7 @@ else
                 {
                     <div class="grimoire-entry gm-narrative">
                         <div class="entry-header"><span>GM 引入叙事</span></div>
-                        <div class="entry-body">@((MarkupString)(round.GmOpening ?? ""))</div>
+                        <div class="entry-body">@((MarkupString)CleanEjsText(round.GmOpening))</div>
                     </div>
                 }
 
@@ -209,13 +209,13 @@ else
                             <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
                             <div class="bubble-content">
                                 <span class="bubble-sender">@turn.CharacterName</span>
-                                <div class="bubble-text">@((MarkupString)(turn.ActionText ?? ""))</div>
+                                <div class="bubble-text">@((MarkupString)CleanEjsText(turn.ActionText))</div>
                                 @if (!turn.Skipped && turn.DiceResult is not null)
                                 {
                                     <div class="bubble-details">
                                         @if (!string.IsNullOrWhiteSpace(turn.GmJudgement))
                                         {
-                                            <div class="bubble-judgement">GM 行为判定: @((MarkupString)(turn.GmJudgement ?? ""))</div>
+                                            <div class="bubble-judgement">GM 行为判定: @((MarkupString)CleanEjsText(turn.GmJudgement))</div>
                                         }
                                         <div class="dice-result-card @GetDiceSuccessClass(turn.DiceResult.SuccessLevel)">
                                             <span class="dice-icon">🎲</span>
@@ -223,7 +223,7 @@ else
                                         </div>
                                         @if (!string.IsNullOrWhiteSpace(turn.ResultResponse))
                                         {
-                                            <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@((MarkupString)(turn.ResultResponse ?? ""))</div>
+                                            <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@((MarkupString)CleanEjsText(turn.ResultResponse))</div>
                                         }
                                     </div>
                                 }
@@ -236,7 +236,7 @@ else
                 {
                     <div class="grimoire-entry gm-narrative">
                         <div class="entry-header"><span>GM 回合总结</span></div>
-                        <div class="entry-body">@((MarkupString)(round.GmSummary ?? ""))</div>
+                        <div class="entry-body">@((MarkupString)CleanEjsText(round.GmSummary))</div>
                     </div>
                 }
 
@@ -1430,5 +1430,21 @@ else
         {
             isBusy = false;
         }
+    }
+
+    private string CleanEjsText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+        // 1. Remove <update>...</update> blocks (including the tags themselves)
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"<update>[\s\S]*?</update>", "");
+
+        // 2. Remove any individual _.set(...) statements (like _.set('chapter', X); or _.set('chapter', 'location'))
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"_\.set\(\s*['""].*?['""]\s*,\s*.*?\);?", "");
+
+        // 3. Trim extra newlines or spaces left behind
+        cleaned = cleaned.Trim();
+
+        return cleaned;
     }
 }
