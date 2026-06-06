@@ -1,0 +1,133 @@
+using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Re0Agent.Core.Database;
+using Re0Agent.Core.Services.Agent;
+using Re0Agent.Core.Services.Database;
+using Re0Agent.Core.Services.Llm;
+
+namespace Re0Agent.Tests;
+
+public sealed class Phase2AgentTests
+{
+    [Fact]
+    public async Task SseParserReadsContentDeltas()
+    {
+        const string payload = """
+            data: {"choices":[{"delta":{"content":"第一段"}}]}
+
+            data: {"choices":[{"delta":{"content":"第二段"}}]}
+
+            data: [DONE]
+
+            """;
+
+        using var reader = new StringReader(payload);
+        var deltas = new List<string>();
+
+        await foreach (var delta in SseParser.ReadContentDeltasAsync(reader))
+        {
+            deltas.Add(delta);
+        }
+
+        Assert.Equal(["第一段", "第二段"], deltas);
+    }
+
+    [Fact]
+    public void SqlSafetyValidatorRejectsUnsafeStatements()
+    {
+        var validator = new SqlSafetyValidator();
+
+        Assert.True(validator.ValidateStatement("INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text) VALUES (1, 'AM0001', '2024-04-01 09:00 ~ 2024-04-01 09:10', '摘要', '正文')").IsValid);
+        Assert.False(validator.ValidateStatement("DELETE FROM chronicle WHERE row_id = 1").IsValid);
+        Assert.False(validator.ValidateStatement("DROP TABLE chronicle").IsValid);
+        Assert.False(validator.ValidateStatement("INSERT INTO save_points (save_id) VALUES (1)").IsValid);
+        Assert.False(validator.ValidateStatement("UPDATE chronicle SET summary = 'a'; UPDATE chronicle SET summary = 'b'").IsValid);
+    }
+
+    [Fact]
+    public async Task OrchestratorRunsFakeRoundAndWritesChronicleAndMemory()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.RunRoundAsync("谨慎观察王都周围的动静。", skipPlayerTurn: false);
+
+            Assert.True(round.UsedFakeClient);
+            Assert.NotEmpty(round.Events);
+            Assert.Single(round.CharacterTurns);
+            Assert.Equal("菜月昴", round.CharacterTurns[0].CharacterName);
+
+            Assert.Equal(1, await context.Chronicle.CountAsync());
+            Assert.Equal(1, await context.CharacterMemory.CountAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task OrchestratorHonorsSkippedPlayerTurn()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.RunRoundAsync(null, skipPlayerTurn: true);
+
+            var turn = Assert.Single(round.CharacterTurns);
+            Assert.True(turn.Skipped);
+            Assert.Equal("无", turn.DiceResult?.Command);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context)
+    {
+        var configResolver = new AgentConfigResolver(context);
+        var promptComposer = new PromptComposer();
+        var fakeClient = new FakeLlmClient();
+        var gmAgent = new GmAgent(context, configResolver, promptComposer, fakeClient);
+        var characterAgent = new CharacterAgentService(context, configResolver, promptComposer, fakeClient);
+        var formAgent = new FormAgent(context, configResolver, promptComposer, fakeClient);
+        var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
+
+        return new AgentOrchestrator(context, gmAgent, characterAgent, formAgent, executor);
+    }
+
+    private static Re0AgentDbContext CreateContext(string databasePath)
+    {
+        var options = new DbContextOptionsBuilder<Re0AgentDbContext>()
+            .UseSqlite($"Data Source={databasePath}")
+            .Options;
+
+        return new Re0AgentDbContext(options);
+    }
+
+    private static string CreateTempDatabasePath()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "re0agent-tests");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{Guid.NewGuid():N}.db");
+    }
+
+    private static void DeleteIfExists(string databasePath)
+    {
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        if (File.Exists(databasePath))
+        {
+            File.Delete(databasePath);
+        }
+    }
+}

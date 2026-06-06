@@ -182,15 +182,15 @@ public static class DatabaseSchema
         """
         CREATE TABLE IF NOT EXISTS agent_config (
           config_id INTEGER PRIMARY KEY,
-          agent_type TEXT NOT NULL,
+          agent_type TEXT NOT NULL CHECK(agent_type IN ('GM', 'Character', 'Form')),
           agent_name TEXT NOT NULL UNIQUE,
           api_endpoint TEXT NOT NULL,
           api_key TEXT NOT NULL,
           model_name TEXT NOT NULL,
-          temperature REAL DEFAULT 0.7,
-          max_tokens INTEGER DEFAULT 4096,
+          temperature REAL DEFAULT 0.7 CHECK(temperature >= 0 AND temperature <= 2),
+          max_tokens INTEGER DEFAULT 4096 CHECK(max_tokens > 0),
           system_prompt TEXT,
-          enabled INTEGER DEFAULT 1
+          enabled INTEGER DEFAULT 1 CHECK(enabled IN (0, 1))
         );
         """,
         """

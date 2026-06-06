@@ -9,6 +9,7 @@ public sealed class CharacterTurn
     public string? PlayerInstruction { get; set; }
     public string? ActionText { get; set; }
     public string? DiceCommand { get; set; }
+    public string? GmJudgement { get; set; }
     public DiceResult? DiceResult { get; set; }
     public string? ResultResponse { get; set; }
     public bool Skipped { get; set; }

@@ -122,6 +122,62 @@ h1:focus {
     padding: 0.45rem 0.55rem;
 }
 
+.round-console {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.round-console textarea {
+    border: 1px solid #c9d2dc;
+    border-radius: 6px;
+    font: inherit;
+    min-height: 8rem;
+    padding: 0.75rem;
+    resize: vertical;
+    width: 100%;
+}
+
+.inline-toggle {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.45rem;
+}
+
+.primary-action {
+    background: #1b6ec2;
+    border: 0;
+    border-radius: 6px;
+    color: #fff;
+    justify-self: start;
+    min-height: 2.4rem;
+    padding: 0 1rem;
+}
+
+.primary-action:disabled {
+    background: #8aa6c0;
+}
+
+.round-log {
+    margin-top: 1rem;
+}
+
+.round-log ol {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.round-log li {
+    margin-bottom: 0.6rem;
+    white-space: pre-wrap;
+}
+
+.error-panel {
+    border-color: #d45c5c;
+    color: #8a1f1f;
+    margin-top: 1rem;
+}
+
 #blazor-error-ui {
     background: lightyellow;
     bottom: 0;

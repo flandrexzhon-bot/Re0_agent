@@ -1,28 +1,90 @@
 @page "/"
+@using Re0Agent.Core.Models
+@using Re0Agent.Core.Services.Agent
+@inject AgentOrchestrator Orchestrator
 
 <PageTitle>Re0Agent</PageTitle>
 
 <section class="page-heading">
     <h1>互动小说</h1>
-    <p>大回合：未开始</p>
+    <p>@StatusText</p>
 </section>
 
 <section class="status-grid">
     <div class="status-panel">
         <span>GM</span>
-        <strong>等待开场</strong>
+        <strong>@(lastRound?.GmOpening is null ? "等待开场" : "已开场")</strong>
     </div>
     <div class="status-panel">
         <span>角色位号</span>
-        <strong>未分配</strong>
+        <strong>@(lastRound?.CharacterTurns.Count ?? 0)</strong>
     </div>
     <div class="status-panel">
-        <span>主角</span>
-        <strong>角色Agent</strong>
+        <span>LLM</span>
+        <strong>@(lastRound?.UsedFakeClient == false ? "真实API" : "Fake")</strong>
     </div>
 </section>
 
-<section class="work-surface">
-    <h2>当前场景</h2>
-    <p>Phase 1 基础框架已预留互动小说入口。</p>
+<section class="work-surface round-console">
+    <h2>大回合</h2>
+    <textarea @bind="playerInput" rows="5" placeholder="输入主角行动"></textarea>
+    <label class="inline-toggle">
+        <input type="checkbox" @bind="skipPlayerTurn" />
+        <span>跳过主角回合</span>
+    </label>
+    <button class="primary-action" type="button" disabled="@isRunning" @onclick="RunRoundAsync">
+        @(isRunning ? "运行中..." : "开始大回合")
+    </button>
 </section>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <section class="work-surface error-panel">
+        <h2>错误</h2>
+        <p>@errorMessage</p>
+    </section>
+}
+
+@if (lastRound is not null)
+{
+    <section class="work-surface round-log">
+        <h2>@lastRound.RoundIndex</h2>
+        <ol>
+            @foreach (var entry in lastRound.Events)
+            {
+                <li>@entry</li>
+            }
+        </ol>
+    </section>
+}
+
+@code {
+    private string playerInput = string.Empty;
+    private bool skipPlayerTurn;
+    private bool isRunning;
+    private string? errorMessage;
+    private GameRound? lastRound;
+
+    private string StatusText => lastRound is null
+        ? "大回合：未开始"
+        : $"大回合：{lastRound.RoundIndex}";
+
+    private async Task RunRoundAsync()
+    {
+        isRunning = true;
+        errorMessage = null;
+
+        try
+        {
+            lastRound = await Orchestrator.RunRoundAsync(playerInput, skipPlayerTurn);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+}
