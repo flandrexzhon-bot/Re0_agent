@@ -204,7 +204,16 @@ else
             @foreach (var entry in chronicles)
             {
                 <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header"><span>@entry.CodeIndex (@entry.TimeSpan)</span></div>
+                    <div class="entry-header">
+                        @if (entry.CodeIndex == "AM0000")
+                        {
+                            <span>前序故事</span>
+                        }
+                        else
+                        {
+                            <span>@entry.CodeIndex (@entry.TimeSpan)</span>
+                        }
+                    </div>
                     <div class="entry-body">@((MarkupString)CleanEjsText(entry.ChronicleText))</div>
                 </div>
             }
@@ -783,18 +792,13 @@ else
 
     private async Task BeginRoundAsync()
     {
-        await BeginRoundAsync(null);
-    }
-
-    private async Task BeginRoundAsync(string? customOpening)
-    {
         isBusy = true;
         phase = RoundPhase.GmRunning;
         errorMessage = null;
         try
         {
             // 第一阶段：GM 开场
-            var round = await Orchestrator.BeginRoundAsync(customOpening, onStepCompleted: async (r) =>
+            var round = await Orchestrator.BeginRoundAsync(onStepCompleted: async (r) =>
             {
                 await AutoSaveChatSessionAsync();
                 StateHasChanged();
@@ -803,6 +807,7 @@ else
             activeRound = round;
             sessionRounds.Add(round);
             await AutoSaveChatSessionAsync();
+            isPrologueStage = false;
 
             if (round.DeathReturnTriggered)
             {
@@ -910,6 +915,7 @@ else
             sessionRounds.Clear();
             activeRound = null;
             phase = RoundPhase.Idle;
+            isPrologueStage = false;
             await LoadDatabaseStateAsync();
             await AutoSaveChatSessionAsync();
         }
@@ -940,6 +946,7 @@ else
             }
             activeRound = null;
             phase = RoundPhase.Idle;
+            isPrologueStage = false;
             
             await LoadDatabaseStateAsync();
         }
@@ -972,6 +979,7 @@ else
             sessionRounds.Clear();
             activeRound = null;
             phase = RoundPhase.Idle;
+            isPrologueStage = false;
 
             await LoadDatabaseStateAsync();
             
@@ -1005,6 +1013,7 @@ else
             sessionRounds.Clear();
             activeRound = null;
             phase = RoundPhase.Idle;
+            isPrologueStage = false;
 
             chatSessions = (await SessionService.ListSessionsAsync()).ToList();
             var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
@@ -1045,7 +1054,11 @@ else
             hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
             templates = await TemplateService.ListTemplatesAsync();
 
-            bool isChatEmpty = sessionRounds.Count == 0;
+            if (sessionRounds.Count > 0)
+            {
+                isPrologueStage = false;
+            }
+            bool isChatEmpty = sessionRounds.Count == 0 && !isPrologueStage;
             if ((!hasProtagonist || isChatEmpty) && !isInitializingGame && !isStartingAdventure)
             {
                 isInitializingGame = true;
@@ -1212,6 +1225,7 @@ else
     }
 
     private bool isInitializingGame = false;
+    private bool isPrologueStage = false;
     private bool isStartingAdventure = false;
     private int initStep = 1;
     private string customOpeningMessage = string.Empty;
@@ -1421,32 +1435,40 @@ else
                 await TemplateService.ApplyTemplateAsync(selectedTemplateId, selectedChapter);
             }
 
+            if (!string.IsNullOrWhiteSpace(customOpeningMessage))
+            {
+                var prologueText = customOpeningMessage.Trim();
+                if (prologueText.Length < 200)
+                {
+                    prologueText = prologueText + "\n" + new string(' ', 200 - prologueText.Length);
+                }
+                else if (prologueText.Length > 600)
+                {
+                    prologueText = prologueText.Substring(0, 600);
+                }
+
+                var nowStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+                var prologueEntry = new ChronicleEntry
+                {
+                    CodeIndex = "AM0000",
+                    TimeSpan = $"{nowStr} ~ {nowStr}",
+                    Summary = "背景介绍",
+                    ChronicleText = prologueText
+                };
+                DbContext.Chronicle.Add(prologueEntry);
+                await DbContext.SaveChangesAsync();
+            }
+
+            customOpeningMessage = string.Empty;
             sessionRounds.Clear();
             activeRound = null;
             phase = RoundPhase.Idle;
             isInitializingGame = false;
-            isStartingAdventure = true;
+            isStartingAdventure = false;
+            isPrologueStage = true;
             
             await LoadDatabaseStateAsync();
             await AutoSaveChatSessionAsync();
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await InvokeAsync(async () =>
-                    {
-                        await BeginRoundAsync(customOpeningMessage);
-                        customOpeningMessage = string.Empty;
-                        isStartingAdventure = false;
-                        StateHasChanged();
-                    });
-                }
-                catch
-                {
-                    isStartingAdventure = false;
-                }
-            });
         }
         catch (Exception ex)
         {

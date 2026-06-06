@@ -256,13 +256,23 @@ public sealed class Phase2AgentTests
         try
         {
             await using var context = CreateContext(databasePath);
+            await Re0Agent.Core.Database.DatabaseInitializer.InitializeAsync(context);
             var orchestrator = CreateOrchestrator(context);
 
-            const string customMessage = "【自定义开场】这是来自世界的神秘意志开场。";
-            var round = await orchestrator.BeginRoundAsync(customOpening: customMessage);
+            var customMessage = "【自定义开场】这是来自世界的神秘意志开场。".PadRight(200);
+            context.Chronicle.Add(new ChronicleEntry
+            {
+                CodeIndex = "AM0000",
+                TimeSpan = "2026-06-06 12:00 ~ 2026-06-06 12:00",
+                Summary = "前序故事",
+                ChronicleText = customMessage
+            });
+            await context.SaveChangesAsync();
 
-            Assert.Equal(customMessage, round.GmOpening);
-            Assert.Contains(customMessage, round.Events);
+            var round = await orchestrator.BeginRoundAsync();
+
+            Assert.False(string.IsNullOrWhiteSpace(round.GmOpening));
+            Assert.Contains(round.GmOpening, round.Events);
         }
         finally
         {

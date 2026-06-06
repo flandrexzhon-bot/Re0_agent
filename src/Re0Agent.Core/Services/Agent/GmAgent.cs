@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Llm;
@@ -27,6 +28,11 @@ public sealed class GmAgent(
             },
             cancellationToken);
 
+        var prologue = await dbContext.Chronicle.AsNoTracking()
+            .Where(c => c.CodeIndex == "AM0000")
+            .Select(c => c.ChronicleText)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -35,7 +41,7 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, ragContext))
+                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, ragContext, prologue))
                 ]
             },
             cancellationToken);

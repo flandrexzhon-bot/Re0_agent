@@ -41,7 +41,6 @@ public sealed class AgentOrchestrator(
     /// 第一阶段：初始化、GM开场。主角和NPC回合尚未执行。
     /// </summary>
     public async Task<GameRound> BeginRoundAsync(
-        string? customOpening = null,
         Func<GameRound, Task>? onStepCompleted = null,
         CancellationToken cancellationToken = default)
     {
@@ -56,14 +55,7 @@ public sealed class AgentOrchestrator(
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         round.PendingProtagonistProfiles = profiles.Where(profile => profile.IsPlayerControlled).ToList();
 
-        if (!string.IsNullOrWhiteSpace(customOpening))
-        {
-            round.GmOpening = customOpening;
-        }
-        else
-        {
-            round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, cancellationToken);
-        }
+        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, cancellationToken);
         round.Events.Add(round.GmOpening);
 
         if (onStepCompleted is not null)

@@ -9,7 +9,8 @@ public sealed class PromptComposer
     public string ComposeGmOpening(
         GlobalState? globalState,
         IReadOnlyList<CharacterAgentProfile> profiles,
-        RagContext? ragContext = null)
+        RagContext? ragContext = null,
+        string? prologue = null)
     {
         var stateText = globalState is null
             ? "当前数据库无global_state，请自行规划合理的开局描述。"
@@ -18,20 +19,24 @@ public sealed class PromptComposer
         var characters = string.Join("，", profiles.Select(profile =>
             profile.IsPlayerControlled ? $"{profile.CharacterName}(主角/固定最后行动)" : profile.CharacterName));
 
+        var prologueText = string.IsNullOrWhiteSpace(prologue)
+            ? ""
+            : $"\n        - 前序背景故事 (由玩家设定): {prologue}";
+
         return $"""
         【身份与角色】
         你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent。
         你是幕后的总控者、规则裁判以及整个世界的推动者。
 
         【当前游戏环境与状态】
-        - 全局状态: {stateText}
+        - 全局状态: {stateText}{prologueText}
         - 当前场景在场的角色: {characters}
         
         【设定背景 (RAG 提取)】
         {FormatRagContext(ragContext)}
 
         【职责与输出指令】
-        1. 描述当前场景开场：结合当前地点、时间、剧情变迁和在场角色，给出极具画面感的简短开局引入描述。
+        1. 描述当前场景开场：结合当前地点、时间、剧情变迁、前序背景故事和在场角色，给出极具画面感的简短开局引入描述。
         2. 决定 NPC 行动倾向，并根据剧情紧急度（如战斗中敏捷高者先行，日常按叙事需要）或角色状态，为在场所有角色（包括非玩家 NPC 以及最后行动的主角）与环境分配行动“位号”（行动顺序序列）。
         3. 位号规范：你必须以清晰的列表输出位号安排，每个在场角色占一行，主角固定在最后行动。格式示例如下：
            - 1号位：环境与路人反应
