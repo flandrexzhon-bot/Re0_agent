@@ -161,6 +161,9 @@ public static class DatabaseSchema
           trigger_reason TEXT NOT NULL,
           global_state_snapshot TEXT NOT NULL,
           protagonist_snapshot TEXT NOT NULL,
+          world_map_snapshot TEXT NOT NULL DEFAULT '[]',
+          map_elements_snapshot TEXT NOT NULL DEFAULT '[]',
+          factions_snapshot TEXT NOT NULL DEFAULT '[]',
           npc_snapshot TEXT NOT NULL,
           inventory_snapshot TEXT NOT NULL,
           equipment_snapshot TEXT NOT NULL,
@@ -202,5 +205,12 @@ public static class DatabaseSchema
           is_default INTEGER DEFAULT 0
         );
         """
+    ];
+
+    public static readonly (string Name, string Definition)[] SavePointUpgradeColumns =
+    [
+        ("world_map_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
+        ("map_elements_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
+        ("factions_snapshot", "TEXT NOT NULL DEFAULT '[]'")
     ];
 }

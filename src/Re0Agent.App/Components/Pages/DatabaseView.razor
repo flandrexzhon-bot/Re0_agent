@@ -1,5 +1,9 @@
 @page "/database"
+@using Re0Agent.Core.Entities
+@using Re0Agent.Core.Services.Database
 @inject DatabaseLocation DatabaseLocation
+@inject SaveSystem SaveSystem
+@inject ProtagonistTemplateService TemplateService
 
 <PageTitle>数据库</PageTitle>
 
@@ -7,6 +11,21 @@
     <h1>数据库</h1>
     <p>@DatabaseLocation.Path</p>
 </section>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+    <section class="work-surface">
+        <p>@statusMessage</p>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <section class="work-surface error-panel">
+        <h2>错误</h2>
+        <p>@errorMessage</p>
+    </section>
+}
 
 <section class="work-surface">
     <h2>Phase 1 表结构</h2>
@@ -17,3 +36,157 @@
         }
     </div>
 </section>
+
+<section class="work-surface">
+    <h2>存档</h2>
+    @if (savePoints.Count == 0)
+    {
+        <p>暂无存档。</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>章节</th>
+                    <th>原因</th>
+                    <th>时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var savePoint in savePoints)
+                {
+                    <tr>
+                        <td>#@savePoint.SaveId</td>
+                        <td>@savePoint.Chapter</td>
+                        <td>@savePoint.TriggerReason</td>
+                        <td>@savePoint.CreatedAt</td>
+                        <td>
+                            <button type="button" disabled="@(savePoint.IsLatest || isBusy)" @onclick="() => DeleteSavePointAsync(savePoint.SaveId)">
+                                删除
+                            </button>
+                            @if (savePoint.IsLatest)
+                            {
+                                <span> 最新</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+<section class="work-surface round-console">
+    <h2>死亡回归</h2>
+    <input @bind="deathCause" placeholder="死因" />
+    <button class="primary-action" type="button" disabled="@isBusy" @onclick="TriggerDeathReturnAsync">
+        手动触发
+    </button>
+</section>
+
+<section class="work-surface">
+    <h2>主角模板</h2>
+    @if (templates.Count == 0)
+    {
+        <p>暂无模板。</p>
+    }
+    else
+    {
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>模板</th>
+                    <th>昴作为NPC</th>
+                    <th>默认</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var template in templates)
+                {
+                    <tr>
+                        <td>@template.TemplateName</td>
+                        <td>@(template.IncludesSubaru == 1 ? "是" : "否")</td>
+                        <td>@(template.IsDefault == 1 ? "是" : "否")</td>
+                        <td>
+                            <button type="button" disabled="@isBusy" @onclick="() => ApplyTemplateAsync(template.TemplateId)">
+                                应用
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<SavePointSummary> savePoints = [];
+    private IReadOnlyList<ProtagonistTemplate> templates = [];
+    private string deathCause = "手动触发死亡回归";
+    private string? statusMessage;
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        savePoints = await SaveSystem.ListSavePointsAsync();
+        templates = await TemplateService.ListTemplatesAsync();
+    }
+
+    private async Task DeleteSavePointAsync(int saveId)
+    {
+        await RunUiActionAsync(async () =>
+        {
+            var deleted = await SaveSystem.DeleteSavePointAsync(saveId);
+            statusMessage = deleted ? $"已删除存档 #{saveId}。" : $"未找到存档 #{saveId}。";
+        });
+    }
+
+    private async Task TriggerDeathReturnAsync()
+    {
+        await RunUiActionAsync(async () =>
+        {
+            var result = await SaveSystem.TriggerDeathReturnAsync(deathCause);
+            statusMessage = $"死亡回归完成：恢复存档 #{result.SavePointId}，瘴气={result.MiasmaLevel}。";
+        });
+    }
+
+    private async Task ApplyTemplateAsync(int templateId)
+    {
+        await RunUiActionAsync(async () =>
+        {
+            var result = await TemplateService.ApplyTemplateAsync(templateId);
+            statusMessage = $"已应用模板“{result.TemplateName}”，主角：{result.ProtagonistName}，初始存档 #{result.SavePointId}。";
+        });
+    }
+
+    private async Task RunUiActionAsync(Func<Task> action)
+    {
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+
+        try
+        {
+            await action();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

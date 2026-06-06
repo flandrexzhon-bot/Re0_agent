@@ -1,6 +1,7 @@
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Llm;
+using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Core.Services.Agent;
 
@@ -8,7 +9,8 @@ public sealed class GmAgent(
     Re0AgentDbContext dbContext,
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
-    ILlmClient llmClient)
+    ILlmClient llmClient,
+    IRagService ragService)
 {
     public async Task<string> CreateOpeningAsync(
         GameRound round,
@@ -17,6 +19,14 @@ public sealed class GmAgent(
     {
         var config = await configResolver.FindConfigAsync("GM", "GM", cancellationToken);
         var state = await dbContext.GlobalStates.FindAsync([1], cancellationToken);
+        var ragContext = await ragService.QueryAsync(
+            new RagQuery
+            {
+                Text = $"{state?.CurrentMajorRegion} {state?.CurrentMinorRegion} {state?.CurrentLocation} {round.PlayerInput} {string.Join(' ', profiles.Select(profile => profile.CharacterName))}",
+                Chapter = round.Chapter
+            },
+            cancellationToken);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -25,7 +35,7 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles))
+                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, ragContext))
                 ]
             },
             cancellationToken);
@@ -40,6 +50,14 @@ public sealed class GmAgent(
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("GM", "GM", cancellationToken);
+        var ragContext = await ragService.QueryAsync(
+            new RagQuery
+            {
+                Text = $"{turn.CharacterName} {turn.ActionText} {round.GmOpening}",
+                Chapter = round.Chapter
+            },
+            cancellationToken);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -48,7 +66,7 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn))
+                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn, ragContext))
                 ]
             },
             cancellationToken);
@@ -62,6 +80,14 @@ public sealed class GmAgent(
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("GM", "GM", cancellationToken);
+        var ragContext = await ragService.QueryAsync(
+            new RagQuery
+            {
+                Text = $"{round.GmOpening} {string.Join(' ', round.CharacterTurns.Select(turn => $"{turn.CharacterName} {turn.ActionText} {turn.GmJudgement}"))}",
+                Chapter = round.Chapter
+            },
+            cancellationToken);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -70,7 +96,7 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmSummary(round))
+                    LlmMessage.User(promptComposer.ComposeGmSummary(round, ragContext))
                 ]
             },
             cancellationToken);

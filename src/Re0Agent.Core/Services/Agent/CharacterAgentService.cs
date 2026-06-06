@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Llm;
+using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Core.Services.Agent;
 
@@ -9,7 +10,8 @@ public sealed class CharacterAgentService(
     Re0AgentDbContext dbContext,
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
-    ILlmClient llmClient)
+    ILlmClient llmClient,
+    IRagService ragService)
 {
     public async Task<IReadOnlyList<CharacterAgentProfile>> LoadActiveProfilesAsync(
         CancellationToken cancellationToken = default)
@@ -62,6 +64,13 @@ public sealed class CharacterAgentService(
             .OrderByDescending(memory => memory.RowId)
             .Take(8)
             .ToListAsync(cancellationToken);
+        var ragContext = await ragService.QueryAsync(
+            new RagQuery
+            {
+                Text = $"{profile.CharacterName} {profile.WorldBookEntryKey} {profile.CurrentStateReference} {round.GmOpening} {playerInstruction} {string.Join(' ', round.CharacterTurns.Select(turn => $"{turn.CharacterName} {turn.ActionText}"))}",
+                Chapter = round.Chapter
+            },
+            cancellationToken);
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest
@@ -71,7 +80,7 @@ public sealed class CharacterAgentService(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的专属角色Agent。"),
-                    LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction))
+                    LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext))
                 ]
             },
             cancellationToken);

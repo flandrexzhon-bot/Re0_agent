@@ -29,6 +29,56 @@ public sealed class DatabaseSchemaTests
 
             var globalStateColumns = await ReadStringsAsync(connection, "PRAGMA table_info(global_state);", 1);
             Assert.Contains("current_chapter", globalStateColumns);
+
+            var savePointColumns = await ReadStringsAsync(connection, "PRAGMA table_info(save_points);", 1);
+            Assert.Contains("world_map_snapshot", savePointColumns);
+            Assert.Contains("map_elements_snapshot", savePointColumns);
+            Assert.Contains("factions_snapshot", savePointColumns);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsyncUpgradesExistingSavePointTableWithSnapshotColumns()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    CREATE TABLE save_points (
+                      save_id INTEGER PRIMARY KEY,
+                      chapter INT NOT NULL,
+                      trigger_reason TEXT NOT NULL,
+                      global_state_snapshot TEXT NOT NULL,
+                      protagonist_snapshot TEXT NOT NULL,
+                      npc_snapshot TEXT NOT NULL,
+                      inventory_snapshot TEXT NOT NULL,
+                      equipment_snapshot TEXT NOT NULL,
+                      quest_snapshot TEXT NOT NULL,
+                      created_at TEXT NOT NULL
+                    );
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+
+            await using var upgradedConnection = new SqliteConnection($"Data Source={databasePath}");
+            await upgradedConnection.OpenAsync();
+            var savePointColumns = await ReadStringsAsync(upgradedConnection, "PRAGMA table_info(save_points);", 1);
+
+            Assert.Contains("world_map_snapshot", savePointColumns);
+            Assert.Contains("map_elements_snapshot", savePointColumns);
+            Assert.Contains("factions_snapshot", savePointColumns);
         }
         finally
         {
@@ -111,6 +161,9 @@ public sealed class DatabaseSchemaTests
                 TriggerReason = "round_end",
                 GlobalStateSnapshot = "{}",
                 ProtagonistSnapshot = "{}",
+                WorldMapSnapshot = "[]",
+                MapElementsSnapshot = "[]",
+                FactionsSnapshot = "[]",
                 NpcSnapshot = "[]",
                 InventorySnapshot = "[]",
                 EquipmentSnapshot = "[]",

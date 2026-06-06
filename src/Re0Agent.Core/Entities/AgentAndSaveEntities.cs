@@ -45,6 +45,15 @@ public sealed class SavePoint
     [Column("protagonist_snapshot")]
     public required string ProtagonistSnapshot { get; set; }
 
+    [Column("world_map_snapshot")]
+    public required string WorldMapSnapshot { get; set; }
+
+    [Column("map_elements_snapshot")]
+    public required string MapElementsSnapshot { get; set; }
+
+    [Column("factions_snapshot")]
+    public required string FactionsSnapshot { get; set; }
+
     [Column("npc_snapshot")]
     public required string NpcSnapshot { get; set; }
 

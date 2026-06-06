@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Database;
+using Re0Agent.Core.Services.Dice;
 
 namespace Re0Agent.Core.Services.Agent;
 
@@ -10,7 +11,9 @@ public sealed class AgentOrchestrator(
     GmAgent gmAgent,
     CharacterAgentService characterAgentService,
     FormAgent formAgent,
-    FormAgentSqlExecutor sqlExecutor)
+    FormAgentSqlExecutor sqlExecutor,
+    DiceEngine diceEngine,
+    SaveSystem saveSystem)
 {
     public async Task<GameRound> RunRoundAsync(
         string? playerInput,
@@ -31,6 +34,7 @@ public sealed class AgentOrchestrator(
         round.Events.Add(round.GmOpening);
 
         var order = 1;
+        string? deathReturnCause = null;
         foreach (var profile in profiles)
         {
             var turn = new CharacterTurn
@@ -59,21 +63,46 @@ public sealed class AgentOrchestrator(
                     cancellationToken);
 
                 turn.GmJudgement = await gmAgent.JudgeTurnAsync(round, turn, cancellationToken);
-                turn.DiceCommand = ReadDiceCommand(turn.GmJudgement);
-                turn.DiceResult = CreatePhaseTwoDiceResult(turn.DiceCommand);
-                turn.ResultResponse = $"{profile.CharacterName}接受判定并完成本回合回应。";
+                turn.DiceResult = await diceEngine.ExecuteAsync(turn.GmJudgement, cancellationToken);
+                turn.DiceCommand = turn.DiceResult.Command;
+                turn.ResultResponse = $"{profile.CharacterName}接受判定：{FormatDiceResult(turn.DiceResult)}。";
+                deathReturnCause = TryReadDeathReturnCause(turn.GmJudgement);
             }
 
             round.CharacterTurns.Add(turn);
             round.Events.Add($"{turn.OrderNumber}. {turn.CharacterName}: {turn.ActionText}");
+            round.Events.Add($"骰子：{FormatDiceResult(turn.DiceResult)}");
+
+            if (deathReturnCause is not null)
+            {
+                round.Events.Add($"死亡回归触发：{deathReturnCause}");
+                break;
+            }
         }
 
         round.GmSummary = await gmAgent.SummarizeAsync(round, cancellationToken);
         round.Events.Add(round.GmSummary);
+        deathReturnCause ??= TryReadDeathReturnCause(round.GmSummary);
 
         var sql = await formAgent.GenerateSqlAsync(round, cancellationToken);
         var execution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
         round.Events.Add($"填表Agent执行SQL：{execution.StatementsExecuted}条。");
+
+        var latestChronicleIndex = await ReadLatestChronicleIndexAsync(cancellationToken);
+        if (deathReturnCause is not null)
+        {
+            var deathReturn = await saveSystem.TriggerDeathReturnAsync(
+                deathReturnCause,
+                latestChronicleIndex,
+                cancellationToken);
+            round.Events.Add($"死亡回归完成：恢复存档#{deathReturn.SavePointId}，第{deathReturn.LoopCount}次循环，瘴气={deathReturn.MiasmaLevel}。");
+        }
+        else
+        {
+            var savePoint = await saveSystem.CreateSavePointAsync("round_end", cancellationToken);
+            round.Events.Add($"自动存档：#{savePoint.SaveId}，章节{savePoint.Chapter}。");
+        }
+
         round.CompletedAt = DateTimeOffset.UtcNow;
 
         return round;
@@ -91,33 +120,57 @@ public sealed class AgentOrchestrator(
         return state?.CurrentChapter ?? 1;
     }
 
-    private static string ReadDiceCommand(string? judgement)
+    private async Task<string?> ReadLatestChronicleIndexAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(judgement))
-        {
-            return "无";
-        }
-
-        if (judgement.Contains("必成", StringComparison.Ordinal))
-        {
-            return "必成";
-        }
-
-        if (judgement.Contains("必败", StringComparison.Ordinal))
-        {
-            return "必败";
-        }
-
-        return "无";
+        return await dbContext.Chronicle.AsNoTracking()
+            .OrderByDescending(entry => entry.RowId)
+            .Select(entry => entry.CodeIndex)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private static DiceResult CreatePhaseTwoDiceResult(string command)
+    private static string? TryReadDeathReturnCause(string? text)
     {
-        return command switch
+        if (string.IsNullOrWhiteSpace(text))
         {
-            "必成" => new DiceResult { Command = command, Outcome = "成功", Detail = "Phase2占位判定" },
-            "必败" => new DiceResult { Command = command, Outcome = "失败", Detail = "Phase2占位判定" },
-            _ => new DiceResult { Command = "无", Outcome = "无需检定", Detail = "完整骰子系统留到Phase3" }
-        };
+            return null;
+        }
+
+        foreach (var rawLine in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            const string fullWidthMarker = "死亡回归：";
+            const string halfWidthMarker = "死亡回归:";
+            if (line.StartsWith(fullWidthMarker, StringComparison.Ordinal))
+            {
+                return ReadCause(line[fullWidthMarker.Length..]);
+            }
+
+            if (line.StartsWith(halfWidthMarker, StringComparison.Ordinal))
+            {
+                return ReadCause(line[halfWidthMarker.Length..]);
+            }
+        }
+
+        return null;
+    }
+
+    private static string ReadCause(string value)
+    {
+        var cause = value.Trim();
+        return string.IsNullOrWhiteSpace(cause) ? "未说明死因" : cause;
+    }
+
+    private static string FormatDiceResult(DiceResult? result)
+    {
+        if (result is null)
+        {
+            return "未执行";
+        }
+
+        var rollText = result.Roll is null
+            ? string.Empty
+            : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
+        var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
+        return $"{result.Command} => {result.Outcome}/{result.SuccessLevel}{rollText}{detail}";
     }
 }

@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Services.Agent;
 using Re0Agent.Core.Services.Database;
+using Re0Agent.Core.Services.Dice;
 using Re0Agent.Core.Services.Llm;
+using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Tests;
 
@@ -97,12 +99,19 @@ public sealed class Phase2AgentTests
         var configResolver = new AgentConfigResolver(context);
         var promptComposer = new PromptComposer();
         var fakeClient = new FakeLlmClient();
-        var gmAgent = new GmAgent(context, configResolver, promptComposer, fakeClient);
-        var characterAgent = new CharacterAgentService(context, configResolver, promptComposer, fakeClient);
+        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+        var gmAgent = new GmAgent(context, configResolver, promptComposer, fakeClient, ragService);
+        var characterAgent = new CharacterAgentService(context, configResolver, promptComposer, fakeClient, ragService);
         var formAgent = new FormAgent(context, configResolver, promptComposer, fakeClient);
         var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
+        var diceEngine = new DiceEngine(
+            new DiceCommandParser(),
+            new CharacterAttributeProvider(context),
+            new SequenceDiceRoller([50, 50, 50, 50]));
 
-        return new AgentOrchestrator(context, gmAgent, characterAgent, formAgent, executor);
+        var saveSystem = new SaveSystem(context, diceEngine);
+
+        return new AgentOrchestrator(context, gmAgent, characterAgent, formAgent, executor, diceEngine, saveSystem);
     }
 
     private static Re0AgentDbContext CreateContext(string databasePath)
