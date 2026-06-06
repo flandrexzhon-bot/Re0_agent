@@ -17,14 +17,15 @@
 </div>
 
 <!-- 魔女叹息紫色滤镜 -->
-<div class="miasma-fog-layer" style="opacity: @(miasmaLevel / 150.0); pointer-events: none;"></div>
+@if (miasmaLevel > 0)
+{
+    <div class="miasma-fog-layer" style="opacity: @(((double)miasmaLevel / 150.0).ToString(System.Globalization.CultureInfo.InvariantCulture));"></div>
+}
 
-<div class="fate-book">
+<div class="fate-book fate-book--novel">
     <!-- 顶部状态面板 -->
     <div class="novel-header-bar">
-        <div class="novel-header-badge chapter">
-            章节 @currentChapter
-        </div>
+        <div class="novel-header-badge chapter">章节 @currentChapter</div>
         <div class="miasma-container">
             <span class="miasma-label">瘴气: @miasmaLevel%</span>
             <div class="miasma-bar-bg">
@@ -33,57 +34,44 @@
         </div>
         @if (loopCount > 0)
         {
-            <div class="novel-header-badge loop-badge">
-                LOOP @loopCount
-            </div>
+            <div class="novel-header-badge loop-badge">LOOP @loopCount</div>
         }
     </div>
 
     <!-- 命运之卷编年史日志 -->
     <section class="work-surface grimoire-log" id="grimoireLogScroll">
         <h2>编年史 / 命运之卷</h2>
-        
-        <!-- 数据库历史纪要 -->
+
+        <!-- 跨 session 持久历史纪要 -->
         @foreach (var entry in chronicles)
         {
             <div class="grimoire-entry gm-narrative">
-                <div class="entry-header">
-                    <span>@entry.CodeIndex (@entry.TimeSpan)</span>
-                </div>
-                <div class="entry-body">
-                    @entry.ChronicleText
-                </div>
+                <div class="entry-header"><span>@entry.CodeIndex (@entry.TimeSpan)</span></div>
+                <div class="entry-body">@entry.ChronicleText</div>
             </div>
         }
 
-        <!-- 当前运行的回合 -->
-        @if (lastRound is not null)
+        <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片） -->
+        @foreach (var round in sessionRounds)
         {
-            <div class="system-event-log">─── 命运分歧点：@lastRound.RoundIndex ───</div>
-            
-            @if (!string.IsNullOrWhiteSpace(lastRound.GmOpening))
+            <div class="system-event-log">─── 命运分歧点：@round.RoundIndex ───</div>
+
+            @if (!string.IsNullOrWhiteSpace(round.GmOpening))
             {
                 <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header">
-                        <span>GM 引入叙事</span>
-                    </div>
-                    <div class="entry-body">
-                        @lastRound.GmOpening
-                    </div>
+                    <div class="entry-header"><span>GM 引入叙事</span></div>
+                    <div class="entry-body">@round.GmOpening</div>
                 </div>
             }
 
-            @foreach (var turn in lastRound.CharacterTurns)
+            @foreach (var turn in round.CharacterTurns)
             {
                 <div class="grimoire-entry">
                     <div class="character-speech-bubble @(turn.IsPlayerControlled ? "player-bubble" : "npc-bubble")">
-                        <div class="bubble-avatar">
-                            @turn.CharacterName.Substring(0, 1)
-                        </div>
+                        <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
                         <div class="bubble-content">
                             <span class="bubble-sender">@turn.CharacterName</span>
                             <div class="bubble-text">@turn.ActionText</div>
-                            
                             @if (!turn.Skipped && turn.DiceResult is not null)
                             {
                                 <div class="bubble-details">
@@ -97,9 +85,7 @@
                                     </div>
                                     @if (!string.IsNullOrWhiteSpace(turn.ResultResponse))
                                     {
-                                        <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">
-                                            @turn.ResultResponse
-                                        </div>
+                                        <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@turn.ResultResponse</div>
                                     }
                                 </div>
                             }
@@ -108,134 +94,273 @@
                 </div>
             }
 
-            @if (!string.IsNullOrWhiteSpace(lastRound.GmSummary))
+            @if (!string.IsNullOrWhiteSpace(round.GmSummary))
             {
                 <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header">
-                        <span>GM 回合总结</span>
-                    </div>
-                    <div class="entry-body">
-                        @lastRound.GmSummary
-                    </div>
+                    <div class="entry-header"><span>GM 回合总结</span></div>
+                    <div class="entry-body">@round.GmSummary</div>
                 </div>
             }
 
-            @foreach (var systemMsg in lastRound.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
+            @foreach (var systemMsg in round.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
             {
                 <div class="system-event-log">🔮 @systemMsg</div>
             }
         }
 
-        @if (isRunning)
+        @if (phase == RoundPhase.NpcRunning)
         {
-            <div class="grimoire-entry gm-narrative" style="opacity: 0.8;">
-                <div class="entry-header">
-                    <span>魔力交织中...</span>
-                </div>
+            <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                <div class="entry-header"><span>群像演绎中...</span></div>
                 <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                     <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                    <span>GM 与在场角色正在编织世界线，请稍候...</span>
+                    <span>在场角色正在行动，请稍候...</span>
+                </div>
+            </div>
+        }
+        else if (phase == RoundPhase.Finalizing)
+        {
+            <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                <div class="entry-header"><span>魔力交织中...</span></div>
+                <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                    <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                    <span>GM 正在编织世界线并刻入编年史...</span>
                 </div>
             </div>
         }
     </section>
-
-    <!-- 命运纺织输入区 -->
-    <section class="work-surface">
-        <h2>纺织新的命运线</h2>
-        <div class="round-console">
-            <textarea @bind="playerInput" rows="4" 
-                      placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默，大回合将完全由NPC与GM推演。" : "在此书写主角的动作、语言或决策...")"></textarea>
-            
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
-                <label class="inline-toggle">
-                    <input type="checkbox" @bind="skipPlayerTurn" />
-                    <span>旁观模式（跳过主角本回合行动）</span>
-                </label>
-                
-                <div style="display: flex; gap: 0.75rem;">
-                    <button class="danger-action" type="button" disabled="@isRunning" @onclick="() => showConfirmResetModal = true">
-                        🔄 重开世界
+    <!--CONSOLE_PLACEHOLDER-->
+    <section class="work-surface round-console-surface">
+        @if (!hasProtagonist)
+        {
+            <h2>缔造命运的主角</h2>
+            <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
+                当前世界线尚未铭刻主角。请先选择一个主角模板，开启起始于零的异世界旅程。
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                @foreach (var tpl in templates)
+                {
+                    <button class="btn-custom @(tpl.IsDefault == 1 ? "primary-action" : "")" type="button"
+                            disabled="@isBusy" @onclick="() => ApplyTemplateAsync(tpl.TemplateId)">
+                        @(tpl.IsDefault == 1 ? "★ " : "")@tpl.TemplateName
                     </button>
-                    <button class="primary-action" type="button" disabled="@isRunning" @onclick="RunRoundAsync">
-                        @(isRunning ? "命运编制中..." : "纺织命运 (进行大回合)")
+                }
+            </div>
+        }
+        else if (phase == RoundPhase.AwaitingPlayer)
+        {
+            <h2>书写主角的抉择</h2>
+            <div class="round-console">
+                <textarea @bind="playerInput" rows="3"
+                          placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
+                    <label class="inline-toggle">
+                        <input type="checkbox" @bind="skipPlayerTurn" />
+                        <span>旁观模式（跳过主角本回合行动）</span>
+                    </label>
+                    <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
+                        @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
                     </button>
                 </div>
             </div>
-        </div>
+        }
+        else
+        {
+            <h2>纺织新的命运线</h2>
+            <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
+                点击「开始大回合」，GM 将铺陈场景、在场角色依次行动；待群像落定后，再轮到你书写主角的抉择。
+            </p>
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="danger-action" type="button" disabled="@isBusy" @onclick="() => showConfirmResetModal = true">
+                    🔄 重开世界
+                </button>
+                <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
+                    @(phase == RoundPhase.NpcRunning ? "角色行动中..." : "▶ 开始大回合")
+                </button>
+            </div>
+        }
     </section>
 
-    <!-- 弹窗报错 -->
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 1001; display: flex; align-items: center; justify-content: center;">
-            <div class="work-surface error-panel" style="max-width: 500px; padding: 1.5rem; border-color: var(--color-crimson);">
-                <h2 style="color: var(--color-crimson-glow); display: flex; align-items: center; gap: 0.5rem;">
-                    ⚠️ 魔力失控 (错误)
-                </h2>
-                <p style="margin-top: 1rem; line-height: 1.5; color: var(--color-text-primary);">
-                    @errorMessage
-                </p>
-                <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid rgba(166, 36, 36, 0.3); padding-top: 1rem;">
-                    <button type="button" class="btn-custom danger-action" @onclick="() => errorMessage = null">确认</button>
-                </div>
-            </div>
-        </div>
-    }
-
-    <!-- 命运重置确认弹窗 -->
-    @if (showConfirmResetModal)
-    {
-        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;">
-            <div class="work-surface" style="max-width: 450px; border-color: var(--color-crimson);">
-                <h2 style="color: var(--color-crimson-glow);">⚠️ 命运重置确认</h2>
-                <p style="margin-top: 1rem; line-height: 1.5;">
-                    确定要毁灭当前世界线并进行“命运重开”吗？
-                </p>
-                <p style="color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                    警告：此操作将清空当前所有章节进度、编年史、人物关系、物品装备和死亡回归日志（重置循环次数为0）。您的 Agent API 契约配置将被保留。此操作不可逆！
-                </p>
-                <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(84, 56, 44, 0.4); padding-top: 1rem;">
-                    <button type="button" class="btn-custom" @onclick="() => showConfirmResetModal = false">继续当前线</button>
-                    <button type="button" class="danger-action" @onclick="ResetGameAsync">重置世界</button>
-                </div>
-            </div>
-        </div>
-    }
 </div>
+<!--MODALS_PLACEHOLDER-->
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 1001; display: flex; align-items: center; justify-content: center;">
+        <div class="work-surface error-panel" style="max-width: 500px; padding: 1.5rem; border-color: var(--color-crimson);">
+            <h2 style="color: var(--color-crimson-glow); display: flex; align-items: center; gap: 0.5rem;">⚠️ 魔力失控 (错误)</h2>
+            <p style="margin-top: 1rem; line-height: 1.5; color: var(--color-text-primary);">@errorMessage</p>
+            <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid rgba(166, 36, 36, 0.3); padding-top: 1rem;">
+                <button type="button" class="btn-custom danger-action" @onclick="() => errorMessage = null">确认</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showConfirmResetModal)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+        <div class="work-surface" style="max-width: 450px; border-color: var(--color-crimson);">
+            <h2 style="color: var(--color-crimson-glow);">⚠️ 命运重置确认</h2>
+            <p style="margin-top: 1rem; line-height: 1.5;">确定要毁灭当前世界线并进行“命运重开”吗？</p>
+            <p style="color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                警告：此操作将清空当前所有章节进度、编年史、人物关系、物品装备和死亡回归日志（重置循环次数为0）。您的 Agent API 契约配置将被保留。此操作不可逆！
+            </p>
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(84, 56, 44, 0.4); padding-top: 1rem;">
+                <button type="button" class="btn-custom" @onclick="() => showConfirmResetModal = false">继续当前线</button>
+                <button type="button" class="danger-action" @onclick="ResetGameAsync">重置世界</button>
+            </div>
+        </div>
+    </div>
+}
+
 
 @code {
+    private enum RoundPhase { Idle, NpcRunning, AwaitingPlayer, Finalizing }
+
     private string playerInput = string.Empty;
     private bool skipPlayerTurn;
-    private bool isRunning;
     private string? errorMessage;
-    private GameRound? lastRound;
-    
+
+    private RoundPhase phase = RoundPhase.Idle;
+    private bool isBusy;
+    private GameRound? activeRound;
+    private readonly List<GameRound> sessionRounds = new();
+
     private int currentChapter = 1;
     private int loopCount = 0;
     private int miasmaLevel = 0;
     private bool showDeathGlitch = false;
     private bool showConfirmResetModal = false;
+    private bool hasProtagonist = false;
     private List<ChronicleEntry> chronicles = new();
+    private IReadOnlyList<ProtagonistTemplate> templates = new List<ProtagonistTemplate>();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadDatabaseStateAsync();
     }
 
+    private async Task BeginRoundAsync()
+    {
+        isBusy = true;
+        phase = RoundPhase.NpcRunning;
+        errorMessage = null;
+        try
+        {
+            var round = await Orchestrator.BeginRoundAsync();
+            activeRound = round;
+            sessionRounds.Add(round);
+
+            if (round.DeathReturnTriggered)
+            {
+                await HandleRoundCompletionAsync(round);
+                return;
+            }
+
+            phase = RoundPhase.AwaitingPlayer;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            RollbackActiveRound();
+            phase = RoundPhase.Idle;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+//CODE_PLACEHOLDER
+
+    private async Task SubmitPlayerTurnAsync()
+    {
+        if (activeRound is null)
+        {
+            phase = RoundPhase.Idle;
+            return;
+        }
+
+        isBusy = true;
+        phase = RoundPhase.Finalizing;
+        errorMessage = null;
+        try
+        {
+            var round = await Orchestrator.CompletePlayerTurnAsync(activeRound, playerInput, skipPlayerTurn);
+            await HandleRoundCompletionAsync(round);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            phase = RoundPhase.AwaitingPlayer;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task HandleRoundCompletionAsync(GameRound round)
+    {
+        if (round.DeathReturnTriggered)
+        {
+            showDeathGlitch = true;
+            StateHasChanged();
+            await Task.Delay(1800);
+            showDeathGlitch = false;
+        }
+
+        playerInput = string.Empty;
+        activeRound = null;
+        phase = RoundPhase.Idle;
+        await LoadDatabaseStateAsync();
+    }
+
+    private void RollbackActiveRound()
+    {
+        if (activeRound is not null)
+        {
+            sessionRounds.Remove(activeRound);
+            activeRound = null;
+        }
+    }
+//CODE_PLACEHOLDER2
+
+    private async Task ApplyTemplateAsync(int templateId)
+    {
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            await TemplateService.ApplyTemplateAsync(templateId);
+            sessionRounds.Clear();
+            activeRound = null;
+            phase = RoundPhase.Idle;
+            await LoadDatabaseStateAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"应用主角模板失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
     private async Task ResetGameAsync()
     {
         showConfirmResetModal = false;
-        isRunning = true;
+        isBusy = true;
         errorMessage = null;
-
         try
         {
             await TemplateService.ResetGameAsync();
-            lastRound = null;
+            sessionRounds.Clear();
+            activeRound = null;
+            phase = RoundPhase.Idle;
             playerInput = string.Empty;
             await LoadDatabaseStateAsync();
-            
+
             showDeathGlitch = true;
             StateHasChanged();
             await Task.Delay(1000);
@@ -247,9 +372,10 @@
         }
         finally
         {
-            isRunning = false;
+            isBusy = false;
         }
     }
+//CODE_PLACEHOLDER3
 
     private async Task LoadDatabaseStateAsync()
     {
@@ -257,6 +383,9 @@
         {
             var state = await DbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync();
             currentChapter = state?.CurrentChapter ?? 1;
+
+            hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
+            templates = await TemplateService.ListTemplatesAsync();
 
             var latestLog = await DbContext.DeathReturnLog.AsNoTracking()
                 .OrderByDescending(item => item.LogId)
@@ -271,39 +400,6 @@
         catch (Exception ex)
         {
             errorMessage = $"加载状态错误: {ex.Message}";
-        }
-    }
-
-    private async Task RunRoundAsync()
-    {
-        isRunning = true;
-        errorMessage = null;
-
-        try
-        {
-            var round = await Orchestrator.RunRoundAsync(playerInput, skipPlayerTurn);
-            lastRound = round;
-            
-            bool deathReturned = round.Events.Any(e => e.Contains("死亡回归完成") || e.Contains("死亡回归触发"));
-            
-            if (deathReturned)
-            {
-                showDeathGlitch = true;
-                StateHasChanged();
-                await Task.Delay(1800); // 播放死亡回归震动闪烁动效
-                showDeathGlitch = false;
-            }
-
-            playerInput = string.Empty;
-            await LoadDatabaseStateAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
-        finally
-        {
-            isRunning = false;
         }
     }
 
@@ -324,11 +420,7 @@
 
     private string FormatDiceResult(DiceResult? result)
     {
-        if (result is null)
-        {
-            return "未执行";
-        }
-
+        if (result is null) return "未执行";
         var rollText = result.Roll is null
             ? string.Empty
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";

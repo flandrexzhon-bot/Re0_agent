@@ -44,10 +44,10 @@ public sealed class CharacterAgentService(
             });
         }
 
+        // NPC 先行动，主角最后行动。
         return profiles
-            .Where(profile => profile.IsPlayerControlled)
-            .Concat(profiles.Where(profile => !profile.IsPlayerControlled))
-            .OrderBy(profile => profile.IsPlayerControlled)
+            .Where(profile => !profile.IsPlayerControlled)
+            .Concat(profiles.Where(profile => profile.IsPlayerControlled))
             .ToList();
     }
 

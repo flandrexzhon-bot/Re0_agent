@@ -41,6 +41,12 @@ public sealed class BlackTeaRagService(
         return BuildContext(constantMatches, keywordMatches, query.MaxCharacters);
     }
 
+    public async Task<IReadOnlyList<WorldBookEntry>> ListAllEntriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await LoadEntriesAsync(cancellationToken);
+    }
+
     private async Task<IReadOnlyList<WorldBookEntry>> LoadEntriesAsync(CancellationToken cancellationToken)
     {
         if (cachedEntries is not null)

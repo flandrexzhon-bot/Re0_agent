@@ -94,6 +94,68 @@ public sealed class Phase2AgentTests
         }
     }
 
+    [Fact]
+    public async Task BeginRoundRunsNpcsAndDefersProtagonist()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.BeginRoundAsync();
+
+            // 默认世界只有主角在场，无在场NPC：第一阶段不应执行任何角色回合，主角被推迟。
+            Assert.Empty(round.CharacterTurns);
+            Assert.Single(round.PendingProtagonistProfiles);
+            Assert.False(round.DeathReturnTriggered);
+            // 第一阶段不应写入编年史。
+            Assert.Equal(0, await context.Chronicle.CountAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task CompletePlayerTurnFinalizesRoundAndPersists()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.BeginRoundAsync();
+            var completed = await orchestrator.CompletePlayerTurnAsync(round, "谨慎观察王都周围的动静。", skipPlayerTurn: false);
+
+            Assert.Single(completed.CharacterTurns);
+            Assert.Equal("菜月昴", completed.CharacterTurns[0].CharacterName);
+            Assert.True(completed.CharacterTurns[0].IsPlayerControlled);
+            Assert.NotNull(completed.CompletedAt);
+            Assert.Equal(1, await context.Chronicle.CountAsync());
+            Assert.Equal(1, await context.CharacterMemory.CountAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task RagServiceListsAllBuiltInEntries()
+    {
+        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+
+        var entries = await ragService.ListAllEntriesAsync();
+
+        // 内置黑茶世界书应可被定位并解析出条目。
+        Assert.NotEmpty(entries);
+    }
+
     private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context)
     {
         var configResolver = new AgentConfigResolver(context);

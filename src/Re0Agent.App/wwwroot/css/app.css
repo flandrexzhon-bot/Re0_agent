@@ -20,7 +20,7 @@
 /* Base resets & typography */
 html, body {
     background-color: var(--bg-base);
-    background-image: 
+    background-image:
         radial-gradient(circle at 50% 30%, rgba(41, 24, 17, 0.6) 0%, rgba(18, 9, 5, 0.95) 80%),
         linear-gradient(rgba(18, 9, 5, 0.3) 1px, transparent 1px),
         linear-gradient(90deg, rgba(18, 9, 5, 0.3) 1px, transparent 1px);
@@ -30,7 +30,8 @@ html, body {
     font-size: 16px;
     margin: 0;
     padding: 0;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -367,6 +368,28 @@ button:disabled {
 .fate-book {
     max-width: 1400px;
     margin: 0 auto;
+    width: 100%;
+}
+
+/* Novel page fills the available article height; only the log scrolls. */
+.fate-book--novel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding: 1rem 0;
+    box-sizing: border-box;
+}
+
+.fate-book--novel .grimoire-log {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
+.fate-book--novel .novel-header-bar,
+.fate-book--novel .round-console-surface {
+    flex-shrink: 0;
 }
 
 .novel-header-bar {
@@ -694,7 +717,7 @@ button:disabled {
     color: #ff4d4d;
     background: #000;
     overflow: hidden;
-    clip: rect(0, 900px, 0, 0); 
+    clip-path: inset(0 0 100% 0);
     animation: noise-anim 2s infinite linear alternate-reverse;
 }
 
@@ -707,7 +730,7 @@ button:disabled {
     color: #ff3333;
     background: #000;
     overflow: hidden;
-    clip: rect(0, 900px, 0, 0); 
+    clip-path: inset(0 0 100% 0);
     animation: noise-anim-2 3s infinite linear alternate-reverse;
 }
 
@@ -752,6 +775,35 @@ button:disabled {
     color: var(--color-text-primary);
 }
 
+/* BlackTea world book entries */
+.blacktea-entry {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-vintage);
+    border-radius: 6px;
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.6rem;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.4);
+}
+
+.blacktea-entry > summary {
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.blacktea-entry > summary::-webkit-details-marker {
+    display: none;
+}
+
+.blacktea-entry[open] > summary {
+    border-bottom: 1px dashed rgba(207, 168, 107, 0.2);
+    padding-bottom: 0.4rem;
+}
+
 /* Bookmarks & Wax Seals */
 .latest-bookmark {
     background: var(--color-gold);
@@ -789,21 +841,31 @@ button:disabled {
 }
 
 @keyframes noise-anim {
-  $steps: 20;
-  @for $i from 0 through $steps {
-    #{percentage($i*(1/$steps))} {
-      clip: rect(random(100)+px, 9999px, random(100)+px, 0);
-    }
-  }
+    0%   { clip-path: inset(20% 0 60% 0); }
+    10%  { clip-path: inset(75% 0 5% 0); }
+    20%  { clip-path: inset(10% 0 80% 0); }
+    30%  { clip-path: inset(50% 0 30% 0); }
+    40%  { clip-path: inset(5% 0 90% 0); }
+    50%  { clip-path: inset(65% 0 20% 0); }
+    60%  { clip-path: inset(30% 0 55% 0); }
+    70%  { clip-path: inset(85% 0 2% 0); }
+    80%  { clip-path: inset(15% 0 70% 0); }
+    90%  { clip-path: inset(45% 0 40% 0); }
+    100% { clip-path: inset(70% 0 10% 0); }
 }
 
 @keyframes noise-anim-2 {
-  $steps: 20;
-  @for $i from 0 through $steps {
-    #{percentage($i*(1/$steps))} {
-      clip: rect(random(100)+px, 9999px, random(100)+px, 0);
-    }
-  }
+    0%   { clip-path: inset(60% 0 20% 0); }
+    10%  { clip-path: inset(15% 0 75% 0); }
+    20%  { clip-path: inset(80% 0 5% 0); }
+    30%  { clip-path: inset(25% 0 60% 0); }
+    40%  { clip-path: inset(90% 0 3% 0); }
+    50%  { clip-path: inset(35% 0 50% 0); }
+    60%  { clip-path: inset(55% 0 30% 0); }
+    70%  { clip-path: inset(5% 0 88% 0); }
+    80%  { clip-path: inset(70% 0 12% 0); }
+    90%  { clip-path: inset(40% 0 45% 0); }
+    100% { clip-path: inset(12% 0 72% 0); }
 }
 
 /* Blazor Layout overrides */
