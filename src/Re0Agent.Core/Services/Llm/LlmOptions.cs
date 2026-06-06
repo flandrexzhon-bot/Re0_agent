@@ -5,7 +5,9 @@ public sealed record LlmOptions(
     string ApiKey,
     string ModelName,
     double Temperature,
-    int MaxTokens)
+    int MaxTokens,
+    int MaxInputTokens = 4096,
+    string ResponseFormat = "JSON")
 {
     public bool HasUsableEndpoint =>
         !string.IsNullOrWhiteSpace(ApiEndpoint)

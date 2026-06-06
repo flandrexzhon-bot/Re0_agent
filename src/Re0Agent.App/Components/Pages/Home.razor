@@ -5,9 +5,13 @@
 @using Re0Agent.Core.Entities
 @using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
+@using System.Text.Json
+@using System.Text.Encodings.Web
 @inject AgentOrchestrator Orchestrator
 @inject Re0AgentDbContext DbContext
 @inject ProtagonistTemplateService TemplateService
+@inject ChatSessionService SessionService
+
 
 <PageTitle>命运之卷 - Re:Zero RPG</PageTitle>
 
@@ -22,165 +26,470 @@
     <div class="miasma-fog-layer" style="opacity: @(((double)miasmaLevel / 150.0).ToString(System.Globalization.CultureInfo.InvariantCulture));"></div>
 }
 
-<div class="fate-book fate-book--novel">
-    <!-- 顶部状态面板 -->
-    <div class="novel-header-bar">
-        <div class="novel-header-badge chapter">章节 @currentChapter</div>
-        <div class="miasma-container">
-            <span class="miasma-label">瘴气: @miasmaLevel%</span>
-            <div class="miasma-bar-bg">
-                <div class="miasma-bar-fill" style="width: @(miasmaLevel)%"></div>
+<div class="novel-layout-container">
+    <div class="fate-book fate-book--novel">
+        <!-- 顶部状态面板 -->
+        <div class="novel-header-bar">
+            <div class="novel-header-badge chapter">章节 @currentChapter</div>
+            <div class="miasma-container">
+                <span class="miasma-label">瘴气: @miasmaLevel%</span>
+                <div class="miasma-bar-bg">
+                    <div class="miasma-bar-fill" style="width: @(miasmaLevel)%"></div>
+                </div>
             </div>
+            @if (loopCount > 0)
+            {
+                <div class="novel-header-badge loop-badge">LOOP @loopCount</div>
+            }
         </div>
-        @if (loopCount > 0)
-        {
-            <div class="novel-header-badge loop-badge">LOOP @loopCount</div>
-        }
-    </div>
 
-    <!-- 命运之卷编年史日志 -->
-    <section class="work-surface grimoire-log" id="grimoireLogScroll">
-        <h2>编年史 / 命运之卷</h2>
+        <!-- 命运之卷编年史日志 -->
+        <section class="work-surface grimoire-log" id="grimoireLogScroll">
+            <h2>编年史 / 命运之卷</h2>
 
-        <!-- 跨 session 持久历史纪要 -->
-        @foreach (var entry in chronicles)
-        {
-            <div class="grimoire-entry gm-narrative">
-                <div class="entry-header"><span>@entry.CodeIndex (@entry.TimeSpan)</span></div>
-                <div class="entry-body">@entry.ChronicleText</div>
-            </div>
-        }
-
-        <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片） -->
-        @foreach (var round in sessionRounds)
-        {
-            <div class="system-event-log">─── 命运分歧点：@round.RoundIndex ───</div>
-
-            @if (!string.IsNullOrWhiteSpace(round.GmOpening))
+            <!-- 跨 session 持久历史纪要 -->
+            @foreach (var entry in chronicles)
             {
                 <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header"><span>GM 引入叙事</span></div>
-                    <div class="entry-body">@round.GmOpening</div>
+                    <div class="entry-header"><span>@entry.CodeIndex (@entry.TimeSpan)</span></div>
+                    <div class="entry-body">@((MarkupString)(entry.ChronicleText ?? ""))</div>
                 </div>
             }
 
-            @foreach (var turn in round.CharacterTurns)
+            <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片） -->
+            @foreach (var round in sessionRounds)
             {
-                <div class="grimoire-entry">
-                    <div class="character-speech-bubble @(turn.IsPlayerControlled ? "player-bubble" : "npc-bubble")">
-                        <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
-                        <div class="bubble-content">
-                            <span class="bubble-sender">@turn.CharacterName</span>
-                            <div class="bubble-text">@turn.ActionText</div>
-                            @if (!turn.Skipped && turn.DiceResult is not null)
-                            {
-                                <div class="bubble-details">
-                                    @if (!string.IsNullOrWhiteSpace(turn.GmJudgement))
-                                    {
-                                        <div class="bubble-judgement">GM 行为判定: @turn.GmJudgement</div>
-                                    }
-                                    <div class="dice-result-card @GetDiceSuccessClass(turn.DiceResult.SuccessLevel)">
-                                        <span class="dice-icon">🎲</span>
-                                        <span>@FormatDiceResult(turn.DiceResult)</span>
+                <div class="system-event-log">─── 命运分歧点：@round.RoundIndex ───</div>
+
+                @if (!string.IsNullOrWhiteSpace(round.GmOpening))
+                {
+                    <div class="grimoire-entry gm-narrative">
+                        <div class="entry-header"><span>GM 引入叙事</span></div>
+                        <div class="entry-body">@((MarkupString)(round.GmOpening ?? ""))</div>
+                    </div>
+                }
+
+                @foreach (var turn in round.CharacterTurns)
+                {
+                    <div class="grimoire-entry">
+                        <div class="character-speech-bubble @(turn.IsPlayerControlled ? "player-bubble" : "npc-bubble")">
+                            <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
+                            <div class="bubble-content">
+                                <span class="bubble-sender">@turn.CharacterName</span>
+                                <div class="bubble-text">@((MarkupString)(turn.ActionText ?? ""))</div>
+                                @if (!turn.Skipped && turn.DiceResult is not null)
+                                {
+                                    <div class="bubble-details">
+                                        @if (!string.IsNullOrWhiteSpace(turn.GmJudgement))
+                                        {
+                                            <div class="bubble-judgement">GM 行为判定: @((MarkupString)(turn.GmJudgement ?? ""))</div>
+                                        }
+                                        <div class="dice-result-card @GetDiceSuccessClass(turn.DiceResult.SuccessLevel)">
+                                            <span class="dice-icon">🎲</span>
+                                            <span>@FormatDiceResult(turn.DiceResult)</span>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(turn.ResultResponse))
+                                        {
+                                            <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@((MarkupString)(turn.ResultResponse ?? ""))</div>
+                                        }
                                     </div>
-                                    @if (!string.IsNullOrWhiteSpace(turn.ResultResponse))
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(round.GmSummary))
+                {
+                    <div class="grimoire-entry gm-narrative">
+                        <div class="entry-header"><span>GM 回合总结</span></div>
+                        <div class="entry-body">@((MarkupString)(round.GmSummary ?? ""))</div>
+                    </div>
+                }
+
+                @foreach (var systemMsg in round.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
+                {
+                    <div class="system-event-log">🔮 @systemMsg</div>
+                }
+            }
+
+            @if (phase == RoundPhase.GmRunning)
+            {
+                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                    <div class="entry-header"><span>GM 思考中...</span></div>
+                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                        <span>GM 正在开场并安排行动顺序...</span>
+                    </div>
+                </div>
+            }
+            else if (phase == RoundPhase.NpcRunning)
+            {
+                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                    <div class="entry-header"><span>NPC 响应中...</span></div>
+                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                        <span>在场 NPC 正在回应并采取行动，请稍候...</span>
+                    </div>
+                </div>
+            }
+            else if (phase == RoundPhase.Finalizing)
+            {
+                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                    <div class="entry-header"><span>魔力交织中...</span></div>
+                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                        <span>GM 正在编织世界线并刻入编年史...</span>
+                    </div>
+                </div>
+            }
+        </section>
+
+        <!--CONSOLE_PLACEHOLDER-->
+        <section class="work-surface round-console-surface">
+            @if (!hasProtagonist)
+            {
+                <h2>缔造命运的主角</h2>
+                <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
+                    当前世界线尚未铭刻主角。请先在右侧状态栏中选择或配置一个主角模板，开启起始于零的异世界旅程。
+                </p>
+                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                    @foreach (var tpl in templates)
+                    {
+                        <button class="btn-custom @(tpl.IsDefault == 1 ? "primary-action" : "")" type="button"
+                                disabled="@isBusy" @onclick="() => ApplyTemplateAsync(tpl.TemplateId)">
+                            @(tpl.IsDefault == 1 ? "★ " : "")@tpl.TemplateName
+                        </button>
+                    }
+                </div>
+            }
+            else if (phase == RoundPhase.AwaitingPlayer)
+            {
+                <h2>书写主角的抉择</h2>
+                <div class="round-console">
+                    <textarea @bind="playerInput" rows="3"
+                              placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
+                        <label class="inline-toggle">
+                            <input type="checkbox" @bind="skipPlayerTurn" />
+                            <span>旁观模式（跳过主角本回合行动）</span>
+                        </label>
+                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
+                            @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <h2>纺织新的命运线</h2>
+                <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
+                    点击「开始大回合」，GM 将铺陈场景、在场角色依次行动；待群像落定后，再轮到你书写主角的抉择。
+                </p>
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                    <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
+                        @(phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning ? "角色行动中..." : "▶ 开始大回合")
+                    </button>
+                </div>
+            }
+        </section>
+    </div>
+
+    <!-- 右侧可收缩状态栏 -->
+    <div class="novel-sidebar @(sidebarExpanded ? "expanded" : "collapsed")">
+        <button type="button" class="sidebar-toggle-btn" @onclick="() => sidebarExpanded = !sidebarExpanded">
+            @if (sidebarExpanded)
+            {
+                <span>关闭状态栏 ▶</span>
+            }
+            else
+            {
+                <span>◀ 展开状态栏</span>
+            }
+        </button>
+
+        @if (sidebarExpanded)
+        {
+            <div class="sidebar-header">
+                🛡️ 冒险者状态栏
+            </div>
+            <div class="sidebar-content">
+                <!-- 0. 聊天会话管理 -->
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>📁 聊天会话</span>
+                    </div>
+                    <div class="sidebar-section-body" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
+                        <!-- 会话下拉选择 -->
+                        <div style="display: flex; gap: 0.25rem; align-items: center;">
+                            <select class="form-select parchment-input" @bind="activeSessionId" @bind:after="OnSessionChangedAsync" style="flex: 1; font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                @foreach (var s in chatSessions)
+                                {
+                                    <option value="@s.SessionId">@(s.IsActive == 1 ? "★ " : "")@s.SessionName (@s.CreatedAt)</option>
+                                }
+                            </select>
+                            <button type="button" class="btn btn-sm danger-action p-0" style="width: 24px; height: 24px; line-height: 22px; cursor: pointer; border-radius: 4px;" title="删除此会话" @onclick="DeleteCurrentSessionAsync" disabled="@(chatSessions.Count <= 1)">
+                                🗑️
+                            </button>
+                        </div>
+                        
+                        <!-- 新建会话 -->
+                        <div style="display: flex; gap: 0.25rem; align-items: center; border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.25rem;">
+                            <input type="text" class="form-control parchment-input" placeholder="新会话名称" @bind="newSessionName" style="flex: 1; font-size: 0.75rem; padding: 0.2rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);" />
+                            <button type="button" class="primary-action" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin: 0; line-height: 1.2;" @onclick="CreateSessionAsync">
+                                新建
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                @if (protagonistInfo is not null)
+                {
+                    <!-- 1. 当前主角状态 -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">
+                            👤 主角属性
+                        </div>
+                        <div class="sidebar-section-body">
+                            <div><span class="attr-label">主角名字:</span> @protagonistInfo.Name</div>
+                            <div><span class="attr-label">性别/年龄:</span> @protagonistInfo.Gender / @(protagonistInfo.Age)岁</div>
+                            <div><span class="attr-label">身处地点:</span> <span style="color: var(--color-gold);">@protagonistInfo.LocationName</span></div>
+                            @if (!string.IsNullOrEmpty(locationRegion))
+                            {
+                                <div style="font-size: 0.8rem; font-style: italic; color: #a98b64; padding-left: 0.5rem;">@locationRegion</div>
+                            }
+                            @if (!string.IsNullOrEmpty(locationDescription))
+                            {
+                                <div style="font-size: 0.8rem; color: var(--color-text-secondary); background: rgba(0,0,0,0.15); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(207,168,107,0.05); margin-top: 0.25rem;">@locationDescription</div>
+                            }
+                            <div><span class="attr-label">身份:</span> @protagonistInfo.IdentityText</div>
+                            <div><span class="attr-label">当前状态:</span> <span class="badge bg-dark-vintage text-gold border-vintage">@protagonistInfo.SelfStatus</span></div>
+                            
+                            <div class="mt-2"><span class="attr-label">基础属性：</span></div>
+                            <div class="attr-grid">
+                                @if (!string.IsNullOrEmpty(protagonistInfo.BaseAttributes))
+                                {
+                                    @foreach (var attr in protagonistInfo.BaseAttributes.Split(';', StringSplitOptions.RemoveEmptyEntries))
                                     {
-                                        <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@turn.ResultResponse</div>
+                                        var parts = attr.Split(':');
+                                        if (parts.Length == 2)
+                                        {
+                                            <div class="attr-item">
+                                                <span class="attr-label">@parts[0].Trim()</span>
+                                                <span class="attr-value">@parts[1].Trim()</span>
+                                            </div>
+                                        }
+                                    }
+                                }
+                            </div>
+
+                            <div class="mt-2"><span class="attr-label">权能/加护:</span> @(string.IsNullOrEmpty(protagonistInfo.SpecialAttributes) ? "无" : protagonistInfo.SpecialAttributes)</div>
+                            <div class="mt-1"><span class="attr-label">携带物资:</span> @(string.IsNullOrEmpty(protagonistInfo.ResourcesText) ? "无" : protagonistInfo.ResourcesText)</div>
+                        </div>
+                    </div>
+
+                    <!-- 2. 在场角色 -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">
+                            👥 在场角色 (@presentNpcs.Count)
+                        </div>
+                        <div class="sidebar-section-body">
+                            @if (presentNpcs.Count == 0)
+                            {
+                                <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
+                                    无在场其他角色
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    @foreach (var npc in presentNpcs)
+                                    {
+                                        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-vintage); padding: 0.5rem; border-radius: 4px;">
+                                            <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--color-gold);">
+                                                <span>@npc.Name</span>
+                                                <span style="font-size: 0.75rem; font-weight: normal; color: var(--color-text-secondary);">@npc.Gender / @(npc.Age)岁</span>
+                                            </div>
+                                            <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">@npc.BriefIntro</div>
+                                            @if (!string.IsNullOrWhiteSpace(npc.RelationsText))
+                                            {
+                                                <div style="font-size: 0.75rem; color: var(--color-gold-glow); margin-top: 0.25rem;">羁绊: @npc.RelationsText</div>
+                                            }
+                                        </div>
                                     }
                                 </div>
                             }
                         </div>
                     </div>
-                </div>
-            }
 
-            @if (!string.IsNullOrWhiteSpace(round.GmSummary))
-            {
-                <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header"><span>GM 回合总结</span></div>
-                    <div class="entry-body">@round.GmSummary</div>
-                </div>
-            }
+                    <!-- 3. 随身包裹与装备 -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">
+                            🎒 随身包裹 (@inventories.Count)
+                        </div>
+                        <div class="sidebar-section-body">
+                            @if (inventories.Count == 0 && equipments.Count == 0)
+                            {
+                                <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
+                                    包裹空空如也
+                                </div>
+                            }
+                            else
+                            {
+                                @if (equipments.Count > 0)
+                                {
+                                    <div class="text-gold mb-1" style="font-size: 0.85rem; font-weight: bold;">⚔️ 当前装备：</div>
+                                    <div class="eq-list mb-2">
+                                        @foreach (var eq in equipments)
+                                        {
+                                            <div class="item-badge quality-@eq.Quality.ToLower()" title="@eq.Description">
+                                                <span class="item-badge-name">@eq.EquipmentName</span>
+                                                <span class="item-badge-qty" style="color: #6da5ff;">@eq.EquipmentType (@eq.StatusText)</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (inventories.Count > 0)
+                                {
+                                    <div class="text-gold mb-1" style="font-size: 0.85rem; font-weight: bold;">📦 拥有物品：</div>
+                                    <div class="item-list">
+                                        @foreach (var item in inventories)
+                                        {
+                                            <div class="item-badge quality-@item.Quality.ToLower()" title="@item.Description">
+                                                <span class="item-badge-name">@item.ItemName</span>
+                                                <span class="item-badge-qty">数量: @item.Quantity</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
 
-            @foreach (var systemMsg in round.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
-            {
-                <div class="system-event-log">🔮 @systemMsg</div>
-            }
-        }
+                    <!-- 4. 模型配置 -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">
+                            ⚙️ 模型配置
+                        </div>
+                        <div class="sidebar-section-body" style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">GM 默认：</label>
+                                <select class="form-select parchment-input" @bind="selectedGmPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (默认首个) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">NPC 执笔：</label>
+                                <select class="form-select parchment-input" @bind="selectedNpcPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (默认首个) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">快速鉴定 (Dice)：</label>
+                                <select class="form-select parchment-input" @bind="selectedDicePreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (默认首个) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">判定延迟 (s)：@delaySeconds 秒</label>
+                                <input type="range" min="0" max="5" step="0.5" @bind="delaySeconds" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">Memory (填表)：</label>
+                                <select class="form-select parchment-input" @bind="selectedMemoryPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (默认首个) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
 
-        @if (phase == RoundPhase.NpcRunning)
-        {
-            <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                <div class="entry-header"><span>群像演绎中...</span></div>
-                <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                    <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                    <span>在场角色正在行动，请稍候...</span>
-                </div>
-            </div>
-        }
-        else if (phase == RoundPhase.Finalizing)
-        {
-            <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                <div class="entry-header"><span>魔力交织中...</span></div>
-                <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                    <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                    <span>GM 正在编织世界线并刻入编年史...</span>
-                </div>
-            </div>
-        }
-    </section>
-    <!--CONSOLE_PLACEHOLDER-->
-    <section class="work-surface round-console-surface">
-        @if (!hasProtagonist)
-        {
-            <h2>缔造命运的主角</h2>
-            <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
-                当前世界线尚未铭刻主角。请先选择一个主角模板，开启起始于零的异世界旅程。
-            </p>
-            <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-                @foreach (var tpl in templates)
-                {
-                    <button class="btn-custom @(tpl.IsDefault == 1 ? "primary-action" : "")" type="button"
-                            disabled="@isBusy" @onclick="() => ApplyTemplateAsync(tpl.TemplateId)">
-                        @(tpl.IsDefault == 1 ? "★ " : "")@tpl.TemplateName
-                    </button>
+                            <!-- 角色与模型绑定 -->
+                            <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <span class="text-gold" style="font-weight: bold; font-size: 0.8rem;">角色与模型绑定：</span>
+                                    <button type="button" class="btn btn-link text-gold p-0 btn-sm" @onclick="AddCharacterBinding" style="text-decoration: none; font-size: 0.75rem;">＋ 新增</button>
+                                </div>
+                                @foreach (var b in characterBindings)
+                                {
+                                    <div style="display: flex; gap: 0.25rem; align-items: center; margin-bottom: 0.25rem;">
+                                        <select class="form-select parchment-input" @bind="b.CharacterName" style="flex: 1; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                            <option value="">-- 角色 --</option>
+                                            @foreach (var name in allCharacterNames)
+                                            {
+                                                <option value="@name">@name</option>
+                                            }
+                                        </select>
+                                        <span style="color: var(--color-gold);">➔</span>
+                                        <select class="form-select parchment-input" @bind="b.PresetName" style="flex: 1.2; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                            <option value="">-- 模型 --</option>
+                                            @foreach (var p in agentConfigs)
+                                            {
+                                                <option value="@p.AgentName">@p.AgentName</option>
+                                            }
+                                        </select>
+                                        <button type="button" class="btn btn-sm btn-outline-danger p-0" style="width: 18px; height: 18px; line-height: 16px; border: 1px solid var(--color-crimson); color: var(--color-crimson); background: transparent; cursor: pointer;" @onclick="() => RemoveCharacterBinding(b)">×</button>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- 临时 NPC 绑定 -->
+                            <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <span class="text-gold" style="font-weight: bold; font-size: 0.8rem;">临时 NPC 绑定：</span>
+                                    <button type="button" class="btn btn-link text-gold p-0 btn-sm" @onclick="AddTempNpcBinding" style="text-decoration: none; font-size: 0.75rem;">＋ 新增</button>
+                                </div>
+                                @foreach (var b in tempNpcBindings)
+                                {
+                                    <div style="display: flex; gap: 0.25rem; align-items: center; margin-bottom: 0.25rem;">
+                                        <input type="text" class="form-control parchment-input" placeholder="NPC 姓名" @bind="b.NpcName" style="flex: 1; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);" />
+                                        <span style="color: var(--color-gold);">➔</span>
+                                        <select class="form-select parchment-input" @bind="b.PresetName" style="flex: 1.2; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                            <option value="">-- 模型 --</option>
+                                            @foreach (var p in agentConfigs)
+                                            {
+                                                <option value="@p.AgentName">@p.AgentName</option>
+                                            }
+                                        </select>
+                                        <button type="button" class="btn btn-sm btn-outline-danger p-0" style="width: 18px; height: 18px; line-height: 16px; border: 1px solid var(--color-crimson); color: var(--color-crimson); background: transparent; cursor: pointer;" @onclick="() => RemoveTempNpcBinding(b)">×</button>
+                                    </div>
+                                }
+                            </div>
+
+                            <button type="button" class="primary-action" style="width: 100%; font-size: 0.8rem; margin: 0.5rem 0 0 0; padding: 0.35rem;" @onclick="SaveRoutingConfigAsync">
+                                保存配置契约
+                            </button>
+                        </div>
+                    </div>
                 }
-            </div>
-        }
-        else if (phase == RoundPhase.AwaitingPlayer)
-        {
-            <h2>书写主角的抉择</h2>
-            <div class="round-console">
-                <textarea @bind="playerInput" rows="3"
-                          placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
-                    <label class="inline-toggle">
-                        <input type="checkbox" @bind="skipPlayerTurn" />
-                        <span>旁观模式（跳过主角本回合行动）</span>
-                    </label>
-                    <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
-                        @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
-                    </button>
-                </div>
+                else
+                {
+                    <div class="text-center py-4 text-gold">
+                        ⚠️ 暂无主角属性，请在左侧应用模板，或在上方新建聊天会话。
+                    </div>
+                }
             </div>
         }
         else
         {
-            <h2>纺织新的命运线</h2>
-            <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
-                点击「开始大回合」，GM 将铺陈场景、在场角色依次行动；待群像落定后，再轮到你书写主角的抉择。
-            </p>
-            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                <button class="danger-action" type="button" disabled="@isBusy" @onclick="() => showConfirmResetModal = true">
-                    🔄 重开世界
-                </button>
-                <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
-                    @(phase == RoundPhase.NpcRunning ? "角色行动中..." : "▶ 开始大回合")
-                </button>
+            <div class="sidebar-collapsed-content" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem; color: var(--color-gold); opacity: 0.8; font-family: var(--font-heading); writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 4px; font-size: 0.95rem;">
+                🛡️ 冒险者状态栏
             </div>
         }
-    </section>
-
+    </div>
 </div>
 <!--MODALS_PLACEHOLDER-->
 @if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -196,26 +505,16 @@
     </div>
 }
 
-@if (showConfirmResetModal)
-{
-    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;">
-        <div class="work-surface" style="max-width: 450px; border-color: var(--color-crimson);">
-            <h2 style="color: var(--color-crimson-glow);">⚠️ 命运重置确认</h2>
-            <p style="margin-top: 1rem; line-height: 1.5;">确定要毁灭当前世界线并进行“命运重开”吗？</p>
-            <p style="color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                警告：此操作将清空当前所有章节进度、编年史、人物关系、物品装备和死亡回归日志（重置循环次数为0）。您的 Agent API 契约配置将被保留。此操作不可逆！
-            </p>
-            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(84, 56, 44, 0.4); padding-top: 1rem;">
-                <button type="button" class="btn-custom" @onclick="() => showConfirmResetModal = false">继续当前线</button>
-                <button type="button" class="danger-action" @onclick="ResetGameAsync">重置世界</button>
-            </div>
-        </div>
-    </div>
-}
+
 
 
 @code {
-    private enum RoundPhase { Idle, NpcRunning, AwaitingPlayer, Finalizing }
+    private enum RoundPhase { Idle, GmRunning, NpcRunning, AwaitingPlayer, Finalizing }
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     private string playerInput = string.Empty;
     private bool skipPlayerTurn;
@@ -226,30 +525,125 @@
     private GameRound? activeRound;
     private readonly List<GameRound> sessionRounds = new();
 
+    private List<ChatSession> chatSessions = new();
+    private int activeSessionId;
+    private string newSessionName = string.Empty;
+
     private int currentChapter = 1;
     private int loopCount = 0;
     private int miasmaLevel = 0;
     private bool showDeathGlitch = false;
-    private bool showConfirmResetModal = false;
     private bool hasProtagonist = false;
     private List<ChronicleEntry> chronicles = new();
     private IReadOnlyList<ProtagonistTemplate> templates = new List<ProtagonistTemplate>();
 
+    private bool sidebarExpanded = true;
+
+    private ProtagonistInfo? protagonistInfo;
+    private List<InventoryItem> inventories = new();
+    private List<EquipmentItem> equipments = new();
+    private string? locationDescription;
+    private string? locationRegion;
+
+    // Model configuration parameters
+    private List<ImportantNpc> presentNpcs = new();
+    private List<string> allCharacterNames = new();
+    private List<Re0Agent.Core.Entities.AgentConfig> agentConfigs = new();
+
+    private string selectedGmPreset = string.Empty;
+    private string selectedNpcPreset = string.Empty;
+    private string selectedDicePreset = string.Empty;
+    private string selectedMemoryPreset = string.Empty;
+    private double delaySeconds = 0.0;
+
+    private List<CharacterBinding> characterBindings = new();
+    private List<TempNpcBinding> tempNpcBindings = new();
+
+    public class CharacterBinding
+    {
+        public string CharacterName { get; set; } = string.Empty;
+        public string PresetName { get; set; } = string.Empty;
+    }
+
+    public class TempNpcBinding
+    {
+        public string NpcName { get; set; } = string.Empty;
+        public string PresetName { get; set; } = string.Empty;
+    }
+
+    private void AddCharacterBinding()
+    {
+        characterBindings.Add(new CharacterBinding());
+    }
+
+    private void RemoveCharacterBinding(CharacterBinding b)
+    {
+        characterBindings.Remove(b);
+    }
+
+    private void AddTempNpcBinding()
+    {
+        tempNpcBindings.Add(new TempNpcBinding());
+    }
+
+    private void RemoveTempNpcBinding(TempNpcBinding b)
+    {
+        tempNpcBindings.Remove(b);
+    }
+
     protected override async Task OnInitializedAsync()
     {
+        await SessionService.EnsureDefaultSessionAsync();
+        var activeSession = await SessionService.GetActiveSessionAsync();
+        if (activeSession is not null)
+        {
+            try
+            {
+                var rounds = JsonSerializer.Deserialize<List<GameRound>>(activeSession.DetailedRoundsSnapshot, JsonOptions);
+                if (rounds is not null)
+                {
+                    sessionRounds.Clear();
+                    sessionRounds.AddRange(rounds);
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+        }
         await LoadDatabaseStateAsync();
+    }
+
+    private async Task AutoSaveChatSessionAsync()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(sessionRounds, JsonOptions);
+            await SessionService.SaveActiveSessionStateAsync(json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Autosave error: {ex.Message}");
+        }
     }
 
     private async Task BeginRoundAsync()
     {
         isBusy = true;
-        phase = RoundPhase.NpcRunning;
+        phase = RoundPhase.GmRunning;
         errorMessage = null;
         try
         {
-            var round = await Orchestrator.BeginRoundAsync();
+            // 第一阶段：GM 开场
+            var round = await Orchestrator.BeginRoundAsync(onStepCompleted: async (r) =>
+            {
+                await AutoSaveChatSessionAsync();
+                StateHasChanged();
+                await Task.Delay(10);
+            });
             activeRound = round;
             sessionRounds.Add(round);
+            await AutoSaveChatSessionAsync();
 
             if (round.DeathReturnTriggered)
             {
@@ -257,6 +651,24 @@
                 return;
             }
 
+            // 第二阶段：NPC 响应
+            phase = RoundPhase.NpcRunning;
+            StateHasChanged();
+
+            await Orchestrator.RunNpcTurnsAsync(round, onStepCompleted: async (r) =>
+            {
+                await AutoSaveChatSessionAsync();
+                StateHasChanged();
+                await Task.Delay(10);
+            });
+
+            if (round.DeathReturnTriggered)
+            {
+                await HandleRoundCompletionAsync(round);
+                return;
+            }
+
+            // 第三阶段：等待玩家输入主角动作
             phase = RoundPhase.AwaitingPlayer;
         }
         catch (Exception ex)
@@ -270,7 +682,6 @@
             isBusy = false;
         }
     }
-//CODE_PLACEHOLDER
 
     private async Task SubmitPlayerTurnAsync()
     {
@@ -285,7 +696,12 @@
         errorMessage = null;
         try
         {
-            var round = await Orchestrator.CompletePlayerTurnAsync(activeRound, playerInput, skipPlayerTurn);
+            var round = await Orchestrator.CompletePlayerTurnAsync(activeRound, playerInput, skipPlayerTurn, onStepCompleted: async (r) =>
+            {
+                await AutoSaveChatSessionAsync();
+                StateHasChanged();
+                await Task.Delay(10);
+            });
             await HandleRoundCompletionAsync(round);
         }
         catch (Exception ex)
@@ -313,6 +729,7 @@
         activeRound = null;
         phase = RoundPhase.Idle;
         await LoadDatabaseStateAsync();
+        await AutoSaveChatSessionAsync();
     }
 
     private void RollbackActiveRound()
@@ -323,7 +740,6 @@
             activeRound = null;
         }
     }
-//CODE_PLACEHOLDER2
 
     private async Task ApplyTemplateAsync(int templateId)
     {
@@ -336,6 +752,7 @@
             activeRound = null;
             phase = RoundPhase.Idle;
             await LoadDatabaseStateAsync();
+            await AutoSaveChatSessionAsync();
         }
         catch (Exception ex)
         {
@@ -347,19 +764,62 @@
         }
     }
 
-    private async Task ResetGameAsync()
+    private async Task OnSessionChangedAsync()
     {
-        showConfirmResetModal = false;
         isBusy = true;
         errorMessage = null;
         try
         {
-            await TemplateService.ResetGameAsync();
+            var currentJson = JsonSerializer.Serialize(sessionRounds, JsonOptions);
+            var targetJson = await SessionService.SwitchSessionAsync(activeSessionId, currentJson);
+            
+            sessionRounds.Clear();
+            var rounds = JsonSerializer.Deserialize<List<GameRound>>(targetJson, JsonOptions);
+            if (rounds is not null)
+            {
+                sessionRounds.AddRange(rounds);
+            }
+            activeRound = null;
+            phase = RoundPhase.Idle;
+            
+            await LoadDatabaseStateAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"切换会话失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task CreateSessionAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newSessionName))
+        {
+            errorMessage = "会话名称不能为空。";
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            var name = newSessionName.Trim();
+            newSessionName = string.Empty;
+
+            var emptyRounds = await SessionService.CreateNewSessionAsync(name);
             sessionRounds.Clear();
             activeRound = null;
             phase = RoundPhase.Idle;
-            playerInput = string.Empty;
+
             await LoadDatabaseStateAsync();
+            
+            // Reload sessions list
+            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
+            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
+            activeSessionId = active?.SessionId ?? 0;
 
             showDeathGlitch = true;
             StateHasChanged();
@@ -368,14 +828,49 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"重置世界线失败: {ex.Message}";
+            errorMessage = $"新建会话失败: {ex.Message}";
         }
         finally
         {
             isBusy = false;
         }
     }
-//CODE_PLACEHOLDER3
+
+    private async Task DeleteCurrentSessionAsync()
+    {
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            await SessionService.DeleteSessionAsync(activeSessionId);
+            sessionRounds.Clear();
+            activeRound = null;
+            phase = RoundPhase.Idle;
+
+            await LoadDatabaseStateAsync();
+
+            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
+            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
+            activeSessionId = active?.SessionId ?? 0;
+
+            if (active is not null)
+            {
+                var rounds = JsonSerializer.Deserialize<List<GameRound>>(active.DetailedRoundsSnapshot, JsonOptions);
+                if (rounds is not null)
+                {
+                    sessionRounds.AddRange(rounds);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"删除会话失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
 
     private async Task LoadDatabaseStateAsync()
     {
@@ -383,6 +878,10 @@
         {
             var state = await DbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync();
             currentChapter = state?.CurrentChapter ?? 1;
+
+            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
+            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
+            activeSessionId = active?.SessionId ?? 0;
 
             hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
             templates = await TemplateService.ListTemplatesAsync();
@@ -396,10 +895,128 @@
             chronicles = await DbContext.Chronicle.AsNoTracking()
                 .OrderBy(c => c.RowId)
                 .ToListAsync();
+
+            protagonistInfo = await DbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync();
+            if (protagonistInfo is not null)
+            {
+                inventories = await DbContext.Inventory.AsNoTracking().ToListAsync();
+                equipments = await DbContext.Equipment.AsNoTracking().ToListAsync();
+                var loc = await DbContext.WorldMapPoints.AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.LocationName == protagonistInfo.LocationName);
+                if (loc is not null)
+                {
+                    locationDescription = loc.EnvironmentDesc;
+                    locationRegion = $"{loc.MajorRegion} · {loc.MinorRegion}";
+                }
+                else
+                {
+                    locationDescription = "未知的异世界区域";
+                    locationRegion = "未知领域";
+                }
+            }
+            else
+            {
+                inventories.Clear();
+                equipments.Clear();
+                locationDescription = null;
+                locationRegion = null;
+            }
+
+            // Load presets, npcs, routings
+            presentNpcs = await DbContext.ImportantNpcs.AsNoTracking().Where(n => n.PresenceStatus == "在场").ToListAsync();
+            allCharacterNames = await DbContext.ImportantNpcs.AsNoTracking().Select(n => n.Name).ToListAsync();
+            agentConfigs = await DbContext.AgentConfig.AsNoTracking().Where(c => c.Enabled == 1).ToListAsync();
+
+            var routings = await DbContext.ApiRoutings.ToListAsync();
+            selectedGmPreset = routings.FirstOrDefault(r => r.RoutingKey == "GM")?.PresetName ?? string.Empty;
+            selectedNpcPreset = routings.FirstOrDefault(r => r.RoutingKey == "NPC")?.PresetName ?? string.Empty;
+            selectedDicePreset = routings.FirstOrDefault(r => r.RoutingKey == "Dice")?.PresetName ?? string.Empty;
+            selectedMemoryPreset = routings.FirstOrDefault(r => r.RoutingKey == "Memory")?.PresetName ?? string.Empty;
+
+            var delayStr = routings.FirstOrDefault(r => r.RoutingKey == "Delay")?.PresetName;
+            if (double.TryParse(delayStr, out var dVal))
+            {
+                delaySeconds = dVal;
+            }
+            else
+            {
+                delaySeconds = 0.0;
+            }
+
+            characterBindings = routings
+                .Where(r => r.RoutingKey.StartsWith("Character_"))
+                .Select(r => new CharacterBinding
+                {
+                    CharacterName = r.RoutingKey.Substring("Character_".Length),
+                    PresetName = r.PresetName
+                })
+                .ToList();
+
+            tempNpcBindings = routings
+                .Where(r => r.RoutingKey.StartsWith("TempNpc_"))
+                .Select(r => new TempNpcBinding
+                {
+                    NpcName = r.RoutingKey.Substring("TempNpc_".Length),
+                    PresetName = r.PresetName
+                })
+                .ToList();
         }
         catch (Exception ex)
         {
             errorMessage = $"加载状态错误: {ex.Message}";
+        }
+    }
+
+    private async Task SaveRoutingConfigAsync()
+    {
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            var existing = await DbContext.ApiRoutings.ToListAsync();
+            DbContext.ApiRoutings.RemoveRange(existing);
+
+            var newRoutings = new List<ApiRouting>();
+            if (!string.IsNullOrWhiteSpace(selectedGmPreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "GM", PresetName = selectedGmPreset });
+            if (!string.IsNullOrWhiteSpace(selectedNpcPreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "NPC", PresetName = selectedNpcPreset });
+            if (!string.IsNullOrWhiteSpace(selectedDicePreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "Dice", PresetName = selectedDicePreset });
+            
+            newRoutings.Add(new ApiRouting { RoutingKey = "Delay", PresetName = delaySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+
+            if (!string.IsNullOrWhiteSpace(selectedMemoryPreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "Memory", PresetName = selectedMemoryPreset });
+
+            foreach (var b in characterBindings)
+            {
+                if (!string.IsNullOrWhiteSpace(b.CharacterName) && !string.IsNullOrWhiteSpace(b.PresetName))
+                {
+                    newRoutings.Add(new ApiRouting { RoutingKey = "Character_" + b.CharacterName.Trim(), PresetName = b.PresetName });
+                }
+            }
+
+            foreach (var b in tempNpcBindings)
+            {
+                if (!string.IsNullOrWhiteSpace(b.NpcName) && !string.IsNullOrWhiteSpace(b.PresetName))
+                {
+                    newRoutings.Add(new ApiRouting { RoutingKey = "TempNpc_" + b.NpcName.Trim(), PresetName = b.PresetName });
+                }
+            }
+
+            DbContext.ApiRoutings.AddRange(newRoutings);
+            await DbContext.SaveChangesAsync();
+            
+            await LoadDatabaseStateAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"保存模型配置路由失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 

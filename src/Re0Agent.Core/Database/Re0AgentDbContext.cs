@@ -20,6 +20,8 @@ public sealed class Re0AgentDbContext(DbContextOptions<Re0AgentDbContext> option
     public DbSet<DeathReturnLog> DeathReturnLog => Set<DeathReturnLog>();
     public DbSet<AgentConfig> AgentConfig => Set<AgentConfig>();
     public DbSet<ProtagonistTemplate> ProtagonistTemplates => Set<ProtagonistTemplate>();
+    public DbSet<ApiRouting> ApiRoutings => Set<ApiRouting>();
+    public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -424,7 +424,7 @@ public sealed class Phase4SaveAndTemplateTests
                 return Task.FromResult(new LlmResponse(request.AgentName, CreateSqlPayload(), UsedFakeClient: true));
             }
 
-            if (request.AgentName == "GM" && prompt.Contains("请对以下角色回合行为做简短裁判", StringComparison.Ordinal))
+            if (request.AgentName == "GM" && (prompt.Contains("请对以下角色回合行为做简短裁判", StringComparison.Ordinal) || prompt.Contains("裁决的角色回合", StringComparison.Ordinal)))
             {
                 return Task.FromResult(new LlmResponse(request.AgentName, "判定：无\n死亡回归：测试死因", UsedFakeClient: true));
             }

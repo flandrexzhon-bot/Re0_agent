@@ -69,7 +69,10 @@ public sealed class ProtagonistTemplateService(
         protagonist.RowId = 1;
 
         var addedSubaruNpc = false;
-        await using (var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken))
+        var transaction = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
         {
             dbContext.ChangeTracker.Clear();
 
@@ -90,7 +93,18 @@ public sealed class ProtagonistTemplateService(
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
+            throw;
         }
 
         var savePoint = await saveSystem.CreateSavePointAsync("initial_template", cancellationToken);
@@ -102,44 +116,60 @@ public sealed class ProtagonistTemplateService(
             savePoint.SaveId);
     }
 
-    public async Task ResetGameAsync(CancellationToken cancellationToken = default)
+
+
+    public async Task CreateTemplateFromProtagonistAsync(
+        string templateName,
+        ProtagonistInfo protagonist,
+        CancellationToken cancellationToken = default)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        var existing = await dbContext.ProtagonistTemplates
+            .AnyAsync(t => t.TemplateName == templateName, cancellationToken);
+        if (existing)
         {
-            dbContext.ChangeTracker.Clear();
-            
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM global_state;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM world_map_points;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM map_elements;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM factions;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM protagonist_info;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM important_npc;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM inventory;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM equipment;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM quests;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM chronicle;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM character_memory;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM death_return_log;", cancellationToken);
-            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM save_points;", cancellationToken);
-            
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            throw new InvalidOperationException($"模板名称 '{templateName}' 已存在。");
         }
 
-        var defaultTemplate = await dbContext.ProtagonistTemplates.FirstOrDefaultAsync(t => t.IsDefault == 1, cancellationToken);
-        if (defaultTemplate is null)
+        var cleanProtagonist = new ProtagonistInfo
         {
-            await EnsureDefaultTemplateAsync(cancellationToken);
-            defaultTemplate = await dbContext.ProtagonistTemplates.FirstAsync(t => t.IsDefault == 1, cancellationToken);
+            RowId = 1,
+            Name = protagonist.Name,
+            Gender = protagonist.Gender,
+            Age = protagonist.Age,
+            Appearance = protagonist.Appearance,
+            IdentityText = protagonist.IdentityText,
+            SelfStatus = protagonist.SelfStatus ?? "正常",
+            LocationName = protagonist.LocationName ?? "王都",
+            BaseAttributes = protagonist.BaseAttributes,
+            SpecialAttributes = protagonist.SpecialAttributes,
+            ResourcesText = protagonist.ResourcesText
+        };
+
+        var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
+
+        dbContext.ProtagonistTemplates.Add(new ProtagonistTemplate
+        {
+            TemplateName = templateName,
+            IncludesSubaru = string.Equals(cleanProtagonist.Name, SubaruName, StringComparison.Ordinal) ? 0 : 1,
+            BaseData = baseData,
+            IsDefault = 0
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteTemplateAsync(int templateId, CancellationToken cancellationToken = default)
+    {
+        var template = await dbContext.ProtagonistTemplates
+            .FirstOrDefaultAsync(t => t.TemplateId == templateId, cancellationToken);
+        if (template is null) return;
+        if (template.IsDefault == 1)
+        {
+            throw new InvalidOperationException("无法删除默认模板。");
         }
 
-        await ApplyTemplateAsync(defaultTemplate.TemplateId, cancellationToken);
+        dbContext.ProtagonistTemplates.Remove(template);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureMinimumWorldStateAsync(

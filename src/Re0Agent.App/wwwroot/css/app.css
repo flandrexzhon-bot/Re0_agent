@@ -525,6 +525,7 @@ button:disabled {
     color: var(--color-gold-glow);
     font-size: 1.05rem;
     line-height: 1.6;
+    white-space: pre-wrap;
 }
 
 /* Character Speech Bubbles */
@@ -885,4 +886,194 @@ button:disabled {
     font-family: var(--font-heading);
     letter-spacing: 0.05em;
     font-size: 0.95rem;
+}
+
+/* Right-side collapsible sidebar status bar */
+.novel-layout-container {
+    display: flex;
+    gap: 1.5rem;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+.novel-sidebar {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-vintage);
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,0,0,0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+}
+
+.novel-sidebar.collapsed {
+    width: 50px;
+    min-width: 50px;
+}
+
+.novel-sidebar.expanded {
+    width: 380px;
+    min-width: 380px;
+}
+
+.sidebar-toggle-btn {
+    background: var(--bg-surface);
+    border: none;
+    border-bottom: 1px solid var(--border-vintage);
+    color: var(--color-gold);
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    font-family: var(--font-heading);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    width: 100%;
+}
+.sidebar-toggle-btn:hover {
+    background: var(--bg-panel-light);
+    color: #fff;
+}
+
+.sidebar-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-vintage);
+    font-family: var(--font-heading);
+    color: var(--color-gold);
+    font-size: 1.1rem;
+    text-align: center;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background: rgba(29, 16, 11, 0.6);
+}
+
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.sidebar-content::-webkit-scrollbar {
+    width: 6px;
+}
+.sidebar-content::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.2);
+}
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--border-vintage);
+    border-radius: 3px;
+}
+
+.sidebar-section {
+    border: 1px solid rgba(207, 168, 107, 0.2);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.sidebar-section-title {
+    background: rgba(207, 168, 107, 0.1);
+    padding: 0.5rem 0.75rem;
+    font-family: var(--font-heading);
+    color: var(--color-gold);
+    font-size: 0.95rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(207, 168, 107, 0.1);
+}
+
+.sidebar-section-body {
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+
+.attr-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.attr-item {
+    background: rgba(0,0,0,0.3);
+    padding: 0.35rem 0.5rem;
+    border-radius: 3px;
+    border: 1px solid rgba(207,168,107,0.1);
+    display: flex;
+    justify-content: space-between;
+}
+
+.attr-label {
+    color: var(--color-gold);
+    font-weight: bold;
+}
+
+.attr-value {
+    color: var(--color-text-primary);
+}
+
+.item-list, .eq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.item-badge {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.3);
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    border-left: 3px solid var(--border-vintage);
+}
+
+.item-badge.quality-common { border-left-color: #8a8a8a; }
+.item-badge.quality-优秀 { border-left-color: #1eff00; }
+.item-badge.quality-rare, .item-badge.quality-优秀 { border-left-color: #0070dd; }
+.item-badge.quality-epic, .item-badge.quality-稀有 { border-left-color: #a335ee; }
+.item-badge.quality-legendary, .item-badge.quality-史诗 { border-left-color: #ff8000; }
+.item-badge.quality-传说 { border-left-color: #e6cc80; }
+
+.item-badge-name {
+    font-weight: bold;
+    color: var(--color-text-primary);
+}
+
+.item-badge-qty {
+    font-size: 0.8rem;
+    color: var(--color-gold);
+    background: rgba(207, 168, 107, 0.15);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+}
+
+.bg-dark-vintage {
+    background-color: var(--bg-surface) !important;
+}
+
+.border-vintage {
+    border: 1px solid var(--border-vintage) !important;
+}
+
+.text-gold {
+    color: var(--color-gold) !important;
 }

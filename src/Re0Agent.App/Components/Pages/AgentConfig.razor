@@ -2,14 +2,16 @@
 @using Microsoft.EntityFrameworkCore
 @using Re0Agent.Core.Entities
 @using Re0Agent.Core.Database
+@using System.Text.Json
+@using System.Text
 @inject Re0AgentDbContext DbContext
 
-<PageTitle>契约之书 - Agent 配置</PageTitle>
+<PageTitle>契约之书 - API 预设配置</PageTitle>
 
 <div class="fate-book">
     <section class="page-heading">
         <h1>契约之书</h1>
-        <p>在此撰写各个 Agent 的魂之契约，配置 LLM 连接与系统提示词。</p>
+        <p>在此撰写各个大语言模型的通灵契约，配置端点与密钥，为世界线的流转提供源力储备。</p>
     </section>
 
     @if (!string.IsNullOrWhiteSpace(statusMessage))
@@ -28,12 +30,12 @@
 
     <div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.5rem; margin-top: 1rem;">
         
-        <!-- 左侧契约列表 -->
+        <!-- 左侧预设列表 -->
         <div>
-            <div class="work-surface" style="padding: 1rem; min-height: 500px;">
-                <h3 style="font-size: 1.15rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(84, 56, 44, 0.4); padding-bottom: 0.5rem;">契约列表</h3>
+            <div class="work-surface" style="padding: 1rem; min-height: 550px; display: flex; flex-direction: column;">
+                <h3 style="font-size: 1.15rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(84, 56, 44, 0.4); padding-bottom: 0.5rem;">API 模型预设</h3>
                 
-                <div style="display: flex; flex-direction: column; gap: 0.50rem;">
+                <div style="display: flex; flex-direction: column; gap: 0.50rem; flex: 1; overflow-y: auto; max-height: 420px;">
                     @foreach (var config in agentConfigs)
                     {
                         <div class="status-panel @(selectedConfig?.ConfigId == config.ConfigId ? "active-contract" : "")" 
@@ -43,9 +45,18 @@
                                 <strong style="font-size: 0.95rem; color: @(selectedConfig?.ConfigId == config.ConfigId ? "var(--color-gold-glow)" : "var(--color-gold)");">
                                     @config.AgentName
                                 </strong>
-                                <span class="badge" style="font-size: 0.7rem; background: rgba(207, 168, 107, 0.15); color: var(--color-gold); padding: 0.15rem 0.35rem; border-radius: 3px;">
-                                    @config.AgentType
-                                </span>
+                                @if (config.Enabled == 1)
+                                {
+                                    <span class="badge" style="font-size: 0.7rem; background: rgba(40, 167, 69, 0.15); color: #28a745; padding: 0.15rem 0.35rem; border-radius: 3px;">
+                                        已启用
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge" style="font-size: 0.7rem; background: rgba(220, 53, 69, 0.15); color: #dc3545; padding: 0.15rem 0.35rem; border-radius: 3px;">
+                                        停用
+                                    </span>
+                                }
                             </div>
                             <span style="font-size: 0.75rem; margin-top: 0.25rem; display: block; color: var(--color-text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
                                 @config.ModelName
@@ -54,74 +65,31 @@
                     }
                 </div>
 
-                <button type="button" class="btn-custom" style="width: 100%; margin-top: 1.5rem; font-size: 0.85rem;" @onclick="CreateNewConfig">
+                <button type="button" class="btn-custom" style="width: 100%; margin-top: 1.5rem; font-size: 0.85rem;" @onclick="CreateNewConfig" disabled="@isBusy">
                     ＋ 缔结新契约
                 </button>
             </div>
         </div>
 
-        <!-- 右侧契约详情与编辑 -->
+        <!-- 右侧预设详情与编辑 -->
         <div>
             @if (selectedConfig is not null)
             {
-                <div class="work-surface" style="min-height: 500px;">
+                <div class="work-surface" style="min-height: 550px;">
                     <h2 style="display: flex; justify-content: space-between; align-items: center;">
                         <span>契约详情：@selectedConfig.AgentName</span>
                         @if (selectedConfig.ConfigId > 0)
                         {
-                            <button type="button" class="danger-action" style="font-size: 0.75rem; padding: 0.3rem 0.75rem;" @onclick="DeleteConfigAsync">
+                            <button type="button" class="danger-action" style="font-size: 0.75rem; padding: 0.3rem 0.75rem;" @onclick="DeleteConfigAsync" disabled="@isBusy">
                                 解除契约
                             </button>
                         }
                     </h2>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem;">
                         <div>
-                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">Agent 类型</label>
-                            <select @value="selectedConfig.AgentType" @onchange="OnAgentTypeChangedInternal">
-                                <option value="GM">GM (大局判定)</option>
-                                <option value="Character">Character (角色扮演)</option>
-                                <option value="Form">Form (填表更新)</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约名称 (绑定角色/模块)</label>
-                            
-                            @if (selectedConfig.AgentType == "GM")
-                            {
-                                <input type="text" value="GM" readonly disabled style="opacity: 0.6; background: rgba(0,0,0,0.2);" />
-                            }
-                            else if (selectedConfig.AgentType == "Form")
-                            {
-                                <input type="text" value="填表Agent" readonly disabled style="opacity: 0.6; background: rgba(0,0,0,0.2);" />
-                            }
-                            else
-                            {
-                                @if (nameSelectionMode == "select" && characterNames.Count > 0)
-                                {
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <select @value="selectedConfig.AgentName" @onchange="OnAgentNameSelectChanged" style="flex: 1;">
-                                            @foreach (var name in characterNames)
-                                            {
-                                                <option value="@name">@name</option>
-                                            }
-                                            <option value="__custom__">-- 绑定自定义新角色 --</option>
-                                        </select>
-                                        <button type="button" class="btn-custom" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin: 0;" @onclick='() => { nameSelectionMode = "custom"; selectedConfig.AgentName = ""; }'>键盘输入</button>
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <input type="text" @bind="selectedConfig.AgentName" placeholder="例如：爱蜜莉雅 / 雷姆" style="flex: 1;" />
-                                        @if (characterNames.Count > 0)
-                                        {
-                                            <button type="button" class="btn-custom" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin: 0;" @onclick='() => { nameSelectionMode = "select"; selectedConfig.AgentName = characterNames[0]; }'>列表选择</button>
-                                        }
-                                    </div>
-                                }
-                            }
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">预设名称 (用于首页路由绑定标识)</label>
+                            <input type="text" @bind="selectedConfig.AgentName" placeholder="例如：Claude 3.5, 自建本地大模型" />
                         </div>
                     </div>
 
@@ -138,12 +106,12 @@
                     </div>
 
                     <div style="margin-top: 1rem;">
-                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">魔力端点 (API Endpoint)</label>
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">魔力端点 (OpenAI API URL)</label>
                         <input type="text" @bind="selectedConfig.ApiEndpoint" placeholder="https://api.openai.com/v1" />
                     </div>
 
                     <div style="margin-top: 1rem;">
-                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">通灵密钥 (API Key)</label>
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">通灵密钥 (OpenAI API Key)</label>
                         <div style="position: relative; display: flex; align-items: center;">
                             <input type="@(showApiKey ? "text" : "password")" @bind="selectedConfig.ApiKey" placeholder="API Key" style="padding-right: 2.5rem;" />
                             <button type="button" style="position: absolute; right: 5px; background: transparent; border: none; box-shadow: none; color: var(--color-gold); cursor: pointer; padding: 5px;" 
@@ -153,25 +121,70 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-top: 1rem;">
                         <div>
                             <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">魂核模型 (Model Name)</label>
-                            <input type="text" @bind="selectedConfig.ModelName" placeholder="gpt-4o" />
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" @bind="selectedConfig.ModelName" placeholder="gpt-4o" style="flex: 1;" />
+                                <button type="button" class="btn-custom" style="font-size: 0.8rem; margin: 0; padding: 0.35rem 0.75rem;" 
+                                        @onclick="FetchModelListAsync" disabled="@isBusy">
+                                    获取模型列表
+                                </button>
+                            </div>
+                            @if (fetchedModels.Count > 0)
+                            {
+                                <div style="margin-top: 0.35rem;">
+                                    <select @onchange="OnFetchedModelSelected" style="font-size: 0.85rem; padding: 0.25rem;">
+                                        <option value="">-- 一键选中已拉取模型 --</option>
+                                        @foreach (var m in fetchedModels)
+                                        {
+                                            <option value="@m">@m</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
                         </div>
                         <div>
                             <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">灵性温度 (Temp)</label>
                             <input type="number" step="0.1" min="0" max="2" @bind="selectedConfig.Temperature" />
                         </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
                         <div>
-                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">最大上限 (Tokens)</label>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">输入 Token 限制</label>
+                            <input type="number" step="1000" min="256" @bind="selectedConfig.MaxInputTokens" />
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">输出 Token 限制 (Max)</label>
                             <input type="number" step="256" min="256" @bind="selectedConfig.MaxTokens" />
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">响应格式</label>
+                            <select @bind="selectedConfig.ResponseFormat">
+                                <option value="JSON">JSON 格式</option>
+                                <option value="Text">纯文本格式</option>
+                            </select>
                         </div>
                     </div>
 
                     <div style="margin-top: 1rem;">
-                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约咒文 (System Prompt)</label>
-                        <textarea rows="6" @bind="selectedConfig.SystemPrompt" placeholder="角色设定的系统 Prompt..."></textarea>
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约咒文 (System Prompt - 选填)</label>
+                        <textarea rows="4" @bind="selectedConfig.SystemPrompt" placeholder="可选的系统级 System Prompt..."></textarea>
                     </div>
+
+                    <!-- 连接测试面板 -->
+                    @if (connectionTestSuccess != null)
+                    {
+                        <div class="work-surface" style="margin-top: 1rem; padding: 0.75rem; border-color: @(connectionTestSuccess.Value ? "#28a745" : "#dc3545");">
+                            <h4 style="font-size: 0.9rem; margin-bottom: 0.25rem; color: @(connectionTestSuccess.Value ? "#28a745" : "#dc3545");">
+                                @(connectionTestSuccess.Value ? "💚 连接测试通过" : "💔 连接测试失败")
+                            </h4>
+                            <p style="font-size: 0.8rem; margin: 0; font-family: monospace; white-space: pre-wrap; word-break: break-all; color: var(--color-text-secondary);">
+                                @connectionTestResult
+                            </p>
+                        </div>
+                    }
 
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(84, 56, 44, 0.4);">
                         <label class="inline-toggle">
@@ -179,17 +192,22 @@
                             <span>启用该契约</span>
                         </label>
                         
-                        <button type="button" class="primary-action" @onclick="SaveConfigAsync">
-                            保存契约印章
-                        </button>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button type="button" class="btn-custom" style="margin: 0;" @onclick="TestConnectionAsync" disabled="@isBusy">
+                                @(isTestingConnection ? "正在通灵..." : "⚡ 预置连接测试")
+                            </button>
+                            <button type="button" class="primary-action" style="margin: 0;" @onclick="SaveConfigAsync" disabled="@isBusy">
+                                保存契约印章
+                            </button>
+                        </div>
                     </div>
                 </div>
             }
             else
             {
-                <div class="work-surface" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 500px; color: var(--color-text-secondary);">
+                <div class="work-surface" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 550px; color: var(--color-text-secondary);">
                     <span style="font-size: 3rem; margin-bottom: 1rem;">📜</span>
-                    <p>在左侧选择一份契约，或点击按钮缔结新的魔力印信。</p>
+                    <p>在左侧选择一份 API 模型预设，或点击按钮缔结新的魔力契约。</p>
                 </div>
             }
         </div>
@@ -211,9 +229,12 @@
     private bool showApiKey;
     private string? statusMessage;
     private string? errorMessage;
+    private bool isBusy = false;
 
-    private List<string> characterNames = new();
-    private string nameSelectionMode = "select"; // "select", "custom", or "fixed"
+    private List<string> fetchedModels = new();
+    private bool isTestingConnection = false;
+    private bool? connectionTestSuccess;
+    private string? connectionTestResult;
 
     protected override async Task OnInitializedAsync()
     {
@@ -228,16 +249,7 @@
     {
         try
         {
-            agentConfigs = await DbContext.AgentConfig.OrderBy(c => c.AgentType).ThenBy(c => c.AgentName).ToListAsync();
-
-            characterNames.Clear();
-            var protag = await DbContext.ProtagonistInfo.AsNoTracking().Select(p => p.Name).FirstOrDefaultAsync();
-            if (!string.IsNullOrEmpty(protag))
-            {
-                characterNames.Add(protag);
-            }
-            var npcs = await DbContext.ImportantNpcs.AsNoTracking().OrderBy(n => n.Name).Select(n => n.Name).ToListAsync();
-            characterNames.AddRange(npcs);
+            agentConfigs = await DbContext.AgentConfig.OrderBy(c => c.AgentName).ToListAsync();
         }
         catch (Exception ex)
         {
@@ -252,74 +264,34 @@
         showApiKey = false;
         statusMessage = null;
         errorMessage = null;
-
-        if (config.AgentType == "Character")
-        {
-            nameSelectionMode = characterNames.Contains(config.AgentName) ? "select" : "custom";
-        }
-        else
-        {
-            nameSelectionMode = "fixed";
-        }
-    }
-
-    private void OnAgentTypeChangedInternal(ChangeEventArgs e)
-    {
-        if (selectedConfig is null) return;
-        var type = e.Value?.ToString() ?? "Character";
-        selectedConfig.AgentType = type;
-
-        if (type == "GM")
-        {
-            selectedConfig.AgentName = "GM";
-            nameSelectionMode = "fixed";
-        }
-        else if (type == "Form")
-        {
-            selectedConfig.AgentName = "填表Agent";
-            nameSelectionMode = "fixed";
-        }
-        else
-        {
-            nameSelectionMode = characterNames.Count > 0 ? "select" : "custom";
-            selectedConfig.AgentName = characterNames.Count > 0 ? characterNames[0] : "新角色";
-        }
-    }
-
-    private void OnAgentNameSelectChanged(ChangeEventArgs e)
-    {
-        if (selectedConfig is null) return;
-        var name = e.Value?.ToString() ?? "";
-        if (name == "__custom__")
-        {
-            nameSelectionMode = "custom";
-            selectedConfig.AgentName = "";
-        }
-        else
-        {
-            selectedConfig.AgentName = name;
-        }
+        fetchedModels.Clear();
+        connectionTestSuccess = null;
+        connectionTestResult = null;
     }
 
     private void CreateNewConfig()
     {
         selectedConfig = new Re0Agent.Core.Entities.AgentConfig
         {
-            AgentName = characterNames.Count > 0 ? characterNames[0] : "新角色",
-            AgentType = "Character",
+            AgentName = "新大语言模型预设",
+            AgentType = "Character", // Bypasses sqlite agent_type constraint
             ApiEndpoint = "https://api.openai.com/v1",
             ApiKey = "",
             ModelName = "gpt-4o-mini",
             Temperature = 0.7,
             MaxTokens = 4096,
-            SystemPrompt = "你是新角色的专属角色Agent。",
+            MaxInputTokens = 4096,
+            ResponseFormat = "JSON",
+            SystemPrompt = "",
             Enabled = 1
         };
-        nameSelectionMode = characterNames.Count > 0 ? "select" : "custom";
         selectedConfigEnabled = true;
         showApiKey = true;
         statusMessage = "拟定了一份新契约，请填入内容后点击保存。";
         errorMessage = null;
+        fetchedModels.Clear();
+        connectionTestSuccess = null;
+        connectionTestResult = null;
     }
 
     private async Task SaveConfigAsync()
@@ -328,16 +300,19 @@
 
         statusMessage = null;
         errorMessage = null;
+        isBusy = true;
 
         if (string.IsNullOrWhiteSpace(selectedConfig.AgentName))
         {
             errorMessage = "契约的名称不能为空。";
+            isBusy = false;
             return;
         }
 
         try
         {
             selectedConfig.Enabled = selectedConfigEnabled ? 1 : 0;
+            selectedConfig.AgentType = "Character"; // ensure default
 
             if (selectedConfig.ConfigId == 0)
             {
@@ -346,6 +321,7 @@
                 if (exists)
                 {
                     errorMessage = $"已存在名称为 {selectedConfig.AgentName} 的契约。";
+                    isBusy = false;
                     return;
                 }
                 DbContext.AgentConfig.Add(selectedConfig);
@@ -356,7 +332,7 @@
             }
 
             await DbContext.SaveChangesAsync();
-            statusMessage = $"契约“{selectedConfig.AgentName}”已成功铭刻保存。";
+            statusMessage = $"预设“{selectedConfig.AgentName}”已成功铭刻保存。";
             await LoadConfigsAsync();
             
             // Re-select newly saved
@@ -370,6 +346,10 @@
         {
             errorMessage = $"保存契约发生错误: {ex.Message}";
         }
+        finally
+        {
+            isBusy = false;
+        }
     }
 
     private async Task DeleteConfigAsync()
@@ -378,12 +358,20 @@
 
         statusMessage = null;
         errorMessage = null;
+        isBusy = true;
 
         try
         {
+            // Also delete any routing mapping to this preset
+            var routings = await DbContext.ApiRoutings.Where(r => r.PresetName == selectedConfig.AgentName).ToListAsync();
+            if (routings.Any())
+            {
+                DbContext.ApiRoutings.RemoveRange(routings);
+            }
+
             DbContext.AgentConfig.Remove(selectedConfig);
             await DbContext.SaveChangesAsync();
-            statusMessage = $"契约“{selectedConfig.AgentName}”已成功解除（删除）。";
+            statusMessage = $"预设“{selectedConfig.AgentName}”已成功解除（删除）。";
             selectedConfig = null;
             await LoadConfigsAsync();
             if (agentConfigs.Count > 0)
@@ -394,6 +382,10 @@
         catch (Exception ex)
         {
             errorMessage = $"解除契约发生错误: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 
@@ -407,23 +399,174 @@
                 selectedConfig.ApiEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
                 selectedConfig.ModelName = "gemini-1.5-flash";
                 selectedConfig.MaxTokens = 8192;
+                selectedConfig.MaxInputTokens = 1048576;
+                selectedConfig.ResponseFormat = "JSON";
                 break;
             case "deepseek":
                 selectedConfig.ApiEndpoint = "https://api.deepseek.com/v1";
                 selectedConfig.ModelName = "deepseek-chat";
                 selectedConfig.MaxTokens = 4096;
+                selectedConfig.MaxInputTokens = 64000;
+                selectedConfig.ResponseFormat = "Text";
                 break;
             case "openai":
                 selectedConfig.ApiEndpoint = "https://api.openai.com/v1";
                 selectedConfig.ModelName = "gpt-4o-mini";
                 selectedConfig.MaxTokens = 4096;
+                selectedConfig.MaxInputTokens = 128000;
+                selectedConfig.ResponseFormat = "JSON";
                 break;
             case "ollama":
                 selectedConfig.ApiEndpoint = "http://localhost:11434/v1";
                 selectedConfig.ModelName = "llama3";
                 selectedConfig.MaxTokens = 2048;
+                selectedConfig.MaxInputTokens = 8192;
+                selectedConfig.ResponseFormat = "Text";
                 break;
         }
         statusMessage = $"已加载 {provider} 模板预设，请记得填写通灵密钥 (API Key)。";
+        fetchedModels.Clear();
+        connectionTestSuccess = null;
+        connectionTestResult = null;
+    }
+
+    private async Task FetchModelListAsync()
+    {
+        if (selectedConfig is null) return;
+
+        if (string.IsNullOrWhiteSpace(selectedConfig.ApiEndpoint))
+        {
+            errorMessage = "请先填写 API URL。";
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+        fetchedModels.Clear();
+
+        try
+        {
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+            var url = selectedConfig.ApiEndpoint.Trim().TrimEnd('/') + "/models";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            
+            if (!string.IsNullOrWhiteSpace(selectedConfig.ApiKey))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", selectedConfig.ApiKey);
+            }
+
+            using var response = await client.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = $"获取模型列表失败 ({response.StatusCode}): {body}";
+                return;
+            }
+
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.TryGetProperty("data", out var dataProp) && dataProp.ValueKind == JsonValueKind.Array)
+            {
+                var models = new List<string>();
+                foreach (var modelItem in dataProp.EnumerateArray())
+                {
+                    if (modelItem.TryGetProperty("id", out var idProp))
+                    {
+                        models.Add(idProp.GetString() ?? "");
+                    }
+                }
+                fetchedModels = models.Where(m => !string.IsNullOrEmpty(m)).Distinct().OrderBy(m => m).ToList();
+                statusMessage = $"已成功拉取到 {fetchedModels.Count} 个可用模型，可通过下拉框快速选择。";
+            }
+            else
+            {
+                errorMessage = "API 返回 Rar JSON 格式不符合 OpenAI /models 规范（未发现 'data' 数组）。";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"拉取模型列表发生异常: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void OnFetchedModelSelected(ChangeEventArgs e)
+    {
+        if (selectedConfig is null) return;
+        var val = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(val))
+        {
+            selectedConfig.ModelName = val;
+        }
+    }
+
+    private async Task TestConnectionAsync()
+    {
+        if (selectedConfig is null) return;
+        isTestingConnection = true;
+        isBusy = true;
+        connectionTestSuccess = null;
+        connectionTestResult = null;
+        errorMessage = null;
+
+        try
+        {
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(20);
+            var url = selectedConfig.ApiEndpoint.Trim().TrimEnd('/') + "/chat/completions";
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            
+            if (!string.IsNullOrWhiteSpace(selectedConfig.ApiKey))
+            {
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", selectedConfig.ApiKey);
+            }
+
+            var testPayload = new
+            {
+                model = selectedConfig.ModelName,
+                messages = new[]
+                {
+                    new { role = "user", content = "hello" }
+                },
+                max_tokens = 10,
+                temperature = 0.5
+            };
+
+            request.Content = new StringContent(JsonSerializer.Serialize(testPayload), Encoding.UTF8, "application/json");
+            using var response = await client.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                connectionTestSuccess = true;
+                using var doc = JsonDocument.Parse(body);
+                var content = string.Empty;
+                if (doc.RootElement.TryGetProperty("choices", out var choicesProp) && choicesProp.GetArrayLength() > 0)
+                {
+                    var msg = choicesProp[0].GetProperty("message");
+                    content = msg.TryGetProperty("content", out var cProp) ? cProp.GetString() : "";
+                }
+                connectionTestResult = $"连接测试成功！\n模型响应内容: \"{content}\"";
+            }
+            else
+            {
+                connectionTestSuccess = false;
+                connectionTestResult = $"连接失败 (HTTP 错误码 {response.StatusCode}):\n{body}";
+            }
+        }
+        catch (Exception ex)
+        {
+            connectionTestSuccess = false;
+            connectionTestResult = $"通灵网络发生异常: {ex.Message}";
+        }
+        finally
+        {
+            isTestingConnection = false;
+            isBusy = false;
+        }
     }
 }

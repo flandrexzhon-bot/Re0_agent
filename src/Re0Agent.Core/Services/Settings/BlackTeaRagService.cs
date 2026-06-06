@@ -63,9 +63,13 @@ public sealed class BlackTeaRagService(
             }
 
             var path = FindDefaultWorldBookPath();
-            cachedEntries = path is null
+            var allEntries = path is null
                 ? []
                 : await importer.ImportAsync(path, cancellationToken);
+
+            cachedEntries = allEntries
+                .Where(entry => entry.Content is null || !entry.Content.Contains("_.set"))
+                .ToList();
 
             return cachedEntries;
         }

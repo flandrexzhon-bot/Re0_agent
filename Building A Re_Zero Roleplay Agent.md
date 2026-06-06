@@ -1642,3 +1642,230 @@ dotnet test Re0Agent.sln --no-restore
 2. **单元测试**：运行 `dotnet test`，**36个测试用例全部顺利通过**。
 
 现在您可以放心重新运行客户端程序并再次尝试“重开世界”重置，外键约束错误已经完全解决！如有其他需要，随时告诉我。
+
+### User Input
+
+commit
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*User accepted the command `git status`*
+
+*User accepted the command `git add -A`*
+
+*User accepted the command `git commit -m "feat: complete phase 5 frontend enhancement, real LLM client config, reset game functionality, world codex database visualization, and fix foreign key reset bug"`*
+
+### Planner Response
+
+### 📦 Git 提交已完成
+
+我已为您暂存并提交了所有的代码与文档修改。
+
+* **提交信息**：`feat: complete phase 5 frontend enhancement, real LLM client config, reset game functionality, world codex database visualization, and fix foreign key reset bug`
+* **影响范围**：修改了 15 个文件，新增 3759 行代码/文档，删除 435 行。
+
+**已提交的文件列表：**
+- **应用配置文件与样式**：
+  - `src/Re0Agent.App/wwwroot/css/app.css` (命运之卷扩容与布局优化)
+  - `src/Re0Agent.App/wwwroot/index.html` (全局魔法字体引入)
+  - `src/Re0Agent.App/Components/Layout/MainLayout.razor.css` & `NavMenu.razor` / `NavMenu.razor.css` (深色魔法木纹侧栏)
+- **核心组件与交互**：
+  - `src/Re0Agent.App/Components/Pages/Home.razor` (重置世界弹窗、异常信息模态提示、大回合旁观模式)
+  - `src/Re0Agent.App/Components/Pages/AgentConfig.razor` (按在场角色名字绑定 API 下拉框)
+  - `src/Re0Agent.App/Components/Pages/DatabaseView.razor` (旧档案馆中“世界法典”分签页与 SQL 可视化)
+- **底层与模型服务**：
+  - `src/Re0Agent.Core/Services/Database/ProtagonistTemplateService.cs` (重设世界线重写、数据清理事务与**外键约束依赖删除顺序修复**)
+  - `src/Re0Agent.Core/Services/Llm/AgentLlmClient.cs` (移除 LLM Fake 调试兜底，无配置时直接报错)
+  - `src/Re0Agent.Core/Services/Database/SaveSystem.cs` (时空节点回滚支撑)
+  - `src/Re0Agent.Core/Services/Agent/AgentOrchestrator.cs` (Orchestrator 调度参数调用适配)
+  - `src/Re0Agent.App/MauiProgram.cs`
+- **文档与纪要**：
+  - `Building A Re_Zero Roleplay Agent.md` 
+  - `implementation_plan.md` 
+
+全部改动已编译验证，且 36 个测试用例均正常运行通过。如果有后续需求（如进行 Phase 6 打包或适配），请随时指示！
+
+### User Input
+
+3. 契约之书除应该是设置API预设具体内容 参考图片 在首页右边添加一个可伸缩状态栏
+2. 调整排版
+4. 实现用户可切换与设置“主角模板”
+
+*Listed directory [data](file:///d:/Re0_agent/data) *
+
+*Listed directory [settings](file:///d:/Re0_agent/data/settings) *
+
+*Listed directory [antigravity](file:///C:/Users/Administrator/.gemini/antigravity) *
+
+*Listed directory [bda72aee-30f3-40fc-80e7-e54e32609495](file:///C:/Users/Administrator/.gemini/antigravity/brain/bda72aee-30f3-40fc-80e7-e54e32609495) *
+
+*Viewed [media__1780740555697.png](file:///C:/Users/Administrator/.gemini/antigravity/brain/bda72aee-30f3-40fc-80e7-e54e32609495/media__1780740555697.png) *
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [AgentAndSaveEntities.cs](file:///d:/Re0_agent/src/Re0Agent.Core/Entities/AgentAndSaveEntities.cs) *
+
+*Viewed [NavMenu.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Layout/NavMenu.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [app.css](file:///d:/Re0_agent/src/Re0Agent.App/wwwroot/css/app.css) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [ProtagonistTemplateService.cs](file:///d:/Re0_agent/src/Re0Agent.Core/Services/Database/ProtagonistTemplateService.cs) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [app.css](file:///d:/Re0_agent/src/Re0Agent.App/wwwroot/css/app.css) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*User accepted the command `dotnet build`*
+
+*User accepted the command `dotnet build`*
+
+*Grep searched codebase*
+
+*Viewed [GameStateEntities.cs](file:///d:/Re0_agent/src/Re0Agent.Core/Entities/GameStateEntities.cs) *
+
+*Grep searched codebase*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*User accepted the command `dotnet build`*
+
+*Edited relevant file*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*User accepted the command `dotnet build`*
+
+*Checked command status*
+
+*User accepted the command `taskkill /IM Re0Agent.App.exe /F`*
+
+*User accepted the command `dotnet build`*
+
+*Viewed [Home.razor](file:///d:/Re0_agent/src/Re0Agent.App/Components/Pages/Home.razor) *
+
+*Edited relevant file*
+
+*User accepted the command `dotnet build`*
+
+*User accepted the command `dotnet test`*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*User accepted the command `git status`*
+
+*User accepted the command `git diff`*
+
+*Viewed [walkthrough.md](file:///C:/Users/Administrator/.gemini/antigravity/brain/bda72aee-30f3-40fc-80e7-e54e32609495/walkthrough.md) *
+
+*Edited relevant file*
+
+*Viewed [walkthrough.md](file:///C:/Users/Administrator/.gemini/antigravity/brain/bda72aee-30f3-40fc-80e7-e54e32609495/walkthrough.md) *
+
+*Edited relevant file*
+
+*User accepted the command `git status`*
+
+### Planner Response
+
+我已为您完成了以下功能升级与调整：
+
+### 1. 首页右侧可伸缩状态栏 (Sidebar Status Panel)
+- **页面排版优化**：在首页 (`Home.razor`) 引入了 `.novel-layout-container` 布局，右侧新增了符合 Re:Zero 暗褐色复古魔法风的 `.novel-sidebar` 状态栏。
+- **平滑折叠/展开**：折叠时自动缩减为 50px 宽度的迷你侧边条（显示竖排装饰字样 “🛡️ 冒险者状态栏”），展开时为 380px 宽度的羊皮纸式样属性与状态看板，支持一键点击切换。
+- **实时数据看板**：
+  - **主角基础信息**：姓名、性别、年龄、身份、外貌特征等。
+  - **动态场景与描述**：实时呈现主角身处的具体地图点（如“王都”）及对应的世界地图详细环境描述。
+  - **属性加护**：以格栅化排版显示体质、敏捷、感知、意志等数值，并显示当前获得的加护/权能与资源描述。
+  - **随身包裹与装备**：直观展示角色拥有的所有随身物品 (`inventory`) 与当前穿戴的装备 (`equipment`)，并根据物品品质（白、绿、蓝、紫、橙、金）动态绘制对应的 RPG 稀有度颜色边框。
+
+### 2. 主角模板切换与自定义配置 (Protagonist Templates Management)
+- **极速切换模板**：在状态栏 `📖 模板设定` 中整合了下拉列表与 “应用” 按钮，读取数据库已存的主角模板，选择后一键应用即可重开并重构世界线的主角。
+- **另存为新模板**：支持在状态栏中将当前主角的数据状态“另存为”新的自定义模板并持久化至 SQLite 数据库中。
+- **删除自定义模板**：可删除玩家自己创建的自定义模板，而系统默认的主角模板（如菜月昴）将受安全保护禁止删除。
+- **实时属性微调**：点击状态栏主角属性旁边的 `📝 编辑` 按钮，将直接在侧边栏中渲染属性表单，允许随时直接编辑主角的名字、身处位置、四维属性、权能和外貌等，并实时保存至数据库。
+
+---
+
+### 🧪 编译与测试验证
+1. **项目生成**：通过 `dotnet build` 确认项目编译成功，0 错误、0 警告。
+2. **自动化测试**：执行 `dotnet test`，所有 **39/39** 个数据库完整性、游戏大回合流程和模板服务核心逻辑测试用例全部一次性完美通过。
+
+详细的变更说明和技术文档已记录在 [walkthrough.md](file:///C:/Users/Administrator/.gemini/antigravity/brain/bda72aee-30f3-40fc-80e7-e54e32609495/walkthrough.md) 中。您现在可以重新启动并部署游戏，体验全新升级的冒险者状态栏与主角模板切换功能！
+
+### User Input
+
+修改 使其可以滚轮
+
+*Viewed [app.css](file:///d:/Re0_agent/src/Re0Agent.App/wwwroot/css/app.css) *
+
+*Viewed [app.css](file:///d:/Re0_agent/src/Re0Agent.App/wwwroot/css/app.css) *
+
+*Grep searched codebase*

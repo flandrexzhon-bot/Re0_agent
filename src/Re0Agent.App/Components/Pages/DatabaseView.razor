@@ -7,6 +7,7 @@
 @inject Re0AgentDbContext DbContext
 @inject SaveSystem SaveSys
 @inject IRagService RagService
+@inject ProtagonistTemplateService TemplateService
 
 <PageTitle>旧档案馆 - 命运账册</PageTitle>
 
@@ -58,31 +59,105 @@
         @if (protagonist is not null)
         {
             <div class="work-surface">
-                <h2>主角契约：@protagonist.Name</h2>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
-                    <div><strong>性别:</strong> @protagonist.Gender</div>
-                    <div><strong>年龄:</strong> @protagonist.Age</div>
-                    <div><strong>所处位置:</strong> @protagonist.LocationName</div>
-                    <div><strong>当前状态:</strong> @protagonist.SelfStatus</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2 style="margin: 0;">👤 主角契约：@protagonist.Name</h2>
+                    @if (!isEditingProtagonist)
+                    {
+                        <button type="button" class="btn-custom" @onclick="StartEditingProtagonist">📝 编辑主角属性</button>
+                    }
                 </div>
-                <div style="margin-top: 1rem;">
-                    <strong>外貌特征:</strong>
-                    <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.Appearance</p>
-                </div>
-                <div>
-                    <strong>身份背景:</strong>
-                    <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.IdentityText</p>
-                </div>
-                <div>
-                    <strong>基础属性:</strong>
-                    <p style="font-family: Consolas, monospace; color: var(--color-gold); margin-top: 0.25rem;">@protagonist.BaseAttributes</p>
-                </div>
-                @if (!string.IsNullOrWhiteSpace(protagonist.SpecialAttributes))
+
+                @if (isEditingProtagonist && editedProtagonist is not null)
                 {
-                    <div>
-                        <strong>特殊加护/权能:</strong>
-                        <p style="font-family: Consolas, monospace; color: var(--color-crimson-glow); margin-top: 0.25rem;">@protagonist.SpecialAttributes</p>
+                    <div style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; border-top: 1px solid rgba(207,168,107,0.15); padding-top: 1rem;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">姓名：</label>
+                                <input type="text" class="form-control parchment-input" @bind="editedProtagonist.Name" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">性别：</label>
+                                <input type="text" class="form-control parchment-input" @bind="editedProtagonist.Gender" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">年龄：</label>
+                                <input type="number" class="form-control parchment-input" @bind="editedProtagonist.Age" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">所处地点：</label>
+                                <input type="text" class="form-control parchment-input" @bind="editedProtagonist.LocationName" style="width: 100%;" />
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">当前身处状态：</label>
+                                <input type="text" class="form-control parchment-input" @bind="editedProtagonist.SelfStatus" style="width: 100%;" />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">基础属性 (使用英文分号分界，例如 体质:45; 敏捷:55)：</label>
+                            <input type="text" class="form-control parchment-input" @bind="editedProtagonist.BaseAttributes" style="width: 100%;" />
+                        </div>
+
+                        <div>
+                            <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">权能加护/特殊属性：</label>
+                            <input type="text" class="form-control parchment-input" @bind="editedProtagonist.SpecialAttributes" style="width: 100%;" />
+                        </div>
+
+                        <div>
+                            <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">携带物资：</label>
+                            <input type="text" class="form-control parchment-input" @bind="editedProtagonist.ResourcesText" style="width: 100%;" />
+                        </div>
+
+                        <div>
+                            <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">外貌特征描述：</label>
+                            <textarea class="form-control parchment-input" @bind="editedProtagonist.Appearance" rows="3" style="width: 100%;"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="text-gold" style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">身份背景简述：</label>
+                            <textarea class="form-control parchment-input" @bind="editedProtagonist.IdentityText" rows="3" style="width: 100%;"></textarea>
+                        </div>
+
+                        <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.5rem;">
+                            <button type="button" class="btn-custom" @onclick="CancelEditingProtagonist">取消</button>
+                            <button type="button" class="btn-custom primary-action" disabled="@isBusy" @onclick="SaveProtagonistInfoAsync">💾 保存属性契约</button>
+                        </div>
                     </div>
+                }
+                else
+                {
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                        <div><strong>性别:</strong> @protagonist.Gender</div>
+                        <div><strong>年龄:</strong> @protagonist.Age</div>
+                        <div><strong>所处位置:</strong> @protagonist.LocationName</div>
+                        <div><strong>当前状态:</strong> @protagonist.SelfStatus</div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <strong>外貌特征:</strong>
+                        <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.Appearance</p>
+                    </div>
+                    <div>
+                        <strong>身份背景:</strong>
+                        <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.IdentityText</p>
+                    </div>
+                    <div>
+                        <strong>基础属性:</strong>
+                        <p style="font-family: Consolas, monospace; color: var(--color-gold); margin-top: 0.25rem;">@protagonist.BaseAttributes</p>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(protagonist.SpecialAttributes))
+                    {
+                        <div>
+                            <strong>特殊加护/权能:</strong>
+                            <p style="font-family: Consolas, monospace; color: var(--color-crimson-glow); margin-top: 0.25rem;">@protagonist.SpecialAttributes</p>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(protagonist.ResourcesText))
+                    {
+                        <div>
+                            <strong>携带物资:</strong>
+                            <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.ResourcesText</p>
+                        </div>
+                    }
                 }
             </div>
         }
@@ -92,6 +167,56 @@
                 <p style="color: var(--color-text-secondary);">尚未生成主角信息。</p>
             </div>
         }
+
+        <!-- 主角模板设定 -->
+        <div class="work-surface">
+            <h2>📖 主角模板设定</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                <!-- 切换/应用模板 -->
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(0,0,0,0.15); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-vintage);">
+                    <label class="text-gold" style="font-weight: bold; font-size: 0.95rem;">应用主角模板：</label>
+                    <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 0 0 0.5rem 0;">选择模板载入会覆盖当前的主角属性契约，开始新的篇章线。</p>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select class="form-select parchment-input" @bind="selectedTemplateId" style="flex: 1; padding: 0.35rem 0.5rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                            @foreach (var temp in templates)
+                            {
+                                <option value="@temp.TemplateId">@temp.TemplateName @(temp.IsDefault == 1 ? "(★ 默认)" : "")</option>
+                            }
+                        </select>
+                        <button type="button" class="btn-custom primary-action" disabled="@isBusy" @onclick="() => ApplyTemplateAsync(selectedTemplateId)" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">应用</button>
+                    </div>
+                </div>
+
+                <!-- 另存为模板 -->
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(0,0,0,0.15); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-vintage);">
+                    <label class="text-gold" style="font-weight: bold; font-size: 0.95rem;">另存为自定义模板：</label>
+                    <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 0 0 0.5rem 0;">将当前的主角属性快照保存为一个全新的模板以供复用。</p>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" class="form-control parchment-input" @bind="newTemplateName" placeholder="输入新模版名称..." style="flex: 1; padding: 0.35rem 0.5rem;" />
+                        <button type="button" class="btn-custom primary-action" disabled="@isBusy" @onclick="CreateTemplateAsync" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">另存为</button>
+                    </div>
+                </div>
+
+                <!-- 删除自定义模板 -->
+                @if (templates.Any(t => t.IsDefault == 0))
+                {
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(0,0,0,0.15); padding: 1rem; border-radius: 6px; border: 1px solid var(--border-vintage);">
+                        <label class="text-gold" style="font-weight: bold; font-size: 0.95rem;">删除自定义模板：</label>
+                        <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 0 0 0.5rem 0;">永久移除此自定义主角模板。默认自带的模板不可删除。</p>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select class="form-select parchment-input" @bind="templateToDeleteId" style="flex: 1; padding: 0.35rem 0.5rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                <option value="0">-- 选择删除的自定义模板 --</option>
+                                @foreach (var temp in templates.Where(t => t.IsDefault == 0))
+                                {
+                                    <option value="@temp.TemplateId">@temp.TemplateName</option>
+                                }
+                            </select>
+                            <button type="button" class="danger-action" disabled="@isBusy" @onclick="DeleteTemplateAsync" style="font-size: 0.85rem; padding: 0.35rem 0.75rem;">删除</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
 
         <!-- 重要 NPC 列表 -->
         <div class="work-surface">
@@ -585,6 +710,15 @@
     private List<Quest> quests = new();
     private List<ChronicleEntry> chronicles = new();
 
+    // Protagonist template and edit fields
+    private bool isEditingProtagonist = false;
+    private ProtagonistInfo? editedProtagonist;
+    private IReadOnlyList<ProtagonistTemplate> templates = new List<ProtagonistTemplate>();
+    private int selectedTemplateId;
+    private int templateToDeleteId;
+    private string newTemplateName = string.Empty;
+    private bool isBusy = false;
+
     // BlackTea world book viewer
     private IReadOnlyList<WorldBookEntry>? worldBookEntries;
     private string blackTeaFilter = string.Empty;
@@ -648,6 +782,13 @@
             mapElements = await DbContext.MapElements.AsNoTracking().OrderBy(e => e.ElementName).ToListAsync();
             quests = await DbContext.Quests.AsNoTracking().OrderBy(q => q.QuestName).ToListAsync();
             chronicles = await DbContext.Chronicle.AsNoTracking().OrderBy(c => c.RowId).ToListAsync();
+
+            templates = await TemplateService.ListTemplatesAsync();
+            if (selectedTemplateId == 0 && templates.Count > 0)
+            {
+                selectedTemplateId = templates.FirstOrDefault(t => t.IsDefault == 1)?.TemplateId 
+                    ?? templates[0].TemplateId;
+            }
         }
         catch (Exception ex)
         {
@@ -747,6 +888,151 @@
         {
             showDeathGlitch = false;
             errorMessage = $"手动死亡回归发生错误: {ex.Message}";
+        }
+    }
+
+    private void StartEditingProtagonist()
+    {
+        if (protagonist is null) return;
+        editedProtagonist = new ProtagonistInfo
+        {
+            RowId = protagonist.RowId,
+            Name = protagonist.Name,
+            Gender = protagonist.Gender,
+            Age = protagonist.Age,
+            Appearance = protagonist.Appearance,
+            IdentityText = protagonist.IdentityText,
+            SelfStatus = protagonist.SelfStatus,
+            LocationName = protagonist.LocationName,
+            BaseAttributes = protagonist.BaseAttributes,
+            SpecialAttributes = protagonist.SpecialAttributes,
+            ResourcesText = protagonist.ResourcesText
+        };
+        isEditingProtagonist = true;
+    }
+
+    private void CancelEditingProtagonist()
+    {
+        isEditingProtagonist = false;
+    }
+
+    private async Task SaveProtagonistInfoAsync()
+    {
+        if (protagonist is null || editedProtagonist is null) return;
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+        try
+        {
+            DbContext.ChangeTracker.Clear();
+            var p = await DbContext.ProtagonistInfo.FirstOrDefaultAsync(x => x.RowId == protagonist.RowId);
+            if (p is not null)
+            {
+                p.Name = editedProtagonist.Name ?? "";
+                p.Gender = editedProtagonist.Gender ?? "";
+                p.Age = editedProtagonist.Age;
+                p.Appearance = editedProtagonist.Appearance ?? "";
+                p.IdentityText = editedProtagonist.IdentityText ?? "";
+                p.SelfStatus = editedProtagonist.SelfStatus ?? "";
+                p.LocationName = editedProtagonist.LocationName ?? "";
+                p.BaseAttributes = editedProtagonist.BaseAttributes ?? "";
+                p.SpecialAttributes = editedProtagonist.SpecialAttributes;
+                p.ResourcesText = editedProtagonist.ResourcesText;
+
+                await DbContext.SaveChangesAsync();
+                isEditingProtagonist = false;
+                statusMessage = "主角属性修改已保存！";
+                await RefreshDataAsync();
+            }
+            else
+            {
+                errorMessage = "未找到对应的主角数据库记录。";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"保存主角属性失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task ApplyTemplateAsync(int templateId)
+    {
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+        try
+        {
+            await TemplateService.ApplyTemplateAsync(templateId);
+            statusMessage = "已成功应用主角模板，世界因果契约已更新！";
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"应用主角模板失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task CreateTemplateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newTemplateName))
+        {
+            errorMessage = "模板名称不能为空。";
+            return;
+        }
+        if (protagonist is null)
+        {
+            errorMessage = "当前没有主角信息。";
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+        try
+        {
+            await TemplateService.CreateTemplateFromProtagonistAsync(newTemplateName, protagonist);
+            statusMessage = $"已成功将当前主角另存为新模板: {newTemplateName}。";
+            newTemplateName = string.Empty;
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"另存为新模板失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task DeleteTemplateAsync()
+    {
+        if (templateToDeleteId <= 0) return;
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = null;
+        try
+        {
+            await TemplateService.DeleteTemplateAsync(templateToDeleteId);
+            statusMessage = "已成功删除该自定义模板。";
+            templateToDeleteId = 0;
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"删除模板失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 }

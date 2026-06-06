@@ -63,14 +63,30 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 
-        var payload = new
+        object payload;
+        if (options.ResponseFormat == "JSON")
         {
-            model = options.ModelName,
-            messages = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
-            temperature = options.Temperature,
-            max_tokens = options.MaxTokens,
-            stream
-        };
+            payload = new
+            {
+                model = options.ModelName,
+                messages = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
+                temperature = options.Temperature,
+                max_tokens = options.MaxTokens,
+                stream,
+                response_format = new { type = "json_object" }
+            };
+        }
+        else
+        {
+            payload = new
+            {
+                model = options.ModelName,
+                messages = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
+                temperature = options.Temperature,
+                max_tokens = options.MaxTokens,
+                stream
+            };
+        }
 
         httpRequest.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         return httpRequest;

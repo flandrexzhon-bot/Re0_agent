@@ -129,6 +129,23 @@ public sealed class AgentConfig
 
     [Column("enabled")]
     public int Enabled { get; set; } = 1;
+
+    [Column("max_input_tokens")]
+    public int MaxInputTokens { get; set; } = 4096;
+
+    [Column("response_format")]
+    public string ResponseFormat { get; set; } = "JSON";
+}
+
+[Table("api_routing")]
+public sealed class ApiRouting
+{
+    [Key]
+    [Column("routing_key")]
+    public required string RoutingKey { get; set; }
+
+    [Column("preset_name")]
+    public required string PresetName { get; set; }
 }
 
 [Table("protagonist_templates")]
@@ -149,4 +166,63 @@ public sealed class ProtagonistTemplate
 
     [Column("is_default")]
     public int IsDefault { get; set; }
+}
+
+[Table("chat_sessions")]
+public sealed class ChatSession
+{
+    [Key]
+    [Column("session_id")]
+    public int SessionId { get; set; }
+
+    [Column("session_name")]
+    public required string SessionName { get; set; }
+
+    [Column("is_active")]
+    public int IsActive { get; set; } = 0;
+
+    [Column("created_at")]
+    public required string CreatedAt { get; set; }
+
+    [Column("global_state_snapshot")]
+    public string GlobalStateSnapshot { get; set; } = "{}";
+
+    [Column("protagonist_snapshot")]
+    public string ProtagonistSnapshot { get; set; } = "{}";
+
+    [Column("world_map_snapshot")]
+    public string WorldMapSnapshot { get; set; } = "[]";
+
+    [Column("map_elements_snapshot")]
+    public string MapElementsSnapshot { get; set; } = "[]";
+
+    [Column("factions_snapshot")]
+    public string FactionsSnapshot { get; set; } = "[]";
+
+    [Column("npc_snapshot")]
+    public string NpcSnapshot { get; set; } = "[]";
+
+    [Column("inventory_snapshot")]
+    public string InventorySnapshot { get; set; } = "[]";
+
+    [Column("equipment_snapshot")]
+    public string EquipmentSnapshot { get; set; } = "[]";
+
+    [Column("quest_snapshot")]
+    public string QuestSnapshot { get; set; } = "[]";
+
+    [Column("chronicle_snapshot")]
+    public string ChronicleSnapshot { get; set; } = "[]";
+
+    [Column("character_memory_snapshot")]
+    public string CharacterMemorySnapshot { get; set; } = "[]";
+
+    [Column("death_return_log_snapshot")]
+    public string DeathReturnLogSnapshot { get; set; } = "[]";
+
+    [Column("save_points_snapshot")]
+    public string SavePointsSnapshot { get; set; } = "[]";
+
+    [Column("detailed_rounds_snapshot")]
+    public string DetailedRoundsSnapshot { get; set; } = "[]";
 }

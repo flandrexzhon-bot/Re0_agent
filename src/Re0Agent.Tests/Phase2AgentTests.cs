@@ -120,6 +120,44 @@ public sealed class Phase2AgentTests
     }
 
     [Fact]
+    public async Task OrchestratorExecutesTemporaryNpcsFromGmOpening()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.BeginRoundAsync();
+            
+            // Override GmOpening to test custom slot parsing and temporary NPC execution
+            round.GmOpening = """
+                【场景描述】
+                绿阳季的晨光斜落在王都中心的石板街上。
+                
+                【行动位号】
+                - 1号位：环境与路人反应
+                - 2号位：菲特
+                - 最后行动：菜月昴
+                """;
+
+            await orchestrator.RunNpcTurnsAsync(round);
+
+            // 1号位和2号位NPC均应该有执行记录，并且名字正确
+            Assert.Equal(2, round.CharacterTurns.Count);
+            Assert.Equal("环境与路人反应", round.CharacterTurns[0].CharacterName);
+            Assert.Equal("菲特", round.CharacterTurns[1].CharacterName);
+            Assert.False(round.CharacterTurns[0].IsPlayerControlled);
+            Assert.False(round.CharacterTurns[1].IsPlayerControlled);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task CompletePlayerTurnFinalizesRoundAndPersists()
     {
         var databasePath = CreateTempDatabasePath();

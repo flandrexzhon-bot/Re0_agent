@@ -46,6 +46,7 @@ public static class MauiProgram
         builder.Services.AddScoped<FormAgentSqlExecutor>();
         builder.Services.AddScoped<SaveSystem>();
         builder.Services.AddScoped<ProtagonistTemplateService>();
+        builder.Services.AddScoped<ChatSessionService>();
         builder.Services.AddScoped<AgentOrchestrator>();
 
 #if DEBUG

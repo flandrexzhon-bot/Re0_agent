@@ -20,20 +20,29 @@ public sealed class AgentOrchestrator(
         bool skipPlayerTurn,
         CancellationToken cancellationToken = default)
     {
-        var round = await BeginRoundAsync(cancellationToken);
+        var round = await BeginRoundAsync(onStepCompleted: null, cancellationToken: cancellationToken);
         if (round.DeathReturnTriggered)
         {
-            await FinalizeRoundAsync(round, cancellationToken);
+            await FinalizeRoundAsync(round, onStepCompleted: null, cancellationToken);
             return round;
         }
 
-        return await CompletePlayerTurnAsync(round, playerInput, skipPlayerTurn, cancellationToken);
+        await RunNpcTurnsAsync(round, onStepCompleted: null, cancellationToken: cancellationToken);
+        if (round.DeathReturnTriggered)
+        {
+            await FinalizeRoundAsync(round, onStepCompleted: null, cancellationToken);
+            return round;
+        }
+
+        return await CompletePlayerTurnAsync(round, playerInput, skipPlayerTurn, onStepCompleted: null, cancellationToken);
     }
 
     /// <summary>
-    /// 第一阶段：初始化、GM开场、在场NPC逐个行动。主角回合尚未执行。
+    /// 第一阶段：初始化、GM开场。主角和NPC回合尚未执行。
     /// </summary>
-    public async Task<GameRound> BeginRoundAsync(CancellationToken cancellationToken = default)
+    public async Task<GameRound> BeginRoundAsync(
+        Func<GameRound, Task>? onStepCompleted = null,
+        CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
 
@@ -49,7 +58,96 @@ public sealed class AgentOrchestrator(
         round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, cancellationToken);
         round.Events.Add(round.GmOpening);
 
-        foreach (var profile in profiles.Where(profile => !profile.IsPlayerControlled))
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+        await ApplyDelayAsync(cancellationToken);
+
+        return round;
+    }
+
+    /// <summary>
+    /// 第二阶段：在场NPC按照位号顺序逐个行动。
+    /// </summary>
+    public async Task RunNpcTurnsAsync(
+        GameRound round,
+        Func<GameRound, Task>? onStepCompleted = null,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Load active profiles from database
+        var dbProfiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+        var dbNpcProfiles = dbProfiles.Where(p => !p.IsPlayerControlled).ToList();
+
+        // 2. Parse slots from GM opening
+        var parsedSlots = new List<(string Name, int Slot, bool IsPlayer)>();
+        var lines = (round.GmOpening ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var line in lines)
+        {
+            if (line.Contains("最后行动", StringComparison.OrdinalIgnoreCase))
+            {
+                var matchProtagonist = System.Text.RegularExpressions.Regex.Match(line, @"最后行动\s*[：:\-\s]*\s*([^\r\n]+)");
+                if (matchProtagonist.Success)
+                {
+                    var name = matchProtagonist.Groups[1].Value.Trim().Trim('*', '-', ' ', '。', '：', ':', '－', '[', ']');
+                    parsedSlots.Add((name, 9999, true));
+                }
+                continue;
+            }
+
+            var matchSlot = System.Text.RegularExpressions.Regex.Match(line, @"(\d+)\s*(?:号位|号|位|\.|：|:|－|\-)\s*([^\r\n]+)");
+            if (matchSlot.Success)
+            {
+                var slotStr = matchSlot.Groups[1].Value;
+                var name = matchSlot.Groups[2].Value.Trim().Trim('*', '-', ' ', '。', '：', ':', '－', '[', ']');
+                if (int.TryParse(slotStr, out var slot))
+                {
+                    parsedSlots.Add((name, slot, false));
+                }
+            }
+        }
+
+        // 3. Build NPC profiles list to run
+        var npcProfilesToRun = new List<(CharacterAgentProfile Profile, int Slot)>();
+        var usedDbNpcs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var parsed in parsedSlots)
+        {
+            if (parsed.IsPlayer) continue;
+
+            // Find matching db profile
+            var dbMatch = dbNpcProfiles.FirstOrDefault(p => p.CharacterName.Equals(parsed.Name, StringComparison.OrdinalIgnoreCase));
+            if (dbMatch is not null)
+            {
+                npcProfilesToRun.Add((dbMatch, parsed.Slot));
+                usedDbNpcs.Add(dbMatch.CharacterName);
+            }
+            else
+            {
+                // Create dynamic/temporary profile
+                var tempProfile = new CharacterAgentProfile
+                {
+                    CharacterName = parsed.Name,
+                    IsPlayerControlled = false,
+                    WorldBookEntryKey = parsed.Name,
+                    CurrentStateReference = "temporary_npc"
+                };
+                npcProfilesToRun.Add((tempProfile, parsed.Slot));
+            }
+        }
+
+        // Add any db NPCs that were NOT parsed in the GM opening, with fallback slot 999
+        foreach (var dbNpc in dbNpcProfiles)
+        {
+            if (!usedDbNpcs.Contains(dbNpc.CharacterName))
+            {
+                npcProfilesToRun.Add((dbNpc, 999));
+            }
+        }
+
+        var sortedNpcProfiles = npcProfilesToRun.OrderBy(x => x.Slot).Select(x => x.Profile).ToList();
+
+        foreach (var profile in sortedNpcProfiles)
         {
             var turn = await RunCharacterTurnAsync(round, profile, playerInput: null, skip: false, cancellationToken);
             if (turn.DiceResult is not null && round.DeathReturnCause is null)
@@ -57,14 +155,22 @@ public sealed class AgentOrchestrator(
                 round.DeathReturnCause = TryReadDeathReturnCause(turn.GmJudgement);
             }
 
+            if (onStepCompleted is not null)
+            {
+                await onStepCompleted(round);
+            }
+            await ApplyDelayAsync(cancellationToken);
+
             if (round.DeathReturnCause is not null)
             {
                 round.Events.Add($"死亡回归触发：{round.DeathReturnCause}");
+                if (onStepCompleted is not null)
+                {
+                    await onStepCompleted(round);
+                }
                 break;
             }
         }
-
-        return round;
     }
 
     /// <summary>
@@ -74,6 +180,7 @@ public sealed class AgentOrchestrator(
         GameRound round,
         string? playerInput,
         bool skipPlayerTurn,
+        Func<GameRound, Task>? onStepCompleted = null,
         CancellationToken cancellationToken = default)
     {
         round.PlayerInput = playerInput;
@@ -87,11 +194,17 @@ public sealed class AgentOrchestrator(
                 {
                     round.DeathReturnCause = TryReadDeathReturnCause(turn.GmJudgement);
                 }
+
+                if (onStepCompleted is not null)
+                {
+                    await onStepCompleted(round);
+                }
+                await ApplyDelayAsync(cancellationToken);
             }
         }
 
         round.PendingProtagonistProfiles = [];
-        await FinalizeRoundAsync(round, cancellationToken);
+        await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }
 
@@ -139,15 +252,30 @@ public sealed class AgentOrchestrator(
         return turn;
     }
 
-    private async Task FinalizeRoundAsync(GameRound round, CancellationToken cancellationToken)
+    private async Task FinalizeRoundAsync(
+        GameRound round,
+        Func<GameRound, Task>? onStepCompleted,
+        CancellationToken cancellationToken)
     {
         round.GmSummary = await gmAgent.SummarizeAsync(round, cancellationToken);
         round.Events.Add(round.GmSummary);
         round.DeathReturnCause ??= TryReadDeathReturnCause(round.GmSummary);
 
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+        await ApplyDelayAsync(cancellationToken);
+
         var sql = await formAgent.GenerateSqlAsync(round, cancellationToken);
         var execution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
         round.Events.Add($"填表Agent执行SQL：{execution.StatementsExecuted}条。");
+
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+        await ApplyDelayAsync(cancellationToken);
 
         var latestChronicleIndex = await ReadLatestChronicleIndexAsync(cancellationToken);
         if (round.DeathReturnCause is not null)
@@ -165,6 +293,31 @@ public sealed class AgentOrchestrator(
         }
 
         round.CompletedAt = DateTimeOffset.UtcNow;
+
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+    }
+
+    private async Task ApplyDelayAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var delayStr = await dbContext.ApiRoutings
+                .Where(r => r.RoutingKey == "Delay")
+                .Select(r => r.PresetName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (double.TryParse(delayStr, out var seconds) && seconds > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(seconds), cancellationToken);
+            }
+        }
+        catch
+        {
+            // Ignore if routing table doesn't exist yet (e.g. initial setup)
+        }
     }
 
     private async Task<string> CreateRoundIndexAsync(CancellationToken cancellationToken)

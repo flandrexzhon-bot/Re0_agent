@@ -18,7 +18,9 @@ public static class DatabaseSchema
         "save_points",
         "death_return_log",
         "agent_config",
-        "protagonist_templates"
+        "protagonist_templates",
+        "api_routing",
+        "chat_sessions"
     ];
 
     public static readonly string[] CreateStatements =
@@ -193,7 +195,9 @@ public static class DatabaseSchema
           temperature REAL DEFAULT 0.7 CHECK(temperature >= 0 AND temperature <= 2),
           max_tokens INTEGER DEFAULT 4096 CHECK(max_tokens > 0),
           system_prompt TEXT,
-          enabled INTEGER DEFAULT 1 CHECK(enabled IN (0, 1))
+          enabled INTEGER DEFAULT 1 CHECK(enabled IN (0, 1)),
+          max_input_tokens INTEGER DEFAULT 4096,
+          response_format TEXT DEFAULT 'JSON'
         );
         """,
         """
@@ -203,6 +207,34 @@ public static class DatabaseSchema
           includes_subaru INTEGER DEFAULT 1,
           base_data TEXT NOT NULL,
           is_default INTEGER DEFAULT 0
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS api_routing (
+          routing_key TEXT PRIMARY KEY,
+          preset_name TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+          session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_name TEXT NOT NULL,
+          is_active INTEGER DEFAULT 0 CHECK(is_active IN (0, 1)),
+          created_at TEXT NOT NULL,
+          global_state_snapshot TEXT NOT NULL DEFAULT '{{}}',
+          protagonist_snapshot TEXT NOT NULL DEFAULT '{{}}',
+          world_map_snapshot TEXT NOT NULL DEFAULT '[]',
+          map_elements_snapshot TEXT NOT NULL DEFAULT '[]',
+          factions_snapshot TEXT NOT NULL DEFAULT '[]',
+          npc_snapshot TEXT NOT NULL DEFAULT '[]',
+          inventory_snapshot TEXT NOT NULL DEFAULT '[]',
+          equipment_snapshot TEXT NOT NULL DEFAULT '[]',
+          quest_snapshot TEXT NOT NULL DEFAULT '[]',
+          chronicle_snapshot TEXT NOT NULL DEFAULT '[]',
+          character_memory_snapshot TEXT NOT NULL DEFAULT '[]',
+          death_return_log_snapshot TEXT NOT NULL DEFAULT '[]',
+          save_points_snapshot TEXT NOT NULL DEFAULT '[]',
+          detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]'
         );
         """
     ];
