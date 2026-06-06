@@ -248,6 +248,28 @@ public sealed class Phase2AgentTests
         }
     }
 
+    [Fact]
+    public async Task BeginRoundWithCustomOpeningUsesProvidedMessage()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            const string customMessage = "【自定义开场】这是来自世界的神秘意志开场。";
+            var round = await orchestrator.BeginRoundAsync(customOpening: customMessage);
+
+            Assert.Equal(customMessage, round.GmOpening);
+            Assert.Contains(customMessage, round.Events);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
     private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context)
     {
         var configResolver = new AgentConfigResolver(context);

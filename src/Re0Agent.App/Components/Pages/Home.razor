@@ -150,6 +150,26 @@
 
                     <div class="wizard-actions">
                         <button class="wizard-btn-secondary" @onclick="GoToStep2">上一步</button>
+                        <button class="wizard-btn-primary" @onclick="GoToStep4">下一步：自定义开场白</button>
+                    </div>
+                </div>
+            }
+            else if (initStep == 4)
+            {
+                <!-- Step 4: Custom Opening Message -->
+                <div class="wizard-step step-custom-opening">
+                    <h3 class="wizard-step-title">第三步：自定义开场白（可以空着）</h3>
+                    
+                    <div class="custom-opening-input-box" style="width: 100%; margin-bottom: 1.5rem;">
+                        <p class="wizard-intro-text" style="font-size: 0.85rem; margin-bottom: 0.5rem; text-align: left;">
+                            您可以自定义本局游戏的初始开场白/背景铺陈。如果留空，系统将自动由 GM 生成。
+                        </p>
+                        <textarea class="wizard-input-area" @bind="customOpeningMessage" rows="6" 
+                                  placeholder="留空则由 GM 自动生成初始开场白，亦可在此输入如：'你从一片黑暗中醒来，耳边传来水果摊贩的吆喝声...'"></textarea>
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="wizard-btn-secondary" @onclick="GoToStep3">上一步</button>
                         <button class="wizard-btn-primary wizard-btn-embark" @onclick="EmbarkOnAdventure">开启宿命之路</button>
                     </div>
                 </div>
@@ -763,13 +783,18 @@ else
 
     private async Task BeginRoundAsync()
     {
+        await BeginRoundAsync(null);
+    }
+
+    private async Task BeginRoundAsync(string? customOpening)
+    {
         isBusy = true;
         phase = RoundPhase.GmRunning;
         errorMessage = null;
         try
         {
             // 第一阶段：GM 开场
-            var round = await Orchestrator.BeginRoundAsync(onStepCompleted: async (r) =>
+            var round = await Orchestrator.BeginRoundAsync(customOpening, onStepCompleted: async (r) =>
             {
                 await AutoSaveChatSessionAsync();
                 StateHasChanged();
@@ -1189,6 +1214,7 @@ else
     private bool isInitializingGame = false;
     private bool isStartingAdventure = false;
     private int initStep = 1;
+    private string customOpeningMessage = string.Empty;
 
     public record ChapterInfo(int Number, string Title, string Desc);
     private readonly List<ChapterInfo> availableChapters = new()
@@ -1228,6 +1254,7 @@ else
         isCustomProtagonist = false;
         selectedTemplate = null;
         selectedTemplateId = 0;
+        customOpeningMessage = string.Empty;
         customProtagonist = new()
         {
             Name = "",
@@ -1275,6 +1302,11 @@ else
         }
         selectedChapter = autoSelectedChapter;
         initStep = 3;
+    }
+
+    private void GoToStep4()
+    {
+        initStep = 4;
     }
 
     private void SelectTemplate(ProtagonistTemplate tpl)
@@ -1404,7 +1436,8 @@ else
                 {
                     await InvokeAsync(async () =>
                     {
-                        await BeginRoundAsync();
+                        await BeginRoundAsync(customOpeningMessage);
+                        customOpeningMessage = string.Empty;
                         isStartingAdventure = false;
                         StateHasChanged();
                     });
