@@ -76,6 +76,17 @@ public sealed class ProtagonistTemplateService(
         var protagonist = ReadTemplateProtagonist(template.BaseData);
         protagonist.RowId = 1;
 
+        var startingLocation = startingChapter switch
+        {
+            1 => "王都",
+            2 => "罗兹瓦尔宅邸",
+            3 => "罗兹瓦尔宅邸",
+            4 => "圣域",
+            5 => "水门都市",
+            _ => "王都"
+        };
+        protagonist.LocationName = startingLocation;
+
         var addedSubaruNpc = false;
         var transaction = dbContext.Database.CurrentTransaction is null
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
@@ -198,12 +209,14 @@ public sealed class ProtagonistTemplateService(
         await dbContext.DeathReturnLog.ExecuteDeleteAsync(cancellationToken);
         await dbContext.SavePoints.ExecuteDeleteAsync(cancellationToken);
 
+        var (majorRegion, minorRegion) = GetRegionForLocation(protagonist.LocationName);
+
         dbContext.GlobalStates.Add(new GlobalState
         {
             RowId = 1,
             CurrentLocation = protagonist.LocationName,
-            CurrentMinorRegion = "王都中心",
-            CurrentMajorRegion = "露格尼卡",
+            CurrentMinorRegion = minorRegion,
+            CurrentMajorRegion = majorRegion,
             ElapsedTime = "0分钟",
             CurTime = "2024-04-01 09:00",
             CurrentChapter = startingChapter,
@@ -214,13 +227,24 @@ public sealed class ProtagonistTemplateService(
         {
             RowId = 1,
             LocationName = protagonist.LocationName,
-            MinorRegion = "王都中心",
-            MajorRegion = "露格尼卡",
+            MinorRegion = minorRegion,
+            MajorRegion = majorRegion,
             LocationType = "特殊",
             EnvironmentDesc = "主角模板初始化地点",
             Importance = "核心",
             ExplorationStatus = "部分探索"
         });
+    }
+
+    private static (string Major, string Minor) GetRegionForLocation(string location)
+    {
+        return location switch
+        {
+            "罗兹瓦尔宅邸" => ("梅札斯领", "宅邸"),
+            "圣域" => ("克莱恩乡", "圣域墓地"),
+            "水门都市" => ("利契亚", "水门都市"),
+            _ => ("露格尼卡", "王都中心")
+        };
     }
 
     private async Task UpsertSubaruNpcAsync(

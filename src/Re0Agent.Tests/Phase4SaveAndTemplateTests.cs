@@ -135,6 +135,38 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
+    public async Task TemplateOverridesLocationBasedOnChapter()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var templateService = CreateTemplateService(context, [50]);
+
+            await templateService.EnsureDefaultTemplateAsync();
+            var template = await context.ProtagonistTemplates.SingleAsync(item => item.TemplateName == "菜月昴");
+
+            // Apply with Chapter 4 (should override starting location to "圣域")
+            var result = await templateService.ApplyTemplateAsync(template.TemplateId, 4);
+            context.ChangeTracker.Clear();
+
+            var protagonist = await context.ProtagonistInfo.SingleAsync();
+            Assert.Equal("圣域", protagonist.LocationName);
+
+            var globalState = await context.GlobalStates.SingleAsync();
+            Assert.Equal("圣域", globalState.CurrentLocation);
+            Assert.Equal("克莱恩乡", globalState.CurrentMajorRegion);
+            Assert.Equal("圣域墓地", globalState.CurrentMinorRegion);
+            Assert.Equal(4, globalState.CurrentChapter);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task ProtagonistTemplateServiceAppliesCustomTemplateWithSubaruNpc()
     {
         var databasePath = CreateTempDatabasePath();

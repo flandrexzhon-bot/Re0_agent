@@ -988,8 +988,6 @@ else
             activeRound = null;
             phase = RoundPhase.Idle;
 
-            await LoadDatabaseStateAsync();
-
             chatSessions = (await SessionService.ListSessionsAsync()).ToList();
             var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
             activeSessionId = active?.SessionId ?? 0;
@@ -1002,6 +1000,8 @@ else
                     sessionRounds.AddRange(rounds);
                 }
             }
+
+            await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
         {
@@ -1027,7 +1027,8 @@ else
             hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
             templates = await TemplateService.ListTemplatesAsync();
 
-            if (!hasProtagonist && !isInitializingGame)
+            bool isChatEmpty = sessionRounds.Count == 0;
+            if ((!hasProtagonist || isChatEmpty) && !isInitializingGame && !isStartingAdventure)
             {
                 isInitializingGame = true;
                 initStep = 1;
@@ -1193,6 +1194,7 @@ else
     }
 
     private bool isInitializingGame = false;
+    private bool isStartingAdventure = false;
     private int initStep = 1;
 
     public record ChapterInfo(int Number, string Title, string Desc);
@@ -1398,9 +1400,27 @@ else
             activeRound = null;
             phase = RoundPhase.Idle;
             isInitializingGame = false;
+            isStartingAdventure = true;
             
             await LoadDatabaseStateAsync();
             await AutoSaveChatSessionAsync();
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await BeginRoundAsync();
+                        isStartingAdventure = false;
+                        StateHasChanged();
+                    });
+                }
+                catch
+                {
+                    isStartingAdventure = false;
+                }
+            });
         }
         catch (Exception ex)
         {
