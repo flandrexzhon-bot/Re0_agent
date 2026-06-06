@@ -261,6 +261,9 @@ public sealed class AgentOrchestrator(
         round.Events.Add(round.GmSummary);
         round.DeathReturnCause ??= TryReadDeathReturnCause(round.GmSummary);
 
+        // Detect chapter switching from EJS/GM
+        await DetectAndApplyChapterChangesAsync(round, cancellationToken);
+
         if (onStepCompleted is not null)
         {
             await onStepCompleted(round);
@@ -384,5 +387,37 @@ public sealed class AgentOrchestrator(
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
         return $"{result.Command} => {result.Outcome}/{result.SuccessLevel}{rollText}{detail}";
+    }
+
+    private async Task DetectAndApplyChapterChangesAsync(
+        GameRound round,
+        CancellationToken cancellationToken)
+    {
+        var texts = new List<string?> { round.GmOpening, round.GmSummary };
+        foreach (var turn in round.CharacterTurns)
+        {
+            texts.Add(turn.ActionText);
+            texts.Add(turn.ResultResponse);
+            texts.Add(turn.GmJudgement);
+        }
+
+        foreach (var text in texts)
+        {
+            if (string.IsNullOrWhiteSpace(text)) continue;
+
+            var match = System.Text.RegularExpressions.Regex.Match(text, @"_\.set\(\s*['""]chapter['""]\s*,\s*(\d+)\s*\)");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var newChapter))
+            {
+                var globalState = await dbContext.GlobalStates.FirstOrDefaultAsync(cancellationToken);
+                if (globalState is not null && globalState.CurrentChapter != newChapter)
+                {
+                    globalState.CurrentChapter = newChapter;
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                    round.Chapter = newChapter;
+                    round.Events.Add($"[EJS / GM 章节切换] 检测到章节变更指令，当前章节已切换为：第 {newChapter} 章");
+                    break;
+                }
+            }
+        }
     }
 }

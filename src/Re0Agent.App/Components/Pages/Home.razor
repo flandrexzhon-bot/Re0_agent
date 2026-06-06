@@ -26,7 +26,140 @@
     <div class="miasma-fog-layer" style="opacity: @(((double)miasmaLevel / 150.0).ToString(System.Globalization.CultureInfo.InvariantCulture));"></div>
 }
 
-<div class="novel-layout-container">
+@if (isInitializingGame)
+{
+    <div class="game-init-wizard-container">
+        <div class="wizard-box">
+            @if (initStep == 1)
+            {
+                <!-- Step 1: Welcome -->
+                <div class="wizard-step step-welcome">
+                    <h1 class="wizard-title">Re:Zero AI Agent RPG</h1>
+                    <h2 class="wizard-subtitle">—— 命 运 编 织 与 轮 回 之 轴 ——</h2>
+                    <div class="wizard-divider"></div>
+                    <p class="wizard-intro-text">
+                        这是一个由 AI 驱动的 Re:Zero 桌面角色扮演（TRPG）与互动小说系统。<br />
+                        在这里，您将扮演主角，在 GM 与 NPC 智能体的交织演绎下推进剧情，挑战死亡，探索宿命。
+                    </p>
+                    <button class="wizard-btn-start" @onclick="GoToStep2">开始游戏</button>
+                </div>
+            }
+            else if (initStep == 2)
+            {
+                <!-- Step 2: Select or Create Protagonist -->
+                <div class="wizard-step step-protagonist">
+                    <h3 class="wizard-step-title">第一步：选择或定制主角</h3>
+                    
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; justify-content: center;">
+                        <button type="button" class="btn-custom @(!isCustomProtagonist ? "primary-action" : "")" @onclick="() => ToggleCustomProtagonist(false)" style="font-size: 0.85rem; padding: 0.35rem 1rem;">选择预设主角模板</button>
+                        <button type="button" class="btn-custom @(isCustomProtagonist ? "primary-action" : "")" @onclick="() => ToggleCustomProtagonist(true)" style="font-size: 0.85rem; padding: 0.35rem 1rem;">定制专属角色</button>
+                    </div>
+
+                    @if (!isCustomProtagonist)
+                    {
+                        <div class="template-selector" style="width: 100%; margin-bottom: 1.5rem;">
+                            <h4 class="sub-section-title">选择预设模板</h4>
+                            <div class="template-list-scroll" style="max-height: 250px;">
+                                @foreach (var tpl in templates)
+                                {
+                                    <div class="template-card @(selectedTemplateId == tpl.TemplateId ? "selected" : "")" @onclick="() => SelectTemplate(tpl)">
+                                        <div class="template-name">@tpl.TemplateName</div>
+                                        <div class="template-desc">@GetTemplateBrief(tpl)</div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="template-creator" style="width: 100%; margin-bottom: 1.5rem;">
+                            <h4 class="sub-section-title">定制专属角色</h4>
+                            <div class="creator-form" style="max-height: 280px;">
+                                <div class="form-row">
+                                    <label>姓名：</label>
+                                    <input type="text" class="wizard-input" @bind="customProtagonist.Name" placeholder="例如：菜月昴" />
+                                </div>
+                                <div class="form-row-group">
+                                    <div class="form-row">
+                                        <label>性别：</label>
+                                        <input type="text" class="wizard-input" @bind="customProtagonist.Gender" placeholder="男" />
+                                    </div>
+                                    <div class="form-row">
+                                        <label>年龄：</label>
+                                        <input type="number" class="wizard-input" @bind="customProtagonist.Age" />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <label>初始位置：</label>
+                                    <input type="text" class="wizard-input" @bind="customProtagonist.LocationName" placeholder="例如：王都 / 罗兹瓦尔宅邸" />
+                                </div>
+                                <div class="form-row">
+                                    <label>外貌特征：</label>
+                                    <textarea class="wizard-input-area" @bind="customProtagonist.Appearance" placeholder="外貌服饰特征描述"></textarea>
+                                </div>
+                                <div class="form-row">
+                                    <label>身份背景：</label>
+                                    <textarea class="wizard-input-area" @bind="customProtagonist.IdentityText" placeholder="主角身世、身份和能力简介"></textarea>
+                                </div>
+                                <div class="form-row">
+                                    <label>基础属性：</label>
+                                    <input type="text" class="wizard-input" @bind="customProtagonist.BaseAttributes" placeholder="体质:45; 敏捷:55; 感知:60; 意志:70" />
+                                </div>
+                                <div class="form-row">
+                                    <label>特异属性：</label>
+                                    <input type="text" class="wizard-input" @bind="customProtagonist.SpecialAttributes" placeholder="例如：死亡回归:特殊" />
+                                </div>
+                                <div class="form-row">
+                                    <label>随身资源：</label>
+                                    <input type="text" class="wizard-input" @bind="customProtagonist.ResourcesText" placeholder="例如：手机; 方便面" />
+                                </div>
+                                <div class="form-row checkbox-row">
+                                    <input type="checkbox" id="includeSubaru" @bind="includeSubaruAsNpc" style="cursor: pointer; width: 16px; height: 16px;" />
+                                    <label for="includeSubaru" style="margin-left: 0.5rem;">若不使用菜月昴为主体，是否将菜月昴保留为在场 NPC？</label>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="wizard-actions">
+                        <button class="wizard-btn-secondary" @onclick="GoToStep1">返回</button>
+                        <button class="wizard-btn-primary" @onclick="GoToStep3" disabled="@(!IsValidProtagonist())">下一步：选择初始章节</button>
+                    </div>
+                </div>
+            }
+            else if (initStep == 3)
+            {
+                <!-- Step 3: Select Chapter -->
+                <div class="wizard-step step-chapter">
+                    <h3 class="wizard-step-title">第二步：选择初始章节</h3>
+                    
+                    <div class="chapter-selection-list">
+                        @foreach (var ch in availableChapters)
+                        {
+                            <div class="chapter-card @(selectedChapter == ch.Number ? "selected" : "")" @onclick="() => selectedChapter = ch.Number">
+                                <div class="chapter-num">第 @ch.Number 章</div>
+                                <div class="chapter-title">@ch.Title</div>
+                                <div class="chapter-desc">@ch.Desc</div>
+                                @if (autoSelectedChapter == ch.Number)
+                                {
+                                    <span class="chapter-recommend-tag">✨ 推荐（基于主角初始位置）</span>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="wizard-actions">
+                        <button class="wizard-btn-secondary" @onclick="GoToStep2">上一步</button>
+                        <button class="wizard-btn-primary wizard-btn-embark" @onclick="EmbarkOnAdventure">开启宿命之路</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="novel-layout-container">
     <div class="fate-book fate-book--novel">
         <!-- 顶部状态面板 -->
         <div class="novel-header-bar">
@@ -238,6 +371,13 @@
                             <input type="text" class="form-control parchment-input" placeholder="新会话名称" @bind="newSessionName" style="flex: 1; font-size: 0.75rem; padding: 0.2rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);" />
                             <button type="button" class="primary-action" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin: 0; line-height: 1.2;" @onclick="CreateSessionAsync">
                                 新建
+                            </button>
+                        </div>
+
+                        <!-- 开始新游戏向导 -->
+                        <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.25rem;">
+                            <button type="button" class="primary-action" style="width: 100%; padding: 0.3rem; font-size: 0.8rem; margin: 0; background: var(--color-crimson); border-color: var(--color-crimson);" @onclick="StartNewGameWizard">
+                                🌟 开始新游戏 (向导)
                             </button>
                         </div>
                     </div>
@@ -490,7 +630,8 @@
             </div>
         }
     </div>
-</div>
+    </div>
+}
 <!--MODALS_PLACEHOLDER-->
 @if (!string.IsNullOrWhiteSpace(errorMessage))
 {
@@ -886,6 +1027,12 @@
             hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
             templates = await TemplateService.ListTemplatesAsync();
 
+            if (!hasProtagonist && !isInitializingGame)
+            {
+                isInitializingGame = true;
+                initStep = 1;
+            }
+
             var latestLog = await DbContext.DeathReturnLog.AsNoTracking()
                 .OrderByDescending(item => item.LogId)
                 .FirstOrDefaultAsync();
@@ -1043,5 +1190,225 @@
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
         return $"{result.Command} => {result.Outcome}/{result.SuccessLevel}{rollText}{detail}";
+    }
+
+    private bool isInitializingGame = false;
+    private int initStep = 1;
+
+    public record ChapterInfo(int Number, string Title, string Desc);
+    private readonly List<ChapterInfo> availableChapters = new()
+    {
+        new(1, "王都的一日", "从水果摊开始的异世界之旅，遭遇银发半精灵与猎肠者艾尔莎。"),
+        new(2, "宅邸的一周", "罗兹瓦尔豪宅的日常与暗藏的魔兽诅咒，在鬼族女仆拉姆蕾姆身边开始的死斗。"),
+        new(3, "王都再访与圣域之迷", "返回王都参加王选，与爱蜜莉雅决裂后的绝望循环，白鲸狩猎与怠惰大罪司教的袭来。"),
+        new(4, "圣域的试炼与强欲魔女", "来到圣域解除结界，面对多娜的强欲茶会与圣域试炼，罗兹瓦尔的真正阴谋展现。"),
+        new(5, "水门都市的抗战", "受邀造访水门都市普利斯特拉，数个大罪司教同时突袭，前所未有的都市防卫战打响。")
+    };
+    private int selectedChapter = 1;
+    private int autoSelectedChapter = 1;
+
+    private ProtagonistInfo customProtagonist = new()
+    {
+        Name = "",
+        Gender = "男",
+        Age = 17,
+        Appearance = "黑发眼眸，身着运动服",
+        IdentityText = "被召唤至异世界的少年",
+        SelfStatus = "正常",
+        LocationName = "王都",
+        BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
+        SpecialAttributes = "死亡回归:特殊",
+        ResourcesText = "手机; 方便面; 薯片"
+    };
+    private bool isCustomProtagonist = false;
+    private ProtagonistTemplate? selectedTemplate;
+    private ProtagonistInfo? selectedTemplateProtagonist;
+    private bool includeSubaruAsNpc = true;
+    private int selectedTemplateId = 0;
+
+    private void StartNewGameWizard()
+    {
+        isInitializingGame = true;
+        initStep = 1;
+        isCustomProtagonist = false;
+        selectedTemplate = null;
+        selectedTemplateId = 0;
+        customProtagonist = new()
+        {
+            Name = "",
+            Gender = "男",
+            Age = 17,
+            Appearance = "黑发眼眸，身着运动服",
+            IdentityText = "被召唤至异世界的少年",
+            SelfStatus = "正常",
+            LocationName = "王都",
+            BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
+            SpecialAttributes = "死亡回归:特殊",
+            ResourcesText = "手机; 方便面; 薯片"
+        };
+        includeSubaruAsNpc = true;
+    }
+
+    private void GoToStep1()
+    {
+        initStep = 1;
+    }
+
+    private void GoToStep2()
+    {
+        initStep = 2;
+    }
+
+    private void GoToStep3()
+    {
+        var location = isCustomProtagonist ? customProtagonist.LocationName : (selectedTemplateProtagonist?.LocationName ?? "王都");
+        if (location.Contains("宅邸") || location.Contains("罗兹瓦尔"))
+        {
+            autoSelectedChapter = 2;
+        }
+        else if (location.Contains("圣域") || location.Contains("克莱恩"))
+        {
+            autoSelectedChapter = 4;
+        }
+        else if (location.Contains("水门") || location.Contains("普利斯特拉"))
+        {
+            autoSelectedChapter = 5;
+        }
+        else
+        {
+            autoSelectedChapter = 1;
+        }
+        selectedChapter = autoSelectedChapter;
+        initStep = 3;
+    }
+
+    private void SelectTemplate(ProtagonistTemplate tpl)
+    {
+        selectedTemplate = tpl;
+        selectedTemplateId = tpl.TemplateId;
+        isCustomProtagonist = false;
+        try
+        {
+            selectedTemplateProtagonist = ReadTemplateProtagonist(tpl.BaseData);
+        }
+        catch
+        {
+            selectedTemplateProtagonist = null;
+        }
+    }
+
+    private void ToggleCustomProtagonist(bool custom)
+    {
+        isCustomProtagonist = custom;
+        if (custom)
+        {
+            selectedTemplate = null;
+            selectedTemplateId = 0;
+            selectedTemplateProtagonist = null;
+        }
+    }
+
+    private ProtagonistInfo ReadTemplateProtagonist(string baseData)
+    {
+        using var document = JsonDocument.Parse(baseData);
+        var element = document.RootElement.TryGetProperty("protagonist", out var protagonistElement)
+            ? protagonistElement
+            : document.RootElement;
+
+        return element.Deserialize<ProtagonistInfo>(JsonOptions)
+            ?? new ProtagonistInfo { Name = "", Gender = "男", Age = 17, Appearance = "", IdentityText = "", SelfStatus = "正常", LocationName = "王都", BaseAttributes = "" };
+    }
+
+    private string GetTemplateBrief(ProtagonistTemplate tpl)
+    {
+        try
+        {
+            var p = ReadTemplateProtagonist(tpl.BaseData);
+            return $"{p.Gender} / {p.Age}岁 / 初始位置：{p.LocationName}\n{p.IdentityText}";
+        }
+        catch
+        {
+            return "模板数据解析失败";
+        }
+    }
+
+    private bool IsValidProtagonist()
+    {
+        if (isCustomProtagonist)
+        {
+            return !string.IsNullOrWhiteSpace(customProtagonist.Name) &&
+                   !string.IsNullOrWhiteSpace(customProtagonist.LocationName) &&
+                   !string.IsNullOrWhiteSpace(customProtagonist.BaseAttributes);
+        }
+        return selectedTemplate != null;
+    }
+
+    private async Task EmbarkOnAdventure()
+    {
+        isBusy = true;
+        errorMessage = null;
+        try
+        {
+            if (isCustomProtagonist)
+            {
+                var templateName = $"自定义主角：{customProtagonist.Name}";
+                var existing = await DbContext.ProtagonistTemplates
+                    .FirstOrDefaultAsync(t => t.TemplateName == templateName);
+                if (existing is not null)
+                {
+                    DbContext.ProtagonistTemplates.Remove(existing);
+                    await DbContext.SaveChangesAsync();
+                }
+
+                int includesSubaruInt = includeSubaruAsNpc ? 1 : 0;
+                var cleanProtagonist = new ProtagonistInfo
+                {
+                    RowId = 1,
+                    Name = customProtagonist.Name,
+                    Gender = customProtagonist.Gender,
+                    Age = customProtagonist.Age,
+                    Appearance = customProtagonist.Appearance,
+                    IdentityText = customProtagonist.IdentityText,
+                    SelfStatus = customProtagonist.SelfStatus ?? "正常",
+                    LocationName = customProtagonist.LocationName ?? "王都",
+                    BaseAttributes = customProtagonist.BaseAttributes,
+                    SpecialAttributes = customProtagonist.SpecialAttributes,
+                    ResourcesText = customProtagonist.ResourcesText
+                };
+
+                var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
+                var newTpl = new ProtagonistTemplate
+                {
+                    TemplateName = templateName,
+                    IncludesSubaru = includesSubaruInt,
+                    BaseData = baseData,
+                    IsDefault = 0
+                };
+                DbContext.ProtagonistTemplates.Add(newTpl);
+                await DbContext.SaveChangesAsync();
+
+                await TemplateService.ApplyTemplateAsync(newTpl.TemplateId, selectedChapter);
+            }
+            else
+            {
+                await TemplateService.ApplyTemplateAsync(selectedTemplateId, selectedChapter);
+            }
+
+            sessionRounds.Clear();
+            activeRound = null;
+            phase = RoundPhase.Idle;
+            isInitializingGame = false;
+            
+            await LoadDatabaseStateAsync();
+            await AutoSaveChatSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"开启冒险失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
     }
 }

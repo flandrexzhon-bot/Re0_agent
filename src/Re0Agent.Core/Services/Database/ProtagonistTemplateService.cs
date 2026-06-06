@@ -57,6 +57,14 @@ public sealed class ProtagonistTemplateService(
 
     public async Task<TemplateApplyResult> ApplyTemplateAsync(
         int templateId,
+        CancellationToken cancellationToken)
+    {
+        return await ApplyTemplateAsync(templateId, 1, cancellationToken);
+    }
+
+    public async Task<TemplateApplyResult> ApplyTemplateAsync(
+        int templateId,
+        int startingChapter = 1,
         CancellationToken cancellationToken = default)
     {
         await EnsureDefaultTemplateAsync(cancellationToken);
@@ -76,7 +84,7 @@ public sealed class ProtagonistTemplateService(
         {
             dbContext.ChangeTracker.Clear();
 
-            await EnsureMinimumWorldStateAsync(protagonist, cancellationToken);
+            await EnsureMinimumWorldStateAsync(protagonist, startingChapter, cancellationToken);
             await dbContext.ProtagonistInfo.ExecuteDeleteAsync(cancellationToken);
             dbContext.ProtagonistInfo.Add(protagonist);
 
@@ -174,37 +182,45 @@ public sealed class ProtagonistTemplateService(
 
     private async Task EnsureMinimumWorldStateAsync(
         ProtagonistInfo protagonist,
+        int startingChapter,
         CancellationToken cancellationToken)
     {
-        if (!await dbContext.GlobalStates.AnyAsync(cancellationToken))
-        {
-            dbContext.GlobalStates.Add(new GlobalState
-            {
-                RowId = 1,
-                CurrentLocation = protagonist.LocationName,
-                CurrentMinorRegion = "王都中心",
-                CurrentMajorRegion = "露格尼卡",
-                ElapsedTime = "0分钟",
-                CurTime = "2024-04-01 09:00",
-                CurrentChapter = 1,
-                IsLewd = "否"
-            });
-        }
+        // Clear old state tables so a new game start resets everything correctly
+        await dbContext.GlobalStates.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.WorldMapPoints.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.MapElements.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Factions.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Inventory.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Equipment.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Quests.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.Chronicle.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.CharacterMemory.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.DeathReturnLog.ExecuteDeleteAsync(cancellationToken);
+        await dbContext.SavePoints.ExecuteDeleteAsync(cancellationToken);
 
-        if (!await dbContext.WorldMapPoints.AnyAsync(point => point.LocationName == protagonist.LocationName, cancellationToken))
+        dbContext.GlobalStates.Add(new GlobalState
         {
-            dbContext.WorldMapPoints.Add(new WorldMapPoint
-            {
-                RowId = await NextRowIdAsync(dbContext.WorldMapPoints, cancellationToken),
-                LocationName = protagonist.LocationName,
-                MinorRegion = "王都中心",
-                MajorRegion = "露格尼卡",
-                LocationType = "特殊",
-                EnvironmentDesc = "主角模板初始化地点",
-                Importance = "核心",
-                ExplorationStatus = "部分探索"
-            });
-        }
+            RowId = 1,
+            CurrentLocation = protagonist.LocationName,
+            CurrentMinorRegion = "王都中心",
+            CurrentMajorRegion = "露格尼卡",
+            ElapsedTime = "0分钟",
+            CurTime = "2024-04-01 09:00",
+            CurrentChapter = startingChapter,
+            IsLewd = "否"
+        });
+
+        dbContext.WorldMapPoints.Add(new WorldMapPoint
+        {
+            RowId = 1,
+            LocationName = protagonist.LocationName,
+            MinorRegion = "王都中心",
+            MajorRegion = "露格尼卡",
+            LocationType = "特殊",
+            EnvironmentDesc = "主角模板初始化地点",
+            Importance = "核心",
+            ExplorationStatus = "部分探索"
+        });
     }
 
     private async Task UpsertSubaruNpcAsync(

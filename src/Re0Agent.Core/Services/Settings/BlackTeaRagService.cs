@@ -67,9 +67,7 @@ public sealed class BlackTeaRagService(
                 ? []
                 : await importer.ImportAsync(path, cancellationToken);
 
-            cachedEntries = allEntries
-                .Where(entry => entry.Content is null || !entry.Content.Contains("_.set"))
-                .ToList();
+            cachedEntries = allEntries.ToList();
 
             return cachedEntries;
         }

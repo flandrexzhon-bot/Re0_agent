@@ -5,6 +5,8 @@ using Re0Agent.Core.Services.Agent;
 using Re0Agent.Core.Services.Database;
 using Re0Agent.Core.Services.Dice;
 using Re0Agent.Core.Services.Llm;
+using Re0Agent.Core.Entities;
+using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Tests;
@@ -192,6 +194,58 @@ public sealed class Phase2AgentTests
 
         // 内置黑茶世界书应可被定位并解析出条目。
         Assert.NotEmpty(entries);
+    }
+
+    [Fact]
+    public async Task OrchestratorTransitionsChapterViaGmSummaryOrOpening()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = await orchestrator.BeginRoundAsync();
+            
+
+            context.GlobalStates.Add(new GlobalState
+            {
+                RowId = 1,
+                CurrentLocation = "王都",
+                CurrentMinorRegion = "王都中心",
+                CurrentMajorRegion = "露格尼卡",
+                ElapsedTime = "0分钟",
+                CurTime = "2024-04-01 09:00",
+                CurrentChapter = 1,
+                IsLewd = "否"
+            });
+            context.ProtagonistInfo.Add(new ProtagonistInfo
+            {
+                RowId = 1,
+                Name = "菜月昴",
+                Gender = "男",
+                Age = 17,
+                Appearance = "黑发眼眸，身着运动服",
+                IdentityText = "被召唤至异世界的少年",
+                SelfStatus = "正常",
+                LocationName = "王都",
+                BaseAttributes = "体质:50"
+            });
+            await context.SaveChangesAsync();
+
+            var completed = await orchestrator.CompletePlayerTurnAsync(round, "ChapterSwitchRequest", skipPlayerTurn: false);
+
+            Assert.Equal(2, completed.Chapter);
+            
+            var globalState = await context.GlobalStates.FirstAsync();
+            Assert.Equal(2, globalState.CurrentChapter);
+            Assert.Contains("[EJS / GM 章节切换]", string.Join("\n", completed.Events));
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
     }
 
     private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context)

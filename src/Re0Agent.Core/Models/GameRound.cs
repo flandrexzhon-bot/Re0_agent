@@ -3,7 +3,7 @@ namespace Re0Agent.Core.Models;
 public sealed class GameRound
 {
     public required string RoundIndex { get; init; }
-    public int Chapter { get; init; }
+    public int Chapter { get; set; }
     public string? SceneSummary { get; init; }
     public string? GmOpening { get; set; }
     public string? PlayerInput { get; set; }

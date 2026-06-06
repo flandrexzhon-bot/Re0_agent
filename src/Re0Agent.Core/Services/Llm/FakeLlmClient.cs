@@ -43,6 +43,10 @@ public sealed class FakeLlmClient : ILlmClient
         if (prompt.Contains("位号", StringComparison.OrdinalIgnoreCase)
             || request.AgentName.Equals("GM", StringComparison.OrdinalIgnoreCase))
         {
+            if (prompt.Contains("ChapterSwitchRequest", StringComparison.OrdinalIgnoreCase))
+            {
+                return "GM总结：章节转换中。\n<update>\n_.set('chapter', 2);\n</update>";
+            }
             return "GM开场：当前场景稳定，角色按在场顺序行动。位号：1 爱蜜莉雅，2 菜月昴。判定：无。";
         }
 
