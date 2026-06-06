@@ -1,0 +1,32 @@
+# Build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and coverage outputs
+TestResults/
+*.trx
+coverage/
+coverage.cobertura.xml
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local app data / databases
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
