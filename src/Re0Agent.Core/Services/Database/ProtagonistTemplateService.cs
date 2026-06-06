@@ -102,6 +102,46 @@ public sealed class ProtagonistTemplateService(
             savePoint.SaveId);
     }
 
+    public async Task ResetGameAsync(CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            dbContext.ChangeTracker.Clear();
+            
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM global_state;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM world_map_points;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM map_elements;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM factions;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM protagonist_info;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM important_npc;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM inventory;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM equipment;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM quests;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM chronicle;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM character_memory;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM death_return_log;", cancellationToken);
+            await dbContext.Database.ExecuteSqlRawAsync("DELETE FROM save_points;", cancellationToken);
+            
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+
+        var defaultTemplate = await dbContext.ProtagonistTemplates.FirstOrDefaultAsync(t => t.IsDefault == 1, cancellationToken);
+        if (defaultTemplate is null)
+        {
+            await EnsureDefaultTemplateAsync(cancellationToken);
+            defaultTemplate = await dbContext.ProtagonistTemplates.FirstAsync(t => t.IsDefault == 1, cancellationToken);
+        }
+
+        await ApplyTemplateAsync(defaultTemplate.TemplateId, cancellationToken);
+    }
+
     private async Task EnsureMinimumWorldStateAsync(
         ProtagonistInfo protagonist,
         CancellationToken cancellationToken)

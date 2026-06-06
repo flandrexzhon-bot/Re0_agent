@@ -94,7 +94,7 @@ public sealed class AgentOrchestrator(
             var deathReturn = await saveSystem.TriggerDeathReturnAsync(
                 deathReturnCause,
                 latestChronicleIndex,
-                cancellationToken);
+                cancellationToken: cancellationToken);
             round.Events.Add($"死亡回归完成：恢复存档#{deathReturn.SavePointId}，第{deathReturn.LoopCount}次循环，瘴气={deathReturn.MiasmaLevel}。");
         }
         else

@@ -117,13 +117,23 @@ public sealed class SaveSystem(
     public async Task<DeathReturnResult> TriggerDeathReturnAsync(
         string deathCause,
         string? chronicleIndex = null,
+        int? specificSaveId = null,
         CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
 
-        var savePoint = await dbContext.SavePoints.AsNoTracking()
-            .OrderByDescending(item => item.SaveId)
-            .FirstOrDefaultAsync(cancellationToken);
+        SavePoint? savePoint = null;
+        if (specificSaveId.HasValue)
+        {
+            savePoint = await dbContext.SavePoints.FindAsync(new object[] { specificSaveId.Value }, cancellationToken);
+        }
+        else
+        {
+            savePoint = await dbContext.SavePoints.AsNoTracking()
+                .OrderByDescending(item => item.SaveId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         if (savePoint is null)
         {
             throw new InvalidOperationException("没有可用于死亡回归的存档。");

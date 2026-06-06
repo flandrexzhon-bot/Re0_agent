@@ -3,24 +3,27 @@ using System.Runtime.CompilerServices;
 namespace Re0Agent.Core.Services.Llm;
 
 public sealed class AgentLlmClient(
-    OpenAiCompatibleLlmClient realClient,
-    FakeLlmClient fakeClient) : ILlmClient
+    OpenAiCompatibleLlmClient realClient) : ILlmClient
 {
     public Task<LlmResponse> SendChatAsync(
         LlmRequest request,
         CancellationToken cancellationToken = default)
     {
-        return request.Options is not null && request.Options.HasUsableEndpoint
-            ? realClient.SendChatAsync(request, cancellationToken)
-            : fakeClient.SendChatAsync(request, cancellationToken);
+        if (request.Options is null || !request.Options.HasUsableEndpoint)
+        {
+            throw new InvalidOperationException($"未配置 Agent“{request.AgentName}”的有效契约 (API Key / Endpoint)。请前往“契约之书”配置您的 API 密钥与端点！");
+        }
+        return realClient.SendChatAsync(request, cancellationToken);
     }
 
     public IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
         LlmRequest request,
         CancellationToken cancellationToken = default)
     {
-        return request.Options is not null && request.Options.HasUsableEndpoint
-            ? realClient.StreamChatAsync(request, cancellationToken)
-            : fakeClient.StreamChatAsync(request, cancellationToken);
+        if (request.Options is null || !request.Options.HasUsableEndpoint)
+        {
+            throw new InvalidOperationException($"未配置 Agent“{request.AgentName}”的有效契约 (API Key / Endpoint)。请前往“契约之书”配置您的 API 密钥与端点！");
+        }
+        return realClient.StreamChatAsync(request, cancellationToken);
     }
 }

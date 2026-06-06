@@ -1,192 +1,660 @@
 @page "/database"
+@using Microsoft.EntityFrameworkCore
 @using Re0Agent.Core.Entities
+@using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
-@inject DatabaseLocation DatabaseLocation
-@inject SaveSystem SaveSystem
-@inject ProtagonistTemplateService TemplateService
+@inject Re0AgentDbContext DbContext
+@inject SaveSystem SaveSys
 
-<PageTitle>数据库</PageTitle>
+<PageTitle>旧档案馆 - 命运账册</PageTitle>
 
-<section class="page-heading">
-    <h1>数据库</h1>
-    <p>@DatabaseLocation.Path</p>
-</section>
+<!-- 死亡回归 Glitch 动画遮罩 -->
+<div class="death-glitch-overlay @(showDeathGlitch ? "active" : "")">
+    <div class="death-glitch-text">死 亡 回 归</div>
+</div>
 
-@if (!string.IsNullOrWhiteSpace(statusMessage))
-{
-    <section class="work-surface">
-        <p>@statusMessage</p>
+<div class="fate-book">
+    <section class="page-heading">
+        <h1>旧档案馆</h1>
+        <p>在此查阅因果记录：主角与伙伴的状况、各人的私密记忆以及时间的回归锚点。</p>
     </section>
-}
 
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <section class="work-surface error-panel">
-        <h2>错误</h2>
-        <p>@errorMessage</p>
-    </section>
-}
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="work-surface" style="border-color: var(--color-gold); padding: 0.75rem 1.25rem;">
+            <p style="color: var(--color-gold-glow); margin: 0;">✨ @statusMessage</p>
+        </div>
+    }
 
-<section class="work-surface">
-    <h2>Phase 1 表结构</h2>
-    <div class="table-list">
-        @foreach (var tableName in DatabaseSchema.ExpectedTableNames)
-        {
-            <span>@tableName</span>
-        }
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="work-surface error-panel" style="padding: 0.75rem 1.25rem;">
+            <p style="margin: 0;">⚠️ @errorMessage</p>
+        </div>
+    }
+
+    <!-- 选项卡导航 -->
+    <div class="vintage-tabs">
+        <button class="vintage-tab-btn @(activeTab == "characters" ? "active" : "")" @onclick='() => SwitchTab("characters")'>
+            👤 角色与状态
+        </button>
+        <button class="vintage-tab-btn @(activeTab == "memories" ? "active" : "")" @onclick='() => SwitchTab("memories")'>
+            🧠 记忆刻印
+        </button>
+        <button class="vintage-tab-btn @(activeTab == "saves" ? "active" : "")" @onclick='() => SwitchTab("saves")'>
+            ⏳ 命运锚地 & 死亡日志
+        </button>
+        <button class="vintage-tab-btn @(activeTab == "worldbook" ? "active" : "")" @onclick='() => SwitchTab("worldbook")'>
+            📖 世界法典
+        </button>
     </div>
-</section>
 
-<section class="work-surface">
-    <h2>存档</h2>
-    @if (savePoints.Count == 0)
+    <!-- 标签页内容：角色与状态 -->
+    @if (activeTab == "characters")
     {
-        <p>暂无存档。</p>
-    }
-    else
-    {
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>章节</th>
-                    <th>原因</th>
-                    <th>时间</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var savePoint in savePoints)
+        <!-- 主角信息 -->
+        @if (protagonist is not null)
+        {
+            <div class="work-surface">
+                <h2>主角契约：@protagonist.Name</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                    <div><strong>性别:</strong> @protagonist.Gender</div>
+                    <div><strong>年龄:</strong> @protagonist.Age</div>
+                    <div><strong>所处位置:</strong> @protagonist.LocationName</div>
+                    <div><strong>当前状态:</strong> @protagonist.SelfStatus</div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <strong>外貌特征:</strong>
+                    <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.Appearance</p>
+                </div>
+                <div>
+                    <strong>身份背景:</strong>
+                    <p style="color: var(--color-text-secondary); margin-top: 0.25rem;">@protagonist.IdentityText</p>
+                </div>
+                <div>
+                    <strong>基础属性:</strong>
+                    <p style="font-family: Consolas, monospace; color: var(--color-gold); margin-top: 0.25rem;">@protagonist.BaseAttributes</p>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(protagonist.SpecialAttributes))
                 {
-                    <tr>
-                        <td>#@savePoint.SaveId</td>
-                        <td>@savePoint.Chapter</td>
-                        <td>@savePoint.TriggerReason</td>
-                        <td>@savePoint.CreatedAt</td>
-                        <td>
-                            <button type="button" disabled="@(savePoint.IsLatest || isBusy)" @onclick="() => DeleteSavePointAsync(savePoint.SaveId)">
-                                删除
-                            </button>
-                            @if (savePoint.IsLatest)
-                            {
-                                <span> 最新</span>
-                            }
-                        </td>
-                    </tr>
+                    <div>
+                        <strong>特殊加护/权能:</strong>
+                        <p style="font-family: Consolas, monospace; color: var(--color-crimson-glow); margin-top: 0.25rem;">@protagonist.SpecialAttributes</p>
+                    </div>
                 }
-            </tbody>
-        </table>
-    }
-</section>
+            </div>
+        }
+        else
+        {
+            <div class="work-surface">
+                <p style="color: var(--color-text-secondary);">尚未生成主角信息。</p>
+            </div>
+        }
 
-<section class="work-surface round-console">
-    <h2>死亡回归</h2>
-    <input @bind="deathCause" placeholder="死因" />
-    <button class="primary-action" type="button" disabled="@isBusy" @onclick="TriggerDeathReturnAsync">
-        手动触发
-    </button>
-</section>
-
-<section class="work-surface">
-    <h2>主角模板</h2>
-    @if (templates.Count == 0)
-    {
-        <p>暂无模板。</p>
+        <!-- 重要 NPC 列表 -->
+        <div class="work-surface">
+            <h2>羁绊角色 (Important NPCs)</h2>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>年龄/性别</th>
+                            <th>所在位置</th>
+                            <th>当前身处状态</th>
+                            <th>关系简述</th>
+                            <th>简介</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var npc in npcs)
+                        {
+                            <tr>
+                                <td style="font-family: var(--font-heading); color: var(--color-gold-glow);">@npc.Name</td>
+                                <td>@npc.Age 岁 / @npc.Gender</td>
+                                <td>@npc.LocationName</td>
+                                <td>@npc.PresenceStatus</td>
+                                <td style="font-size: 0.85rem;">@npc.RelationsText</td>
+                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.BriefIntro</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
     }
-    else
+
+    <!-- 标签页内容：记忆刻印 -->
+    @if (activeTab == "memories")
     {
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>模板</th>
-                    <th>昴作为NPC</th>
-                    <th>默认</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var template in templates)
+        <div class="work-surface">
+            <h2>独立记忆空间 (Character Memories)</h2>
+            <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                说明：每次大回合结束后，填表 Agent 会为每个在场角色写入独立记忆。在触发“死亡回归”时，<strong>除主角外的所有 NPC 的记忆都将被完全抹除</strong>。
+            </p>
+            
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 120px;">角色</th>
+                            <th style="width: 100px;">回合</th>
+                            <th>记忆文字</th>
+                            <th style="width: 100px;">心境/情绪</th>
+                            <th style="width: 180px;">记叙时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (memories.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--color-text-secondary);">暂无任何角色记忆刻印。</td>
+                            </tr>
+                        }
+                        @foreach (var memory in memories)
+                        {
+                            <tr>
+                                <td style="font-family: var(--font-heading); color: var(--color-gold);">@memory.CharacterName</td>
+                                <td style="font-family: Consolas, monospace;">@memory.RoundIndex</td>
+                                <td style="font-size: 0.9rem; white-space: pre-wrap;">@memory.MemoryText</td>
+                                <td style="color: var(--color-text-secondary);">@memory.EmotionalState</td>
+                                <td style="font-size: 0.8rem; color: var(--color-text-secondary);">@memory.CreatedAt</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- 标签页内容：命运锚点与死亡日志 -->
+    @if (activeTab == "saves")
+    {
+        <!-- 手动触发死亡回归控制台 -->
+        <div class="work-surface error-panel">
+            <h2>魔女的眷顾：手动触发“死亡回归”</h2>
+            <p>通过遭受重创或主动舍弃世界线，主角将强制重置时间并返回最近的因果锚点。</p>
+            <div style="display: flex; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
+                <div style="flex: 1;">
+                    <label style="display: block; font-size: 0.85rem; color: #ffb8b8; margin-bottom: 0.35rem;">回归死因 / 触发契机</label>
+                    <input type="text" @bind="deathCauseInput" placeholder="例如：在冰冷的森林中被魔兽撕碎..." style="border-color: var(--color-crimson); background: rgba(0,0,0,0.5);" />
+                </div>
+                <button type="button" class="danger-action" style="padding: 0.75rem 1.5rem;" @onclick="TriggerManualDeathReturnAsync">
+                    💔 触发死亡回归
+                </button>
+            </div>
+        </div>
+
+        <!-- 命运存档锚地 -->
+        <div class="work-surface">
+            <h2>时间因果锚点 (Save Points)</h2>
+            <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                每一条记录代表一个保存的世界状态副本。最新的存档代表当前世界线的根基，不可删除。
+            </p>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 80px;">锚点ID</th>
+                            <th style="width: 80px;">章节</th>
+                            <th>记录契机 (Trigger Reason)</th>
+                            <th style="width: 220px;">刻印时间</th>
+                            <th style="width: 220px; text-align: right;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var save in savePoints)
+                        {
+                            <tr>
+                                <td style="font-family: Consolas, monospace;">#@save.SaveId</td>
+                                <td>第 @save.Chapter 章</td>
+                                <td style="color: var(--color-gold-glow);">@save.TriggerReason</td>
+                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@save.CreatedAt</td>
+                                <td style="text-align: right; white-space: nowrap;">
+                                    @if (save.IsLatest)
+                                    {
+                                        <span class="latest-bookmark" style="margin-right: 0.5rem;">最新锚点</span>
+                                    }
+                                    
+                                    <button type="button" class="btn-custom primary-action" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; margin-right: 0.35rem;"
+                                            @onclick="() => ConfirmRollback(save.SaveId)">
+                                        ⏳ 回滚至此
+                                    </button>
+
+                                    @if (!save.IsLatest)
+                                    {
+                                        <button type="button" class="danger-action" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;"
+                                                @onclick="() => DeleteSaveAsync(save.SaveId)">
+                                            删除
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 死亡回归日志 -->
+        <div class="work-surface">
+            <h2>魔女瘴气与回归纪事 (Death Return Logs)</h2>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 100px;">回归循环</th>
+                            <th>回归原因</th>
+                            <th style="width: 120px;">累积瘴气度</th>
+                            <th style="width: 100px;">关联存档</th>
+                            <th style="width: 200px;">发生时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (deathLogs.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: var(--color-text-secondary);">尚无死亡回归经历（未有循环记录）。</td>
+                            </tr>
+                        }
+                        @foreach (var log in deathLogs)
+                        {
+                            <tr>
+                                <td style="font-family: var(--font-heading); color: var(--color-crimson-glow); font-weight: bold;">
+                                    LOOP @log.LoopCount
+                                </td>
+                                <td style="font-style: italic; color: #ff9e9e;">@log.DeathCause</td>
+                                <td style="font-family: Consolas, monospace; color: var(--color-purple-glow); font-weight: bold;">
+                                    @log.MiasmaLevel%
+                                </td>
+                                <td style="font-family: Consolas, monospace;">#@log.SavePointId</td>
+                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@log.CreatedAt</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- 标签页内容：世界法典 -->
+    @if (activeTab == "worldbook")
+    {
+        <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
+            <button class="btn-custom @(activeSubTab == "factions" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "factions"'>🚩 阵营势力 (@factions.Count)</button>
+            <button class="btn-custom @(activeSubTab == "mappoints" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "mappoints"'>🗺️ 探索场景 (@mapPoints.Count)</button>
+            <button class="btn-custom @(activeSubTab == "elements" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "elements"'>🔍 场景要素 (@mapElements.Count)</button>
+            <button class="btn-custom @(activeSubTab == "quests" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "quests"'>📜 任务委派 (@quests.Count)</button>
+            <button class="btn-custom @(activeSubTab == "chronicle" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "chronicle"'>📖 编年史 (@chronicles.Count)</button>
+        </div>
+
+        @if (activeSubTab == "factions")
+        {
+            <div class="work-surface">
+                <h2>阵营势力设定 (Factions)</h2>
+                @if (factions.Count == 0)
                 {
-                    <tr>
-                        <td>@template.TemplateName</td>
-                        <td>@(template.IncludesSubaru == 1 ? "是" : "否")</td>
-                        <td>@(template.IsDefault == 1 ? "是" : "否")</td>
-                        <td>
-                            <button type="button" disabled="@isBusy" @onclick="() => ApplyTemplateAsync(template.TemplateId)">
-                                应用
-                            </button>
-                        </td>
-                    </tr>
+                    <p style="color: var(--color-text-secondary);">暂无阵营势力记录。</p>
                 }
-            </tbody>
-        </table>
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>阵营名称</th>
+                                    <th>领袖/主导人</th>
+                                    <th>大本营/总部</th>
+                                    <th>阵营关系</th>
+                                    <th>势力设定简介</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var f in factions)
+                                {
+                                    <tr>
+                                        <td><strong>@f.FactionName</strong></td>
+                                        <td>@f.Leader</td>
+                                        <td>@f.Headquarters</td>
+                                        <td>@f.RelationsText</td>
+                                        <td>@f.Description</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeSubTab == "mappoints")
+        {
+            <div class="work-surface">
+                <h2>探索场景目录 (World Map Points)</h2>
+                @if (mapPoints.Count == 0)
+                {
+                    <p style="color: var(--color-text-secondary);">暂无场景探索记录。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>场景名称</th>
+                                    <th>行政分区</th>
+                                    <th>所属区域</th>
+                                    <th>类型</th>
+                                    <th>探索度</th>
+                                    <th>重要性</th>
+                                    <th>场景环境描述</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var mp in mapPoints)
+                                {
+                                    <tr>
+                                        <td><strong>@mp.LocationName</strong></td>
+                                        <td>@mp.MinorRegion</td>
+                                        <td>@mp.MajorRegion</td>
+                                        <td>@mp.LocationType</td>
+                                        <td>@mp.ExplorationStatus</td>
+                                        <td>@mp.Importance</td>
+                                        <td>@mp.EnvironmentDesc</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeSubTab == "elements")
+        {
+            <div class="work-surface">
+                <h2>场景要素与剧情道具 (Map Elements)</h2>
+                @if (mapElements.Count == 0)
+                {
+                    <p style="color: var(--color-text-secondary);">暂无场景要素记录。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>要素/道具名</th>
+                                    <th>分类</th>
+                                    <th>所处场景</th>
+                                    <th>状态/信息</th>
+                                    <th>交互选项</th>
+                                    <th>要素描述</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var el in mapElements)
+                                {
+                                    <tr>
+                                        <td><strong>@el.ElementName</strong></td>
+                                        <td>@el.ElementType</td>
+                                        <td>@el.LocationName</td>
+                                        <td>@el.StatusText</td>
+                                        <td>@el.InteractionOptions</td>
+                                        <td>@el.ElementDesc</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeSubTab == "quests")
+        {
+            <div class="work-surface">
+                <h2>任务委派书 (Quests)</h2>
+                @if (quests.Count == 0)
+                {
+                    <p style="color: var(--color-text-secondary);">暂无任务委派记录。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>任务名称</th>
+                                    <th>类型</th>
+                                    <th>优先级</th>
+                                    <th>当前状态</th>
+                                    <th>进度</th>
+                                    <th>来源</th>
+                                    <th>目标描述</th>
+                                    <th>奖励</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var q in quests)
+                                {
+                                    <tr>
+                                        <td><strong>@q.QuestName</strong></td>
+                                        <td>@q.QuestType</td>
+                                        <td>@q.PriorityLevel</td>
+                                        <td>@q.StatusTag</td>
+                                        <td>@q.ProgressText</td>
+                                        <td>@q.SourceText</td>
+                                        <td>@q.TargetDesc</td>
+                                        <td>@q.RewardText</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeSubTab == "chronicle")
+        {
+            <div class="work-surface">
+                <h2>世界纪要编年史 (Chronicle)</h2>
+                @if (chronicles.Count == 0)
+                {
+                    <p style="color: var(--color-text-secondary);">暂无编年史记录。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>纪要索引</th>
+                                    <th>时间跨度</th>
+                                    <th>剧情概括</th>
+                                    <th>编年史正文</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var c in chronicles)
+                                {
+                                    <tr>
+                                        <td><strong>@c.CodeIndex</strong></td>
+                                        <td>@c.TimeSpan</td>
+                                        <td>@c.Summary</td>
+                                        <td style="font-size: 0.9rem; line-height: 1.5; color: var(--color-text-secondary);">@c.ChronicleText</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
     }
-</section>
+</div>
+
+<!-- 确认回滚对话框弹窗 -->
+@if (showConfirmRollbackModal)
+{
+    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+        <div class="work-surface" style="max-width: 480px; border-color: var(--color-crimson);">
+            <h2 style="color: var(--color-crimson-glow);">⚠️ 扭转因果链确认</h2>
+            <p style="margin-top: 1rem; line-height: 1.5;">
+                你确定要将因果回滚至存档 <strong>#@rollbackSaveId</strong> 吗？
+            </p>
+            <p style="color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                警告：一旦执行，当前所有的角色状态与故事进度将倒退回该锚点。<strong>所有非主角角色（NPC）在此时间段内产生的独立记忆将被魔女的瘴气彻底抹除。</strong>仅主角菜月昴的记忆仍会留存。
+            </p>
+            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(84, 56, 44, 0.4); padding-top: 1rem;">
+                <button type="button" class="btn-custom" @onclick="() => showConfirmRollbackModal = false">取消</button>
+                <button type="button" class="danger-action" @onclick="RollbackToSavePointAsync">确定回滚</button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private IReadOnlyList<SavePointSummary> savePoints = [];
-    private IReadOnlyList<ProtagonistTemplate> templates = [];
-    private string deathCause = "手动触发死亡回归";
+    private string activeTab = "characters";
+    private string activeSubTab = "factions";
     private string? statusMessage;
     private string? errorMessage;
-    private bool isBusy;
+    private string deathCauseInput = string.Empty;
+
+    // Data models
+    private ProtagonistInfo? protagonist;
+    private List<ImportantNpc> npcs = new();
+    private List<CharacterMemory> memories = new();
+    private IReadOnlyList<SavePointSummary> savePoints = new List<SavePointSummary>();
+    private List<DeathReturnLog> deathLogs = new();
+
+    private List<Faction> factions = new();
+    private List<WorldMapPoint> mapPoints = new();
+    private List<MapElement> mapElements = new();
+    private List<Quest> quests = new();
+    private List<ChronicleEntry> chronicles = new();
+
+    // Rollback confirmation
+    private bool showConfirmRollbackModal = false;
+    private int rollbackSaveId;
+    private bool showDeathGlitch = false;
 
     protected override async Task OnInitializedAsync()
     {
-        await ReloadAsync();
+        await RefreshDataAsync();
     }
 
-    private async Task ReloadAsync()
+    private async Task RefreshDataAsync()
     {
-        savePoints = await SaveSystem.ListSavePointsAsync();
-        templates = await TemplateService.ListTemplatesAsync();
-    }
-
-    private async Task DeleteSavePointAsync(int saveId)
-    {
-        await RunUiActionAsync(async () =>
-        {
-            var deleted = await SaveSystem.DeleteSavePointAsync(saveId);
-            statusMessage = deleted ? $"已删除存档 #{saveId}。" : $"未找到存档 #{saveId}。";
-        });
-    }
-
-    private async Task TriggerDeathReturnAsync()
-    {
-        await RunUiActionAsync(async () =>
-        {
-            var result = await SaveSystem.TriggerDeathReturnAsync(deathCause);
-            statusMessage = $"死亡回归完成：恢复存档 #{result.SavePointId}，瘴气={result.MiasmaLevel}。";
-        });
-    }
-
-    private async Task ApplyTemplateAsync(int templateId)
-    {
-        await RunUiActionAsync(async () =>
-        {
-            var result = await TemplateService.ApplyTemplateAsync(templateId);
-            statusMessage = $"已应用模板“{result.TemplateName}”，主角：{result.ProtagonistName}，初始存档 #{result.SavePointId}。";
-        });
-    }
-
-    private async Task RunUiActionAsync(Func<Task> action)
-    {
-        isBusy = true;
-        errorMessage = null;
-        statusMessage = null;
-
         try
         {
-            await action();
-            await ReloadAsync();
+            protagonist = await DbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync();
+            npcs = await DbContext.ImportantNpcs.AsNoTracking().OrderBy(n => n.Name).ToListAsync();
+            memories = await DbContext.CharacterMemory.AsNoTracking().OrderByDescending(m => m.RowId).ToListAsync();
+            savePoints = await SaveSys.ListSavePointsAsync();
+            deathLogs = await DbContext.DeathReturnLog.AsNoTracking().OrderByDescending(l => l.LogId).ToListAsync();
+
+            factions = await DbContext.Factions.AsNoTracking().OrderBy(f => f.FactionName).ToListAsync();
+            mapPoints = await DbContext.WorldMapPoints.AsNoTracking().OrderBy(m => m.LocationName).ToListAsync();
+            mapElements = await DbContext.MapElements.AsNoTracking().OrderBy(e => e.ElementName).ToListAsync();
+            quests = await DbContext.Quests.AsNoTracking().OrderBy(q => q.QuestName).ToListAsync();
+            chronicles = await DbContext.Chronicle.AsNoTracking().OrderBy(c => c.RowId).ToListAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            errorMessage = $"加载因果数据失败: {ex.Message}";
         }
-        finally
+    }
+
+    private void SwitchTab(string tab)
+    {
+        activeTab = tab;
+        statusMessage = null;
+        errorMessage = null;
+    }
+
+    private async Task DeleteSaveAsync(int saveId)
+    {
+        statusMessage = null;
+        errorMessage = null;
+
+        try
         {
-            isBusy = false;
+            var success = await SaveSys.DeleteSavePointAsync(saveId);
+            if (success)
+            {
+                statusMessage = $"已抹除因果锚点 #{saveId}。";
+                await RefreshDataAsync();
+            }
+            else
+            {
+                errorMessage = $"无法删除该锚点。";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"删除因果锚点错误: {ex.Message}";
+        }
+    }
+
+    private void ConfirmRollback(int saveId)
+    {
+        rollbackSaveId = saveId;
+        showConfirmRollbackModal = true;
+    }
+
+    private async Task RollbackToSavePointAsync()
+    {
+        showConfirmRollbackModal = false;
+        statusMessage = null;
+        errorMessage = null;
+
+        try
+        {
+            showDeathGlitch = true;
+            StateHasChanged();
+            
+            // Execute rollback in the background
+            var result = await SaveSys.TriggerDeathReturnAsync(
+                "玩家通过终端执行时空回溯",
+                chronicleIndex: null,
+                specificSaveId: rollbackSaveId);
+
+            await Task.Delay(1800); // Allow death glitch animations to complete
+            showDeathGlitch = false;
+            
+            statusMessage = $"已成功执行回归。时空已重置至存档 #{rollbackSaveId}，进入第 {result.LoopCount} 次循环，当前瘴气累积量为 {result.MiasmaLevel}%。";
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            showDeathGlitch = false;
+            errorMessage = $"回滚因果锚点错误: {ex.Message}";
+        }
+    }
+
+    private async Task TriggerManualDeathReturnAsync()
+    {
+        statusMessage = null;
+        errorMessage = null;
+
+        var cause = string.IsNullOrWhiteSpace(deathCauseInput) ? "未说明具体死因的手动时空分裂" : deathCauseInput;
+
+        try
+        {
+            showDeathGlitch = true;
+            StateHasChanged();
+
+            var result = await SaveSys.TriggerDeathReturnAsync(cause);
+            
+            await Task.Delay(1800); // Play glitch
+            showDeathGlitch = false;
+
+            deathCauseInput = string.Empty;
+            statusMessage = $"死亡回归触发！已恢复最近存档点，进入第 {result.LoopCount} 次循环，瘴气量为 {result.MiasmaLevel}%。原因：{result.DeathCause}";
+            await RefreshDataAsync();
+        }
+        catch (Exception ex)
+        {
+            showDeathGlitch = false;
+            errorMessage = $"手动死亡回归发生错误: {ex.Message}";
         }
     }
 }

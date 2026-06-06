@@ -29,7 +29,6 @@ public static class MauiProgram
             options.UseSqlite($"Data Source={databasePath}"));
         builder.Services.AddSingleton<HttpClient>();
         builder.Services.AddScoped<OpenAiCompatibleLlmClient>();
-        builder.Services.AddScoped<FakeLlmClient>();
         builder.Services.AddScoped<ILlmClient, AgentLlmClient>();
         builder.Services.AddSingleton<IBlackTeaImporter, BlackTeaImporter>();
         builder.Services.AddSingleton<ChapterVariantRenderer>();

@@ -1,37 +1,429 @@
 @page "/agents"
+@using Microsoft.EntityFrameworkCore
+@using Re0Agent.Core.Entities
+@using Re0Agent.Core.Database
+@inject Re0AgentDbContext DbContext
 
-<PageTitle>Agent 配置</PageTitle>
+<PageTitle>契约之书 - Agent 配置</PageTitle>
 
-<section class="page-heading">
-    <h1>Agent 配置</h1>
-    <p>三类 Agent</p>
-</section>
+<div class="fate-book">
+    <section class="page-heading">
+        <h1>契约之书</h1>
+        <p>在此撰写各个 Agent 的魂之契约，配置 LLM 连接与系统提示词。</p>
+    </section>
 
-<section class="work-surface">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>类型</th>
-                <th>职责</th>
-                <th>状态</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>GM Agent</td>
-                <td>总控 / 裁判 / 骰子</td>
-                <td>待配置</td>
-            </tr>
-            <tr>
-                <td>CharacterAgent</td>
-                <td>一名角色一个 Agent，主角包含在内</td>
-                <td>待配置</td>
-            </tr>
-            <tr>
-                <td>FormAgent</td>
-                <td>回合记录转 SQL</td>
-                <td>待配置</td>
-            </tr>
-        </tbody>
-    </table>
-</section>
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="work-surface" style="border-color: var(--color-gold); padding: 0.75rem 1.25rem;">
+            <p style="color: var(--color-gold-glow); margin: 0;">✨ @statusMessage</p>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="work-surface error-panel" style="padding: 0.75rem 1.25rem;">
+            <p style="margin: 0;">⚠️ @errorMessage</p>
+        </div>
+    }
+
+    <div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.5rem; margin-top: 1rem;">
+        
+        <!-- 左侧契约列表 -->
+        <div>
+            <div class="work-surface" style="padding: 1rem; min-height: 500px;">
+                <h3 style="font-size: 1.15rem; margin-bottom: 1rem; border-bottom: 1px solid rgba(84, 56, 44, 0.4); padding-bottom: 0.5rem;">契约列表</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 0.50rem;">
+                    @foreach (var config in agentConfigs)
+                    {
+                        <div class="status-panel @(selectedConfig?.ConfigId == config.ConfigId ? "active-contract" : "")" 
+                             style="cursor: pointer; padding: 0.75rem; border-color: @(selectedConfig?.ConfigId == config.ConfigId ? "var(--color-gold-glow)" : "var(--border-vintage)");"
+                             @onclick="() => SelectConfig(config)">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <strong style="font-size: 0.95rem; color: @(selectedConfig?.ConfigId == config.ConfigId ? "var(--color-gold-glow)" : "var(--color-gold)");">
+                                    @config.AgentName
+                                </strong>
+                                <span class="badge" style="font-size: 0.7rem; background: rgba(207, 168, 107, 0.15); color: var(--color-gold); padding: 0.15rem 0.35rem; border-radius: 3px;">
+                                    @config.AgentType
+                                </span>
+                            </div>
+                            <span style="font-size: 0.75rem; margin-top: 0.25rem; display: block; color: var(--color-text-secondary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                @config.ModelName
+                            </span>
+                        </div>
+                    }
+                </div>
+
+                <button type="button" class="btn-custom" style="width: 100%; margin-top: 1.5rem; font-size: 0.85rem;" @onclick="CreateNewConfig">
+                    ＋ 缔结新契约
+                </button>
+            </div>
+        </div>
+
+        <!-- 右侧契约详情与编辑 -->
+        <div>
+            @if (selectedConfig is not null)
+            {
+                <div class="work-surface" style="min-height: 500px;">
+                    <h2 style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>契约详情：@selectedConfig.AgentName</span>
+                        @if (selectedConfig.ConfigId > 0)
+                        {
+                            <button type="button" class="danger-action" style="font-size: 0.75rem; padding: 0.3rem 0.75rem;" @onclick="DeleteConfigAsync">
+                                解除契约
+                            </button>
+                        }
+                    </h2>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">Agent 类型</label>
+                            <select @value="selectedConfig.AgentType" @onchange="OnAgentTypeChangedInternal">
+                                <option value="GM">GM (大局判定)</option>
+                                <option value="Character">Character (角色扮演)</option>
+                                <option value="Form">Form (填表更新)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约名称 (绑定角色/模块)</label>
+                            
+                            @if (selectedConfig.AgentType == "GM")
+                            {
+                                <input type="text" value="GM" readonly disabled style="opacity: 0.6; background: rgba(0,0,0,0.2);" />
+                            }
+                            else if (selectedConfig.AgentType == "Form")
+                            {
+                                <input type="text" value="填表Agent" readonly disabled style="opacity: 0.6; background: rgba(0,0,0,0.2);" />
+                            }
+                            else
+                            {
+                                @if (nameSelectionMode == "select" && characterNames.Count > 0)
+                                {
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <select @value="selectedConfig.AgentName" @onchange="OnAgentNameSelectChanged" style="flex: 1;">
+                                            @foreach (var name in characterNames)
+                                            {
+                                                <option value="@name">@name</option>
+                                            }
+                                            <option value="__custom__">-- 绑定自定义新角色 --</option>
+                                        </select>
+                                        <button type="button" class="btn-custom" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin: 0;" @onclick='() => { nameSelectionMode = "custom"; selectedConfig.AgentName = ""; }'>键盘输入</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <input type="text" @bind="selectedConfig.AgentName" placeholder="例如：爱蜜莉雅 / 雷姆" style="flex: 1;" />
+                                        @if (characterNames.Count > 0)
+                                        {
+                                            <button type="button" class="btn-custom" style="padding: 0.35rem 0.75rem; font-size: 0.8rem; margin: 0;" @onclick='() => { nameSelectionMode = "select"; selectedConfig.AgentName = characterNames[0]; }'>列表选择</button>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                            <label style="font-size: 0.85rem; color: var(--color-text-secondary);">契约模板快捷加载</label>
+                            <div style="display: flex; gap: 0.35rem;">
+                                <button type="button" class="btn-custom" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" @onclick='() => ApplyPreset("google")'>Google AI</button>
+                                <button type="button" class="btn-custom" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" @onclick='() => ApplyPreset("deepseek")'>DeepSeek</button>
+                                <button type="button" class="btn-custom" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" @onclick='() => ApplyPreset("openai")'>OpenAI</button>
+                                <button type="button" class="btn-custom" style="font-size: 0.7rem; padding: 0.2rem 0.5rem;" @onclick='() => ApplyPreset("ollama")'>Ollama</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">魔力端点 (API Endpoint)</label>
+                        <input type="text" @bind="selectedConfig.ApiEndpoint" placeholder="https://api.openai.com/v1" />
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">通灵密钥 (API Key)</label>
+                        <div style="position: relative; display: flex; align-items: center;">
+                            <input type="@(showApiKey ? "text" : "password")" @bind="selectedConfig.ApiKey" placeholder="API Key" style="padding-right: 2.5rem;" />
+                            <button type="button" style="position: absolute; right: 5px; background: transparent; border: none; box-shadow: none; color: var(--color-gold); cursor: pointer; padding: 5px;" 
+                                    @onclick="() => showApiKey = !showApiKey">
+                                @(showApiKey ? "👁️" : "🙈")
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">魂核模型 (Model Name)</label>
+                            <input type="text" @bind="selectedConfig.ModelName" placeholder="gpt-4o" />
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">灵性温度 (Temp)</label>
+                            <input type="number" step="0.1" min="0" max="2" @bind="selectedConfig.Temperature" />
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">最大上限 (Tokens)</label>
+                            <input type="number" step="256" min="256" @bind="selectedConfig.MaxTokens" />
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约咒文 (System Prompt)</label>
+                        <textarea rows="6" @bind="selectedConfig.SystemPrompt" placeholder="角色设定的系统 Prompt..."></textarea>
+                    </div>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(84, 56, 44, 0.4);">
+                        <label class="inline-toggle">
+                            <input type="checkbox" @bind="selectedConfigEnabled" />
+                            <span>启用该契约</span>
+                        </label>
+                        
+                        <button type="button" class="primary-action" @onclick="SaveConfigAsync">
+                            保存契约印章
+                        </button>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="work-surface" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 500px; color: var(--color-text-secondary);">
+                    <span style="font-size: 3rem; margin-bottom: 1rem;">📜</span>
+                    <p>在左侧选择一份契约，或点击按钮缔结新的魔力印信。</p>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .active-contract {
+        border-color: var(--color-gold-glow) !important;
+        box-shadow: 0 0 10px rgba(255, 223, 158, 0.2), inset 0 0 8px rgba(0,0,0,0.5) !important;
+        background: var(--bg-card) !important;
+    }
+</style>
+
+@code {
+    private List<Re0Agent.Core.Entities.AgentConfig> agentConfigs = new();
+    private Re0Agent.Core.Entities.AgentConfig? selectedConfig;
+    private bool selectedConfigEnabled;
+    private bool showApiKey;
+    private string? statusMessage;
+    private string? errorMessage;
+
+    private List<string> characterNames = new();
+    private string nameSelectionMode = "select"; // "select", "custom", or "fixed"
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigsAsync();
+        if (agentConfigs.Count > 0)
+        {
+            SelectConfig(agentConfigs[0]);
+        }
+    }
+
+    private async Task LoadConfigsAsync()
+    {
+        try
+        {
+            agentConfigs = await DbContext.AgentConfig.OrderBy(c => c.AgentType).ThenBy(c => c.AgentName).ToListAsync();
+
+            characterNames.Clear();
+            var protag = await DbContext.ProtagonistInfo.AsNoTracking().Select(p => p.Name).FirstOrDefaultAsync();
+            if (!string.IsNullOrEmpty(protag))
+            {
+                characterNames.Add(protag);
+            }
+            var npcs = await DbContext.ImportantNpcs.AsNoTracking().OrderBy(n => n.Name).Select(n => n.Name).ToListAsync();
+            characterNames.AddRange(npcs);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"加载契约法典失败: {ex.Message}";
+        }
+    }
+
+    private void SelectConfig(Re0Agent.Core.Entities.AgentConfig config)
+    {
+        selectedConfig = config;
+        selectedConfigEnabled = config.Enabled == 1;
+        showApiKey = false;
+        statusMessage = null;
+        errorMessage = null;
+
+        if (config.AgentType == "Character")
+        {
+            nameSelectionMode = characterNames.Contains(config.AgentName) ? "select" : "custom";
+        }
+        else
+        {
+            nameSelectionMode = "fixed";
+        }
+    }
+
+    private void OnAgentTypeChangedInternal(ChangeEventArgs e)
+    {
+        if (selectedConfig is null) return;
+        var type = e.Value?.ToString() ?? "Character";
+        selectedConfig.AgentType = type;
+
+        if (type == "GM")
+        {
+            selectedConfig.AgentName = "GM";
+            nameSelectionMode = "fixed";
+        }
+        else if (type == "Form")
+        {
+            selectedConfig.AgentName = "填表Agent";
+            nameSelectionMode = "fixed";
+        }
+        else
+        {
+            nameSelectionMode = characterNames.Count > 0 ? "select" : "custom";
+            selectedConfig.AgentName = characterNames.Count > 0 ? characterNames[0] : "新角色";
+        }
+    }
+
+    private void OnAgentNameSelectChanged(ChangeEventArgs e)
+    {
+        if (selectedConfig is null) return;
+        var name = e.Value?.ToString() ?? "";
+        if (name == "__custom__")
+        {
+            nameSelectionMode = "custom";
+            selectedConfig.AgentName = "";
+        }
+        else
+        {
+            selectedConfig.AgentName = name;
+        }
+    }
+
+    private void CreateNewConfig()
+    {
+        selectedConfig = new Re0Agent.Core.Entities.AgentConfig
+        {
+            AgentName = characterNames.Count > 0 ? characterNames[0] : "新角色",
+            AgentType = "Character",
+            ApiEndpoint = "https://api.openai.com/v1",
+            ApiKey = "",
+            ModelName = "gpt-4o-mini",
+            Temperature = 0.7,
+            MaxTokens = 4096,
+            SystemPrompt = "你是新角色的专属角色Agent。",
+            Enabled = 1
+        };
+        nameSelectionMode = characterNames.Count > 0 ? "select" : "custom";
+        selectedConfigEnabled = true;
+        showApiKey = true;
+        statusMessage = "拟定了一份新契约，请填入内容后点击保存。";
+        errorMessage = null;
+    }
+
+    private async Task SaveConfigAsync()
+    {
+        if (selectedConfig is null) return;
+
+        statusMessage = null;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(selectedConfig.AgentName))
+        {
+            errorMessage = "契约的名称不能为空。";
+            return;
+        }
+
+        try
+        {
+            selectedConfig.Enabled = selectedConfigEnabled ? 1 : 0;
+
+            if (selectedConfig.ConfigId == 0)
+            {
+                // check uniqueness
+                var exists = await DbContext.AgentConfig.AnyAsync(c => c.AgentName == selectedConfig.AgentName);
+                if (exists)
+                {
+                    errorMessage = $"已存在名称为 {selectedConfig.AgentName} 的契约。";
+                    return;
+                }
+                DbContext.AgentConfig.Add(selectedConfig);
+            }
+            else
+            {
+                DbContext.AgentConfig.Update(selectedConfig);
+            }
+
+            await DbContext.SaveChangesAsync();
+            statusMessage = $"契约“{selectedConfig.AgentName}”已成功铭刻保存。";
+            await LoadConfigsAsync();
+            
+            // Re-select newly saved
+            var saved = agentConfigs.FirstOrDefault(c => c.AgentName == selectedConfig.AgentName);
+            if (saved is not null)
+            {
+                SelectConfig(saved);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"保存契约发生错误: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteConfigAsync()
+    {
+        if (selectedConfig is null || selectedConfig.ConfigId == 0) return;
+
+        statusMessage = null;
+        errorMessage = null;
+
+        try
+        {
+            DbContext.AgentConfig.Remove(selectedConfig);
+            await DbContext.SaveChangesAsync();
+            statusMessage = $"契约“{selectedConfig.AgentName}”已成功解除（删除）。";
+            selectedConfig = null;
+            await LoadConfigsAsync();
+            if (agentConfigs.Count > 0)
+            {
+                SelectConfig(agentConfigs[0]);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"解除契约发生错误: {ex.Message}";
+        }
+    }
+
+    private void ApplyPreset(string provider)
+    {
+        if (selectedConfig is null) return;
+
+        switch (provider)
+        {
+            case "google":
+                selectedConfig.ApiEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai";
+                selectedConfig.ModelName = "gemini-1.5-flash";
+                selectedConfig.MaxTokens = 8192;
+                break;
+            case "deepseek":
+                selectedConfig.ApiEndpoint = "https://api.deepseek.com/v1";
+                selectedConfig.ModelName = "deepseek-chat";
+                selectedConfig.MaxTokens = 4096;
+                break;
+            case "openai":
+                selectedConfig.ApiEndpoint = "https://api.openai.com/v1";
+                selectedConfig.ModelName = "gpt-4o-mini";
+                selectedConfig.MaxTokens = 4096;
+                break;
+            case "ollama":
+                selectedConfig.ApiEndpoint = "http://localhost:11434/v1";
+                selectedConfig.ModelName = "llama3";
+                selectedConfig.MaxTokens = 2048;
+                break;
+        }
+        statusMessage = $"已加载 {provider} 模板预设，请记得填写通灵密钥 (API Key)。";
+    }
+}
