@@ -1,0 +1,182 @@
+@page "/world-codex"
+@using Re0Agent.Core.Services.Settings
+@using Re0Agent.Core.Entities
+@inject IRagService RagService
+
+<PageTitle>世界法典 - 设定集</PageTitle>
+
+<div class="fate-book">
+    <section class="page-heading">
+        <h1>世界法典</h1>
+        <p>在此阅读大世界观、地区设定、人物模板与章节剧情详情。</p>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="work-surface error-panel" style="padding: 0.75rem 1.25rem;">
+            <p style="margin: 0;">⚠️ @errorMessage</p>
+        </div>
+    }
+
+    <!-- 二级分类导航 -->
+    <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
+        <button class="btn-custom @(activeBlackTeaCategory == "world" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeBlackTeaCategory = "world"'>🌍 世界设定 (@GetCategoryCount("world"))</button>
+        <button class="btn-custom @(activeBlackTeaCategory == "locations" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeBlackTeaCategory = "locations"'>📍 地区设定 (@GetCategoryCount("locations"))</button>
+        <button class="btn-custom @(activeBlackTeaCategory == "characters" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeBlackTeaCategory = "characters"'>👤 角色设定模板 (@GetCategoryCount("characters"))</button>
+        <button class="btn-custom @(activeBlackTeaCategory == "plots" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeBlackTeaCategory = "plots"'>📖 章节剧情 (@GetCategoryCount("plots"))</button>
+    </div>
+
+    <div class="work-surface">
+        <h2>📖 世界法典 · 设定集 (World Codex)</h2>
+        <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+            只读浏览游戏内置的 Re:Zero 设定条目。点击条目标题展开正文。
+        </p>
+
+        @if (worldBookEntries is null)
+        {
+            <p style="color: var(--color-text-secondary);">正在载入世界书条目...</p>
+        }
+        else if (worldBookEntries.Count == 0)
+        {
+            <p style="color: var(--color-text-secondary);">未找到内置世界书文件 (REZero_BlackTea_v2.0.0.json)。</p>
+        }
+        else
+        {
+            <input type="text" placeholder="🔍 按标题 / 关键词过滤..." @bind="blackTeaFilter" @bind:event="oninput" style="margin-bottom: 1rem;" />
+
+            <p style="color: var(--color-text-secondary); font-size: 0.85rem;">
+                当前分类共 @GetCategoryCount(activeBlackTeaCategory) 条，过滤后显示 @FilteredBlackTea.Count 条。
+            </p>
+
+            @foreach (var entry in FilteredBlackTea.Take(blackTeaShown))
+            {
+                <details class="blacktea-entry">
+                    <summary>
+                        <span style="color: var(--color-gold-glow); font-family: var(--font-heading);">@(string.IsNullOrWhiteSpace(entry.Comment) ? $"条目 #{entry.Id}" : entry.Comment)</span>
+                        @if (entry.Constant)
+                        {
+                            <span class="latest-bookmark" style="margin-left: 0.5rem;">常驻</span>
+                        }
+                        @if (entry.Keys.Count > 0)
+                        {
+                            <span style="color: var(--color-text-secondary); font-size: 0.8rem; margin-left: 0.5rem;">关键词: @string.Join("、", entry.Keys.Take(6))</span>
+                        }
+                    </summary>
+                    <div style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--color-text-primary); margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(84,56,44,0.3);">@entry.Content</div>
+                </details>
+            }
+
+            @if (FilteredBlackTea.Count > blackTeaShown)
+            {
+                <button type="button" class="btn-custom" style="width: 100%; margin-top: 1rem;" @onclick="() => blackTeaShown += 20">
+                    载入更多 (剩余 @(FilteredBlackTea.Count - blackTeaShown) 条)
+                </button>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+    private IReadOnlyList<WorldBookEntry>? worldBookEntries;
+    private string blackTeaFilter = string.Empty;
+    private int blackTeaShown = 20;
+    private string activeBlackTeaCategory = "world";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWorldBookEntriesAsync();
+    }
+
+    private async Task LoadWorldBookEntriesAsync()
+    {
+        if (worldBookEntries is null)
+        {
+            try
+            {
+                worldBookEntries = await RagService.ListAllEntriesAsync();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"加载世界法典失败: {ex.Message}";
+                worldBookEntries = [];
+            }
+        }
+    }
+
+    private string GetEntryCategory(WorldBookEntry entry)
+    {
+        var comment = entry.Comment ?? "";
+        
+        // Output Prompts
+        if (comment == "变量提示词" || 
+            comment == "🔆状态栏🔆" || 
+            comment == "🔆章节设定(自动切章节)" || 
+            comment == "[initvar]" || 
+            comment.StartsWith("⚙️全局要求"))
+        {
+            return "output_prompts";
+        }
+        
+        // Chapters Plot
+        if (comment.StartsWith("第") && comment.Contains("章"))
+        {
+            return "plots";
+        }
+        
+        // Character Templates
+        if (comment.Contains("角色") || 
+            comment.Contains("人物") || 
+            comment.Contains("阵营·"))
+        {
+            return "characters";
+        }
+        
+        // Location Settings
+        if (comment.Contains("地点") || 
+            comment.Contains("城市") || 
+            comment.Contains("区域") || 
+            comment.Contains("大地图") || 
+            comment.Contains("帝国") || 
+            comment.Contains("国家") || 
+            comment.Contains("王国") || 
+            comment.Contains("城邦") || 
+            comment == "⚔️神圣弗拉基亚帝国" || 
+            comment == "⚖️卡拉拉基都市国家" || 
+            comment == "🐉露格尼卡亲龙王国" || 
+            comment == "🙏古斯提科圣王国")
+        {
+            return "locations";
+        }
+        
+        // World Settings (Default)
+        return "world";
+    }
+
+    private int GetCategoryCount(string category)
+    {
+        if (worldBookEntries is null) return 0;
+        return worldBookEntries.Count(e => GetEntryCategory(e) == category);
+    }
+
+    private IReadOnlyList<WorldBookEntry> FilteredBlackTea
+    {
+        get
+        {
+            if (worldBookEntries is null) return [];
+            
+            var categorized = worldBookEntries
+                .Where(e => GetEntryCategory(e) == activeBlackTeaCategory);
+
+            if (string.IsNullOrWhiteSpace(blackTeaFilter)) 
+                return categorized.ToList();
+
+            var term = blackTeaFilter.Trim();
+            return categorized
+                .Where(e => e.Comment.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || e.Content.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || e.Keys.Any(k => k.Contains(term, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+    }
+}

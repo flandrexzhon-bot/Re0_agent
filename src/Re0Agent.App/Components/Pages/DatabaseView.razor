@@ -3,11 +3,10 @@
 @using Re0Agent.Core.Entities
 @using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
-@using Re0Agent.Core.Services.Settings
 @inject Re0AgentDbContext DbContext
 @inject SaveSystem SaveSys
-@inject IRagService RagService
 @inject ProtagonistTemplateService TemplateService
+
 
 <PageTitle>旧档案馆 - 命运账册</PageTitle>
 
@@ -48,9 +47,10 @@
             ⏳ 命运锚地 & 死亡日志
         </button>
         <button class="vintage-tab-btn @(activeTab == "worldbook" ? "active" : "")" @onclick='() => SwitchTab("worldbook")'>
-            📖 世界法典
+            📖 现世处境
         </button>
     </div>
+
 
     <!-- 标签页内容：角色与状态 -->
     @if (activeTab == "characters")
@@ -404,7 +404,7 @@
         </div>
     }
 
-    <!-- 标签页内容：世界法典 -->
+    <!-- 标签页内容：现世处境 -->
     @if (activeTab == "worldbook")
     {
         <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
@@ -413,7 +413,6 @@
             <button class="btn-custom @(activeSubTab == "elements" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "elements"'>🔍 场景要素 (@mapElements.Count)</button>
             <button class="btn-custom @(activeSubTab == "quests" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "quests"'>📜 任务委派 (@quests.Count)</button>
             <button class="btn-custom @(activeSubTab == "chronicle" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "chronicle"'>📖 编年史 (@chronicles.Count)</button>
-            <button class="btn-custom @(activeSubTab == "blacktea" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick="OpenBlackTeaTab">📜 黑茶世界书 (@(worldBookEntries?.Count ?? 0))</button>
         </div>
 
         @if (activeSubTab == "factions")
@@ -616,58 +615,9 @@
                 }
             </div>
         }
-        else if (activeSubTab == "blacktea")
-        {
-            <div class="work-surface">
-                <h2>黑茶世界书 · 内置设定法典 (BlackTea World Book)</h2>
-                <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
-                    只读浏览游戏内置的 Re:Zero 设定条目（RAG 检索来源）。点击条目标题展开正文。
-                </p>
-
-                @if (worldBookEntries is null)
-                {
-                    <p style="color: var(--color-text-secondary);">正在载入世界书条目...</p>
-                }
-                else if (worldBookEntries.Count == 0)
-                {
-                    <p style="color: var(--color-text-secondary);">未找到内置世界书文件 (REZero_BlackTea_v2.0.0.json)。</p>
-                }
-                else
-                {
-                    <input type="text" placeholder="🔍 按标题 / 关键词过滤..." @bind="blackTeaFilter" @bind:event="oninput" style="margin-bottom: 1rem;" />
-
-                    <p style="color: var(--color-text-secondary); font-size: 0.85rem;">
-                        共 @worldBookEntries.Count 条，当前显示 @FilteredBlackTea.Count 条。
-                    </p>
-
-                    @foreach (var entry in FilteredBlackTea.Take(blackTeaShown))
-                    {
-                        <details class="blacktea-entry">
-                            <summary>
-                                <span style="color: var(--color-gold-glow); font-family: var(--font-heading);">@(string.IsNullOrWhiteSpace(entry.Comment) ? $"条目 #{entry.Id}" : entry.Comment)</span>
-                                @if (entry.Constant)
-                                {
-                                    <span class="latest-bookmark" style="margin-left: 0.5rem;">常驻</span>
-                                }
-                                @if (entry.Keys.Count > 0)
-                                {
-                                    <span style="color: var(--color-text-secondary); font-size: 0.8rem; margin-left: 0.5rem;">关键词: @string.Join("、", entry.Keys.Take(6))</span>
-                                }
-                            </summary>
-                            <div style="white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; color: var(--color-text-primary); margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(84,56,44,0.3);">@entry.Content</div>
-                        </details>
-                    }
-
-                    @if (FilteredBlackTea.Count > blackTeaShown)
-                    {
-                        <button type="button" class="btn-custom" style="width: 100%; margin-top: 1rem;" @onclick="() => blackTeaShown += 20">
-                            载入更多 (剩余 @(FilteredBlackTea.Count - blackTeaShown) 条)
-                        </button>
-                    }
-                }
-            </div>
-        }
     }
+
+
 </div>
 
 <!-- 确认回滚对话框弹窗 -->
@@ -718,44 +668,6 @@
     private int templateToDeleteId;
     private string newTemplateName = string.Empty;
     private bool isBusy = false;
-
-    // BlackTea world book viewer
-    private IReadOnlyList<WorldBookEntry>? worldBookEntries;
-    private string blackTeaFilter = string.Empty;
-    private int blackTeaShown = 20;
-
-    private IReadOnlyList<WorldBookEntry> FilteredBlackTea
-    {
-        get
-        {
-            if (worldBookEntries is null) return [];
-            if (string.IsNullOrWhiteSpace(blackTeaFilter)) return worldBookEntries;
-
-            var term = blackTeaFilter.Trim();
-            return worldBookEntries
-                .Where(e => e.Comment.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || e.Content.Contains(term, StringComparison.OrdinalIgnoreCase)
-                    || e.Keys.Any(k => k.Contains(term, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-        }
-    }
-
-    private async Task OpenBlackTeaTab()
-    {
-        activeSubTab = "blacktea";
-        if (worldBookEntries is null)
-        {
-            try
-            {
-                worldBookEntries = await RagService.ListAllEntriesAsync();
-            }
-            catch (Exception ex)
-            {
-                errorMessage = $"加载黑茶世界书失败: {ex.Message}";
-                worldBookEntries = [];
-            }
-        }
-    }
 
     // Rollback confirmation
     private bool showConfirmRollbackModal = false;
