@@ -268,8 +268,12 @@ public sealed class PromptComposer
             return "未执行";
         }
 
+        var outcomeText = result.Outcome == result.SuccessLevel
+            ? result.Outcome
+            : $"{result.Outcome}/{result.SuccessLevel}";
+
         var roll = result.Roll is null ? "" : $" roll={result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var error = string.IsNullOrWhiteSpace(result.Error) ? "" : $" error={result.Error}";
-        return $"{result.Command} => {result.Outcome}/{result.SuccessLevel}{roll}{error}";
+        return $"{result.Command} => {outcomeText}{roll}{error}";
     }
 }

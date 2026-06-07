@@ -423,11 +423,15 @@ public sealed class AgentOrchestrator(
             return "未执行";
         }
 
+        var outcomeText = result.Outcome == result.SuccessLevel
+            ? result.Outcome
+            : $"{result.Outcome}/{result.SuccessLevel}";
+
         var rollText = result.Roll is null
             ? string.Empty
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
-        return $"{result.Command} => {result.Outcome}/{result.SuccessLevel}{rollText}{detail}";
+        return $"{result.Command} => {outcomeText}{rollText}{detail}";
     }
 
     private async Task DetectAndApplyChapterChangesAsync(
