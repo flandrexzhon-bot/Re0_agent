@@ -42,6 +42,24 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Fact]
+    public async Task RagServiceFiltersChaptersAndLoadsActiveChapterOnly()
+    {
+        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+
+        var context = await ragService.QueryAsync(new RagQuery
+        {
+            Text = "第82章 第83章 水门都市普利斯提拉",
+            Chapter = 82,
+            MaxCharacters = 14_000
+        });
+
+        // 1. Assert Chapter 82 (ID 180) is loaded (as it is the active chapter)
+        Assert.Contains(context.Matches, match => match.Entry.Id == 180);
+        // 2. Assert Chapter 83 (ID 181) is NOT loaded (as it belongs to a different chapter)
+        Assert.DoesNotContain(context.Matches, match => match.Entry.Id == 181);
+    }
+
+    [Fact]
     public async Task ChapterVariantRendererChoosesDifferentBranches()
     {
         var importer = new BlackTeaImporter();

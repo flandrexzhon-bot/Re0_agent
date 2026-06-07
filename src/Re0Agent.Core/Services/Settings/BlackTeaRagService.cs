@@ -20,15 +20,47 @@ public sealed class BlackTeaRagService(
             return new RagContext();
         }
 
-        var constantMatches = entries
-            .Where(entry => entry.Enabled && entry.Constant)
-            .Select(entry => CreateMatch(entry, 0, [], query.Chapter))
-            .OrderBy(match => match.Entry.InsertionOrder)
+        var constantMatches = new List<RagMatch>();
+        var nonConstantCandidates = new List<WorldBookEntry>();
+
+        foreach (var entry in entries)
+        {
+            if (!entry.Enabled)
+            {
+                continue;
+            }
+
+            var entryChapter = TryGetEntryChapter(entry);
+            if (entryChapter.HasValue)
+            {
+                // Chapter WorldBook - only read if it matches the current chapter
+                if (entryChapter.Value == query.Chapter)
+                {
+                    constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
+                }
+            }
+            else
+            {
+                if (entry.Constant)
+                {
+                    // Constant WorldBook - always read
+                    constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
+                }
+                else
+                {
+                    // Non-constant WorldBook - only read if mentioned
+                    nonConstantCandidates.Add(entry);
+                }
+            }
+        }
+
+        constantMatches = constantMatches
+            .OrderBy(match => TryGetEntryChapter(match.Entry).HasValue ? -1000 : match.Entry.InsertionOrder)
+            .ThenBy(match => match.Entry.InsertionOrder)
             .ThenBy(match => match.Entry.Id)
             .ToList();
 
-        var keywordMatches = entries
-            .Where(entry => entry.Enabled && !entry.Constant)
+        var keywordMatches = nonConstantCandidates
             .Select(entry => TryMatch(entry, query.Text, query.Chapter))
             .Where(match => match is not null)
             .Select(match => match!)
@@ -242,5 +274,29 @@ public sealed class BlackTeaRagService(
     {
         yield return AppContext.BaseDirectory;
         yield return Environment.CurrentDirectory;
+    }
+
+    private static int? TryGetEntryChapter(WorldBookEntry entry)
+    {
+        if (!string.IsNullOrEmpty(entry.Comment))
+        {
+            var match = Regex.Match(entry.Comment, @"第(\d+)章");
+            if (match.Success)
+            {
+                return int.Parse(match.Groups[1].Value);
+            }
+        }
+        foreach (var key in entry.Keys)
+        {
+            if (!string.IsNullOrEmpty(key))
+            {
+                var match = Regex.Match(key, @"第(\d+)章");
+                if (match.Success)
+                {
+                    return int.Parse(match.Groups[1].Value);
+                }
+            }
+        }
+        return null;
     }
 }
