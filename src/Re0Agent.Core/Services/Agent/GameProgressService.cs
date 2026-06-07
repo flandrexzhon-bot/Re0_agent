@@ -733,7 +733,7 @@ public sealed class GameProgressService
                 {
                     CodeIndex = "AM0000",
                     TimeSpan = $"{nowStr} ~ {nowStr}",
-                    Summary = "背景介绍",
+                    Summary = "开场事件",
                     ChronicleText = prologueText
                 };
                 db.Chronicle.Add(prologueEntry);
