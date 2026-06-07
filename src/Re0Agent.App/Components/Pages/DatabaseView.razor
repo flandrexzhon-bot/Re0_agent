@@ -3,9 +3,14 @@
 @using Re0Agent.Core.Entities
 @using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
+@using Re0Agent.Core.Services.Agent
+@using Re0Agent.Core.Models
 @inject Re0AgentDbContext DbContext
 @inject SaveSystem SaveSys
 @inject ProtagonistTemplateService TemplateService
+@inject FormAgent FormAgent
+@inject FormAgentSqlExecutor SqlExecutor
+@inject GameProgressService Progress
 
 
 <PageTitle>旧档案馆 - 命运账册</PageTitle>
@@ -407,12 +412,17 @@
     <!-- 标签页内容：现世处境 -->
     @if (activeTab == "worldbook")
     {
-        <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
-            <button class="btn-custom @(activeSubTab == "factions" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "factions"'>🚩 阵营势力 (@factions.Count)</button>
-            <button class="btn-custom @(activeSubTab == "mappoints" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "mappoints"'>🗺️ 探索场景 (@mapPoints.Count)</button>
-            <button class="btn-custom @(activeSubTab == "elements" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "elements"'>🔍 场景要素 (@mapElements.Count)</button>
-            <button class="btn-custom @(activeSubTab == "quests" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "quests"'>📜 任务委派 (@quests.Count)</button>
-            <button class="btn-custom @(activeSubTab == "chronicle" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "chronicle"'>📖 编年史 (@chronicles.Count)</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
+            <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; flex-wrap: wrap; border: none; padding: 0; margin: 0;">
+                <button class="btn-custom @(activeSubTab == "factions" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "factions"'>🚩 阵营势力 (@factions.Count)</button>
+                <button class="btn-custom @(activeSubTab == "mappoints" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "mappoints"'>🗺️ 探索场景 (@mapPoints.Count)</button>
+                <button class="btn-custom @(activeSubTab == "elements" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "elements"'>🔍 场景要素 (@mapElements.Count)</button>
+                <button class="btn-custom @(activeSubTab == "quests" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "quests"'>📜 任务委派 (@quests.Count)</button>
+                <button class="btn-custom @(activeSubTab == "chronicle" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "chronicle"'>📖 编年史 (@chronicles.Count)</button>
+            </div>
+            <button class="btn-custom primary-action" disabled="@isBusy" @onclick="ManualUpdateFormAsync" style="padding: 0.45rem 1rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem;">
+                ✍️ 手动填表更新
+            </button>
         </div>
 
         @if (activeSubTab == "factions")
@@ -941,6 +951,61 @@
         catch (Exception ex)
         {
             errorMessage = $"删除模板失败: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task ManualUpdateFormAsync()
+    {
+        var latestRound = Progress.SessionRounds.LastOrDefault();
+        if (latestRound is null)
+        {
+            errorMessage = "当前会话暂无任何回合，请先开启冒险并完成首轮。";
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+        statusMessage = "正在请求填表Agent分析当前剧情并生成SQL指令...";
+        StateHasChanged();
+
+        try
+        {
+            int maxFormRetries = 3;
+            int formAttempt = 0;
+            bool formSuccess = false;
+            SqlExecutionResult? formExecution = null;
+
+            while (formAttempt < maxFormRetries && !formSuccess)
+            {
+                formAttempt++;
+                try
+                {
+                    var sql = await FormAgent.GenerateSqlAsync(latestRound);
+                    formExecution = await SqlExecutor.ExecuteAsync(sql);
+                    formSuccess = true;
+                }
+                catch (Exception ex)
+                {
+                    if (formAttempt >= maxFormRetries)
+                    {
+                        throw new InvalidOperationException($"填表失败（已尝试 {maxFormRetries} 次）：{ex.Message}", ex);
+                    }
+                }
+            }
+
+            if (formSuccess && formExecution is not null)
+            {
+                statusMessage = $"手动填表更新成功！已生成并执行 {formExecution.StatementsExecuted} 条SQL指令。";
+                await RefreshDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
         }
         finally
         {

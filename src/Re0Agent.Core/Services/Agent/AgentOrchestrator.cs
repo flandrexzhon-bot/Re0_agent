@@ -270,9 +270,34 @@ public sealed class AgentOrchestrator(
         }
         await ApplyDelayAsync(cancellationToken);
 
-        var sql = await formAgent.GenerateSqlAsync(round, cancellationToken);
-        var execution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
-        round.Events.Add($"填表Agent执行SQL：{execution.StatementsExecuted}条。");
+        int maxFormRetries = 3;
+        int formAttempt = 0;
+        bool formSuccess = false;
+        SqlExecutionResult? formExecution = null;
+
+        while (formAttempt < maxFormRetries && !formSuccess)
+        {
+            formAttempt++;
+            try
+            {
+                var sql = await formAgent.GenerateSqlAsync(round, cancellationToken);
+                formExecution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
+                formSuccess = true;
+            }
+            catch (Exception ex)
+            {
+                round.Events.Add($"填表Agent填表失败第 {formAttempt} 次，原因：{ex.Message}");
+                if (formAttempt >= maxFormRetries)
+                {
+                    round.Events.Add($"填表Agent填表最终失败。可稍后在【现世处境】手动重试。");
+                }
+            }
+        }
+
+        if (formSuccess && formExecution is not null)
+        {
+            round.Events.Add($"填表Agent执行SQL：{formExecution.StatementsExecuted}条。");
+        }
 
         if (onStepCompleted is not null)
         {
