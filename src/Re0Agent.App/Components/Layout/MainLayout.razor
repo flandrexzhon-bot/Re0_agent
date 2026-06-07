@@ -1,4 +1,67 @@
 @inherits LayoutComponentBase
+@using Re0Agent.Core.Models
+@using Re0Agent.Core.Services.Agent
+@inject GameProgressService Progress
+@implements IDisposable
+
+<style>
+    .status-badge {
+        font-family: var(--font-heading);
+        font-size: 0.85rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        border: 1px solid var(--border-vintage);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: bold;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .badge-idle {
+        background: rgba(84, 56, 44, 0.15);
+        color: var(--color-text-secondary);
+        border-color: var(--border-vintage);
+    }
+    .badge-green {
+        background: rgba(46, 125, 50, 0.15);
+        color: #81c784;
+        border-color: #2e7d32;
+        box-shadow: 0 0 8px rgba(46, 125, 50, 0.3);
+    }
+    .pulse-gold {
+        background: rgba(207, 168, 107, 0.15);
+        color: var(--color-gold-glow);
+        border-color: var(--color-gold);
+        animation: status-pulse-gold 2s infinite ease-in-out;
+    }
+    .pulse-purple {
+        background: rgba(91, 40, 102, 0.15);
+        color: var(--color-purple-glow);
+        border-color: var(--color-purple);
+        animation: status-pulse-purple 2s infinite ease-in-out;
+    }
+
+    @@keyframes status-pulse-gold {
+        0%, 100% {
+            box-shadow: 0 0 4px rgba(207, 168, 107, 0.2);
+            opacity: 0.85;
+        }
+        50% {
+            box-shadow: 0 0 12px rgba(255, 223, 158, 0.5);
+            opacity: 1;
+        }
+    }
+    @@keyframes status-pulse-purple {
+        0%, 100% {
+            box-shadow: 0 0 4px rgba(91, 40, 102, 0.2);
+            opacity: 0.85;
+        }
+        50% {
+            box-shadow: 0 0 12px rgba(177, 82, 196, 0.5);
+            opacity: 1;
+        }
+    }
+</style>
 
 <div class="page">
     <div class="sidebar">
@@ -6,8 +69,31 @@
     </div>
 
     <main>
-        <div class="top-row px-4">
+        <div class="top-row px-4" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <span>Re:Zero 命运全书 · 起始于零的异世界编年史</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; user-select: none;">
+                <span style="font-size: 0.8rem; color: var(--color-text-secondary); font-family: var(--font-sans);">后台命运线:</span>
+                @if (Progress.Phase == RoundPhase.GmRunning)
+                {
+                    <span class="status-badge pulse-gold">🔮 GM行动中...</span>
+                }
+                else if (Progress.Phase == RoundPhase.NpcRunning)
+                {
+                    <span class="status-badge pulse-purple">👥 NPC响应中...</span>
+                }
+                else if (Progress.Phase == RoundPhase.AwaitingPlayer)
+                {
+                    <span class="status-badge badge-green">✍️ 等待抉择</span>
+                }
+                else if (Progress.Phase == RoundPhase.Finalizing)
+                {
+                    <span class="status-badge pulse-purple">✨ 命运编制中...</span>
+                }
+                else
+                {
+                    <span class="status-badge badge-idle">💤 已就绪</span>
+                }
+            </div>
         </div>
 
         <article class="content px-4">
@@ -15,3 +101,20 @@
         </article>
     </main>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Progress.OnStateChanged += SyncState;
+    }
+
+    private void SyncState()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Progress.OnStateChanged -= SyncState;
+    }
+}

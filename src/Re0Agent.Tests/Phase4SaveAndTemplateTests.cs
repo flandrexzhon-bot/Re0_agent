@@ -147,8 +147,8 @@ public sealed class Phase4SaveAndTemplateTests
             await templateService.EnsureDefaultTemplateAsync();
             var template = await context.ProtagonistTemplates.SingleAsync(item => item.TemplateName == "菜月昴");
 
-            // Apply with Chapter 4 (should override starting location to "圣域")
-            var result = await templateService.ApplyTemplateAsync(template.TemplateId, 4);
+            // Apply with Chapter 53 (should override starting location to "圣域")
+            var result = await templateService.ApplyTemplateAsync(template.TemplateId, 53);
             context.ChangeTracker.Clear();
 
             var protagonist = await context.ProtagonistInfo.SingleAsync();
@@ -158,7 +158,7 @@ public sealed class Phase4SaveAndTemplateTests
             Assert.Equal("圣域", globalState.CurrentLocation);
             Assert.Equal("克莱恩乡", globalState.CurrentMajorRegion);
             Assert.Equal("圣域墓地", globalState.CurrentMinorRegion);
-            Assert.Equal(4, globalState.CurrentChapter);
+            Assert.Equal(53, globalState.CurrentChapter);
         }
         finally
         {

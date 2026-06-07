@@ -11,6 +11,8 @@
 @inject Re0AgentDbContext DbContext
 @inject ProtagonistTemplateService TemplateService
 @inject ChatSessionService SessionService
+@inject GameProgressService Progress
+@implements IDisposable
 
 
 <PageTitle>命运之卷 - Re:Zero RPG</PageTitle>
@@ -77,44 +79,44 @@
                             <div class="creator-form" style="max-height: 280px;">
                                 <div class="form-row">
                                     <label>姓名：</label>
-                                    <input type="text" class="wizard-input" @bind="customProtagonist.Name" placeholder="例如：菜月昴" />
+                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.Name" placeholder="例如：菜月昴" />
                                 </div>
                                 <div class="form-row-group">
                                     <div class="form-row">
                                         <label>性别：</label>
-                                        <input type="text" class="wizard-input" @bind="customProtagonist.Gender" placeholder="男" />
+                                        <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.Gender" placeholder="男" />
                                     </div>
                                     <div class="form-row">
                                         <label>年龄：</label>
-                                        <input type="number" class="wizard-input" @bind="customProtagonist.Age" />
+                                        <input type="number" class="wizard-input" @bind="Progress.CustomProtagonist.Age" />
                                     </div>
                                 </div>
                                 <div class="form-row">
                                     <label>初始位置：</label>
-                                    <input type="text" class="wizard-input" @bind="customProtagonist.LocationName" placeholder="例如：王都 / 罗兹瓦尔宅邸" />
+                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.LocationName" placeholder="例如：王都 / 罗兹瓦尔宅邸" />
                                 </div>
                                 <div class="form-row">
                                     <label>外貌特征：</label>
-                                    <textarea class="wizard-input-area" @bind="customProtagonist.Appearance" placeholder="外貌服饰特征描述"></textarea>
+                                    <textarea class="wizard-input-area" @bind="Progress.CustomProtagonist.Appearance" placeholder="外貌服饰特征描述"></textarea>
                                 </div>
                                 <div class="form-row">
                                     <label>身份背景：</label>
-                                    <textarea class="wizard-input-area" @bind="customProtagonist.IdentityText" placeholder="主角身世、身份和能力简介"></textarea>
+                                    <textarea class="wizard-input-area" @bind="Progress.CustomProtagonist.IdentityText" placeholder="主角身世、身份 and 能力简介"></textarea>
                                 </div>
                                 <div class="form-row">
                                     <label>基础属性：</label>
-                                    <input type="text" class="wizard-input" @bind="customProtagonist.BaseAttributes" placeholder="体质:45; 敏捷:55; 感知:60; 意志:70" />
+                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.BaseAttributes" placeholder="体质:45; 敏捷:55; 感知:60; 意志:70" />
                                 </div>
                                 <div class="form-row">
                                     <label>特异属性：</label>
-                                    <input type="text" class="wizard-input" @bind="customProtagonist.SpecialAttributes" placeholder="例如：死亡回归:特殊" />
+                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.SpecialAttributes" placeholder="例如：死亡回归:特殊" />
                                 </div>
                                 <div class="form-row">
                                     <label>随身资源：</label>
-                                    <input type="text" class="wizard-input" @bind="customProtagonist.ResourcesText" placeholder="例如：手机; 方便面" />
+                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.ResourcesText" placeholder="例如：手机; 方便面" />
                                 </div>
                                 <div class="form-row checkbox-row">
-                                    <input type="checkbox" id="includeSubaru" @bind="includeSubaruAsNpc" style="cursor: pointer; width: 16px; height: 16px;" />
+                                    <input type="checkbox" id="includeSubaru" @bind="Progress.IncludeSubaruAsNpc" style="cursor: pointer; width: 16px; height: 16px;" />
                                     <label for="includeSubaru" style="margin-left: 0.5rem;">若不使用菜月昴为主体，是否将菜月昴保留为在场 NPC？</label>
                                 </div>
                             </div>
@@ -136,7 +138,7 @@
                     <div class="chapter-selection-list">
                         @foreach (var ch in availableChapters)
                         {
-                            <div class="chapter-card @(selectedChapter == ch.Number ? "selected" : "")" @onclick="() => selectedChapter = ch.Number">
+                            <div class="chapter-card @(Progress.SelectedChapter == ch.Number ? "selected" : "")" @onclick="() => SelectChapter(ch.Number)">
                                 <div class="chapter-num">第 @ch.Number 章</div>
                                 <div class="chapter-title">@ch.Title</div>
                                 <div class="chapter-desc">@ch.Desc</div>
@@ -164,7 +166,7 @@
                         <p class="wizard-intro-text" style="font-size: 0.85rem; margin-bottom: 0.5rem; text-align: left;">
                             您可以自定义本局游戏的初始开场白/背景铺陈。如果留空，系统将自动由 GM 生成。
                         </p>
-                        <textarea class="wizard-input-area" @bind="customOpeningMessage" rows="6" 
+                        <textarea class="wizard-input-area" @bind="Progress.CustomOpeningMessage" rows="6" 
                                   placeholder="留空则由 GM 自动生成初始开场白，亦可在此输入如：'你从一片黑暗中醒来，耳边传来水果摊贩的吆喝声...'"></textarea>
                     </div>
 
@@ -672,8 +674,6 @@ else
 
 
 @code {
-    private enum RoundPhase { Idle, GmRunning, NpcRunning, AwaitingPlayer, Finalizing }
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -683,7 +683,8 @@ else
     private bool skipPlayerTurn;
     private string? errorMessage;
 
-    private RoundPhase phase = RoundPhase.Idle;
+
+    private Re0Agent.Core.Models.RoundPhase phase = Re0Agent.Core.Models.RoundPhase.Idle;
     private bool isBusy;
     private GameRound? activeRound;
     private readonly List<GameRound> sessionRounds = new();
@@ -719,245 +720,129 @@ else
     private string selectedMemoryPreset = string.Empty;
     private double delaySeconds = 0.0;
 
-    private List<CharacterBinding> characterBindings = new();
-    private List<TempNpcBinding> tempNpcBindings = new();
-
-    public class CharacterBinding
-    {
-        public string CharacterName { get; set; } = string.Empty;
-        public string PresetName { get; set; } = string.Empty;
-    }
-
-    public class TempNpcBinding
-    {
-        public string NpcName { get; set; } = string.Empty;
-        public string PresetName { get; set; } = string.Empty;
-    }
+    private List<GameProgressService.CharacterBinding> characterBindings = new();
+    private List<GameProgressService.TempNpcBinding> tempNpcBindings = new();
 
     private void AddCharacterBinding()
     {
-        characterBindings.Add(new CharacterBinding());
+        Progress.AddCharacterBinding();
     }
 
-    private void RemoveCharacterBinding(CharacterBinding b)
+    private void RemoveCharacterBinding(GameProgressService.CharacterBinding b)
     {
-        characterBindings.Remove(b);
+        Progress.RemoveCharacterBinding(b);
     }
 
     private void AddTempNpcBinding()
     {
-        tempNpcBindings.Add(new TempNpcBinding());
+        Progress.AddTempNpcBinding();
     }
 
-    private void RemoveTempNpcBinding(TempNpcBinding b)
+    private void RemoveTempNpcBinding(GameProgressService.TempNpcBinding b)
     {
-        tempNpcBindings.Remove(b);
+        Progress.RemoveTempNpcBinding(b);
     }
 
     protected override async Task OnInitializedAsync()
     {
-        await SessionService.EnsureDefaultSessionAsync();
-        var activeSession = await SessionService.GetActiveSessionAsync();
-        if (activeSession is not null)
-        {
-            try
-            {
-                var rounds = JsonSerializer.Deserialize<List<GameRound>>(activeSession.DetailedRoundsSnapshot, JsonOptions);
-                if (rounds is not null)
-                {
-                    sessionRounds.Clear();
-                    sessionRounds.AddRange(rounds);
-                }
-            }
-            catch
-            {
-                // ignore
-            }
-        }
-        await LoadDatabaseStateAsync();
+        Progress.OnStateChanged += SyncState;
+        await Progress.LoadDatabaseStateAsync();
+        SyncState();
     }
 
-    private async Task AutoSaveChatSessionAsync()
+    public void Dispose()
     {
-        try
+        Progress.OnStateChanged -= SyncState;
+    }
+
+    private void SyncState()
+    {
+        InvokeAsync(() =>
         {
-            var json = JsonSerializer.Serialize(sessionRounds, JsonOptions);
-            await SessionService.SaveActiveSessionStateAsync(json);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Autosave error: {ex.Message}");
-        }
+            phase = Progress.Phase;
+            isBusy = Progress.IsBusy;
+            activeRound = Progress.ActiveRound;
+            
+            sessionRounds.Clear();
+            lock (Progress.SessionRounds)
+            {
+                sessionRounds.AddRange(Progress.SessionRounds);
+            }
+            
+            chatSessions = Progress.ChatSessions;
+            activeSessionId = Progress.ActiveSessionId;
+            currentChapter = Progress.CurrentChapter;
+            loopCount = Progress.LoopCount;
+            miasmaLevel = Progress.MiasmaLevel;
+            showDeathGlitch = Progress.ShowDeathGlitch;
+            hasProtagonist = Progress.HasProtagonist;
+            chronicles = Progress.Chronicles;
+            templates = Progress.Templates;
+            protagonistInfo = Progress.Protagonist;
+            
+            inventories.Clear();
+            inventories.AddRange(Progress.Inventories);
+            
+            equipments.Clear();
+            equipments.AddRange(Progress.Equipments);
+            
+            locationDescription = Progress.LocationDescription;
+            locationRegion = Progress.LocationRegion;
+            presentNpcs = Progress.PresentNpcs;
+            allCharacterNames = Progress.AllCharacterNames;
+            agentConfigs = Progress.AgentConfigs;
+            
+            // Sync wizard states
+            isInitializingGame = Progress.IsInitializingGame;
+            isStartingAdventure = Progress.IsStartingAdventure;
+            initStep = Progress.InitStep;
+            isPrologueStage = Progress.IsPrologueStage;
+            
+            selectedGmPreset = Progress.SelectedGmPreset;
+            selectedNpcPreset = Progress.SelectedNpcPreset;
+            selectedDicePreset = Progress.SelectedDicePreset;
+            selectedMemoryPreset = Progress.SelectedMemoryPreset;
+            delaySeconds = Progress.DelaySeconds;
+            
+            characterBindings = Progress.CharacterBindings;
+            tempNpcBindings = Progress.TempNpcBindings;
+            
+            customOpeningMessage = Progress.CustomOpeningMessage;
+            includeSubaruAsNpc = Progress.IncludeSubaruAsNpc;
+            customProtagonist = Progress.CustomProtagonist;
+            isCustomProtagonist = Progress.IsCustomProtagonist;
+            selectedTemplate = Progress.SelectedTemplate;
+            selectedTemplateId = Progress.SelectedTemplateId;
+            selectedTemplateProtagonist = Progress.SelectedTemplateProtagonist;
+            selectedChapter = Progress.SelectedChapter;
+            autoSelectedChapter = Progress.AutoSelectedChapter;
+            errorMessage = Progress.ErrorMessage;
+
+            StateHasChanged();
+        });
     }
 
     private async Task BeginRoundAsync()
     {
-        isBusy = true;
-        phase = RoundPhase.GmRunning;
-        errorMessage = null;
-        try
-        {
-            // 第一阶段：GM 开场
-            var round = await Orchestrator.BeginRoundAsync(onStepCompleted: async (r) =>
-            {
-                await AutoSaveChatSessionAsync();
-                StateHasChanged();
-                await Task.Delay(10);
-            });
-            activeRound = round;
-            sessionRounds.Add(round);
-            await AutoSaveChatSessionAsync();
-            isPrologueStage = false;
-
-            if (round.DeathReturnTriggered)
-            {
-                await HandleRoundCompletionAsync(round);
-                return;
-            }
-
-            // 第二阶段：NPC 响应
-            phase = RoundPhase.NpcRunning;
-            StateHasChanged();
-
-            await Orchestrator.RunNpcTurnsAsync(round, onStepCompleted: async (r) =>
-            {
-                await AutoSaveChatSessionAsync();
-                StateHasChanged();
-                await Task.Delay(10);
-            });
-
-            if (round.DeathReturnTriggered)
-            {
-                await HandleRoundCompletionAsync(round);
-                return;
-            }
-
-            // 第三阶段：等待玩家输入主角动作
-            phase = RoundPhase.AwaitingPlayer;
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-            RollbackActiveRound();
-            phase = RoundPhase.Idle;
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.BeginRoundAsync();
     }
 
     private async Task SubmitPlayerTurnAsync()
     {
-        if (activeRound is null)
-        {
-            phase = RoundPhase.Idle;
-            return;
-        }
-
-        isBusy = true;
-        phase = RoundPhase.Finalizing;
-        errorMessage = null;
-        try
-        {
-            var round = await Orchestrator.CompletePlayerTurnAsync(activeRound, playerInput, skipPlayerTurn, onStepCompleted: async (r) =>
-            {
-                await AutoSaveChatSessionAsync();
-                StateHasChanged();
-                await Task.Delay(10);
-            });
-            await HandleRoundCompletionAsync(round);
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-            phase = RoundPhase.AwaitingPlayer;
-        }
-        finally
-        {
-            isBusy = false;
-        }
-    }
-
-    private async Task HandleRoundCompletionAsync(GameRound round)
-    {
-        if (round.DeathReturnTriggered)
-        {
-            showDeathGlitch = true;
-            StateHasChanged();
-            await Task.Delay(1800);
-            showDeathGlitch = false;
-        }
-
+        var input = playerInput;
         playerInput = string.Empty;
-        activeRound = null;
-        phase = RoundPhase.Idle;
-        await LoadDatabaseStateAsync();
-        await AutoSaveChatSessionAsync();
+        await Progress.SubmitPlayerTurnAsync(input, skipPlayerTurn);
     }
 
-    private void RollbackActiveRound()
-    {
-        if (activeRound is not null)
-        {
-            sessionRounds.Remove(activeRound);
-            activeRound = null;
-        }
-    }
 
     private async Task ApplyTemplateAsync(int templateId)
     {
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            await TemplateService.ApplyTemplateAsync(templateId);
-            sessionRounds.Clear();
-            activeRound = null;
-            phase = RoundPhase.Idle;
-            isPrologueStage = false;
-            await LoadDatabaseStateAsync();
-            await AutoSaveChatSessionAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"应用主角模板失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.ApplyTemplateAsync(templateId);
     }
 
     private async Task OnSessionChangedAsync()
     {
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            var currentJson = JsonSerializer.Serialize(sessionRounds, JsonOptions);
-            var targetJson = await SessionService.SwitchSessionAsync(activeSessionId, currentJson);
-            
-            sessionRounds.Clear();
-            var rounds = JsonSerializer.Deserialize<List<GameRound>>(targetJson, JsonOptions);
-            if (rounds is not null)
-            {
-                sessionRounds.AddRange(rounds);
-            }
-            activeRound = null;
-            phase = RoundPhase.Idle;
-            isPrologueStage = false;
-            
-            await LoadDatabaseStateAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"切换会话失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.SwitchSessionAsync(activeSessionId);
     }
 
     private async Task CreateSessionAsync()
@@ -967,237 +852,33 @@ else
             errorMessage = "会话名称不能为空。";
             return;
         }
-
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            var name = newSessionName.Trim();
-            newSessionName = string.Empty;
-
-            var emptyRounds = await SessionService.CreateNewSessionAsync(name);
-            sessionRounds.Clear();
-            activeRound = null;
-            phase = RoundPhase.Idle;
-            isPrologueStage = false;
-
-            await LoadDatabaseStateAsync();
-            
-            // Reload sessions list
-            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
-            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
-            activeSessionId = active?.SessionId ?? 0;
-
-            showDeathGlitch = true;
-            StateHasChanged();
-            await Task.Delay(1000);
-            showDeathGlitch = false;
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"新建会话失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.CreateSessionAsync(newSessionName);
+        newSessionName = string.Empty;
     }
 
     private async Task DeleteCurrentSessionAsync()
     {
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            await SessionService.DeleteSessionAsync(activeSessionId);
-            sessionRounds.Clear();
-            activeRound = null;
-            phase = RoundPhase.Idle;
-            isPrologueStage = false;
-
-            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
-            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
-            activeSessionId = active?.SessionId ?? 0;
-
-            if (active is not null)
-            {
-                var rounds = JsonSerializer.Deserialize<List<GameRound>>(active.DetailedRoundsSnapshot, JsonOptions);
-                if (rounds is not null)
-                {
-                    sessionRounds.AddRange(rounds);
-                }
-            }
-
-            await LoadDatabaseStateAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"删除会话失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.DeleteCurrentSessionAsync(activeSessionId);
     }
 
     private async Task LoadDatabaseStateAsync()
     {
-        try
-        {
-            var state = await DbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync();
-            currentChapter = state?.CurrentChapter ?? 1;
-
-            chatSessions = (await SessionService.ListSessionsAsync()).ToList();
-            var active = chatSessions.FirstOrDefault(s => s.IsActive == 1);
-            activeSessionId = active?.SessionId ?? 0;
-
-            hasProtagonist = await DbContext.ProtagonistInfo.AsNoTracking().AnyAsync();
-            templates = await TemplateService.ListTemplatesAsync();
-
-            if (sessionRounds.Count > 0)
-            {
-                isPrologueStage = false;
-            }
-            bool isChatEmpty = sessionRounds.Count == 0 && !isPrologueStage;
-            if ((!hasProtagonist || isChatEmpty) && !isInitializingGame && !isStartingAdventure)
-            {
-                isInitializingGame = true;
-                initStep = 1;
-            }
-
-            var latestLog = await DbContext.DeathReturnLog.AsNoTracking()
-                .OrderByDescending(item => item.LogId)
-                .FirstOrDefaultAsync();
-            loopCount = latestLog?.LoopCount ?? 0;
-            miasmaLevel = latestLog?.MiasmaLevel ?? 0;
-
-            chronicles = await DbContext.Chronicle.AsNoTracking()
-                .OrderBy(c => c.RowId)
-                .ToListAsync();
-
-            protagonistInfo = await DbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync();
-            if (protagonistInfo is not null)
-            {
-                inventories = await DbContext.Inventory.AsNoTracking().ToListAsync();
-                equipments = await DbContext.Equipment.AsNoTracking().ToListAsync();
-                var loc = await DbContext.WorldMapPoints.AsNoTracking()
-                    .FirstOrDefaultAsync(w => w.LocationName == protagonistInfo.LocationName);
-                if (loc is not null)
-                {
-                    locationDescription = loc.EnvironmentDesc;
-                    locationRegion = $"{loc.MajorRegion} · {loc.MinorRegion}";
-                }
-                else
-                {
-                    locationDescription = "未知的异世界区域";
-                    locationRegion = "未知领域";
-                }
-            }
-            else
-            {
-                inventories.Clear();
-                equipments.Clear();
-                locationDescription = null;
-                locationRegion = null;
-            }
-
-            // Load presets, npcs, routings
-            presentNpcs = await DbContext.ImportantNpcs.AsNoTracking().Where(n => n.PresenceStatus == "在场").ToListAsync();
-            allCharacterNames = await DbContext.ImportantNpcs.AsNoTracking().Select(n => n.Name).ToListAsync();
-            agentConfigs = await DbContext.AgentConfig.AsNoTracking().Where(c => c.Enabled == 1).ToListAsync();
-
-            var routings = await DbContext.ApiRoutings.ToListAsync();
-            selectedGmPreset = routings.FirstOrDefault(r => r.RoutingKey == "GM")?.PresetName ?? string.Empty;
-            selectedNpcPreset = routings.FirstOrDefault(r => r.RoutingKey == "NPC")?.PresetName ?? string.Empty;
-            selectedDicePreset = routings.FirstOrDefault(r => r.RoutingKey == "Dice")?.PresetName ?? string.Empty;
-            selectedMemoryPreset = routings.FirstOrDefault(r => r.RoutingKey == "Memory")?.PresetName ?? string.Empty;
-
-            var delayStr = routings.FirstOrDefault(r => r.RoutingKey == "Delay")?.PresetName;
-            if (double.TryParse(delayStr, out var dVal))
-            {
-                delaySeconds = dVal;
-            }
-            else
-            {
-                delaySeconds = 0.0;
-            }
-
-            characterBindings = routings
-                .Where(r => r.RoutingKey.StartsWith("Character_"))
-                .Select(r => new CharacterBinding
-                {
-                    CharacterName = r.RoutingKey.Substring("Character_".Length),
-                    PresetName = r.PresetName
-                })
-                .ToList();
-
-            tempNpcBindings = routings
-                .Where(r => r.RoutingKey.StartsWith("TempNpc_"))
-                .Select(r => new TempNpcBinding
-                {
-                    NpcName = r.RoutingKey.Substring("TempNpc_".Length),
-                    PresetName = r.PresetName
-                })
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"加载状态错误: {ex.Message}";
-        }
+        await Progress.LoadDatabaseStateAsync();
+        SyncState();
     }
+
 
     private async Task SaveRoutingConfigAsync()
     {
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            var existing = await DbContext.ApiRoutings.ToListAsync();
-            DbContext.ApiRoutings.RemoveRange(existing);
+        Progress.SelectedGmPreset = selectedGmPreset;
+        Progress.SelectedNpcPreset = selectedNpcPreset;
+        Progress.SelectedDicePreset = selectedDicePreset;
+        Progress.SelectedMemoryPreset = selectedMemoryPreset;
+        Progress.DelaySeconds = delaySeconds;
 
-            var newRoutings = new List<ApiRouting>();
-            if (!string.IsNullOrWhiteSpace(selectedGmPreset))
-                newRoutings.Add(new ApiRouting { RoutingKey = "GM", PresetName = selectedGmPreset });
-            if (!string.IsNullOrWhiteSpace(selectedNpcPreset))
-                newRoutings.Add(new ApiRouting { RoutingKey = "NPC", PresetName = selectedNpcPreset });
-            if (!string.IsNullOrWhiteSpace(selectedDicePreset))
-                newRoutings.Add(new ApiRouting { RoutingKey = "Dice", PresetName = selectedDicePreset });
-            
-            newRoutings.Add(new ApiRouting { RoutingKey = "Delay", PresetName = delaySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) });
-
-            if (!string.IsNullOrWhiteSpace(selectedMemoryPreset))
-                newRoutings.Add(new ApiRouting { RoutingKey = "Memory", PresetName = selectedMemoryPreset });
-
-            foreach (var b in characterBindings)
-            {
-                if (!string.IsNullOrWhiteSpace(b.CharacterName) && !string.IsNullOrWhiteSpace(b.PresetName))
-                {
-                    newRoutings.Add(new ApiRouting { RoutingKey = "Character_" + b.CharacterName.Trim(), PresetName = b.PresetName });
-                }
-            }
-
-            foreach (var b in tempNpcBindings)
-            {
-                if (!string.IsNullOrWhiteSpace(b.NpcName) && !string.IsNullOrWhiteSpace(b.PresetName))
-                {
-                    newRoutings.Add(new ApiRouting { RoutingKey = "TempNpc_" + b.NpcName.Trim(), PresetName = b.PresetName });
-                }
-            }
-
-            DbContext.ApiRoutings.AddRange(newRoutings);
-            await DbContext.SaveChangesAsync();
-            
-            await LoadDatabaseStateAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"保存模型配置路由失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.SaveRoutingConfigAsync();
     }
+
 
     private string GetDiceSuccessClass(string? successLevel)
     {
@@ -1233,11 +914,11 @@ else
     public record ChapterInfo(int Number, string Title, string Desc);
     private readonly List<ChapterInfo> availableChapters = new()
     {
-        new(1, "王都的一日", "从水果摊开始的异世界之旅，遭遇银发半精灵与猎肠者艾尔莎。"),
-        new(2, "宅邸的一周", "罗兹瓦尔豪宅的日常与暗藏的魔兽诅咒，在鬼族女仆拉姆蕾姆身边开始的死斗。"),
-        new(3, "王都再访与圣域之迷", "返回王都参加王选，与爱蜜莉雅决裂后的绝望循环，白鲸狩猎与怠惰大罪司教的袭来。"),
-        new(4, "圣域的试炼与强欲魔女", "来到圣域解除结界，面对多娜的强欲茶会与圣域试炼，罗兹瓦尔的真正阴谋展现。"),
-        new(5, "水门都市的抗战", "受邀造访水门都市普利斯特拉，数个大罪司教同时突袭，前所未有的都市防卫战打响。")
+        new(1, "开始的结束 (王都的一日)", "从水果摊开始的异世界之旅，遭遇银发半精灵与猎肠者艾尔莎。"),
+        new(7, "自觉的感情 (宅邸的一周)", "罗兹瓦尔豪宅的日常与暗藏的魔兽诅咒，在鬼族女仆拉姆蕾姆身边开始的死斗。"),
+        new(18, "再访王都", "返回王都参加王选，与爱蜜莉雅决裂后的绝望循环，白鲸狩猎与怠惰大罪司教的袭来。"),
+        new(53, "千辛万苦抵达的地方 (圣域的试炼与强欲魔女)", "来到圣域解除结界，面对多娜的强欲茶会与圣域试炼，罗兹瓦尔的真正阴谋展现。"),
+        new(82, "开头总由来访者开始 (水门都市的抗战)", "受邀造访水门都市普利斯特拉，数个大罪司教同时突袭，前所未有的都市防卫战打响。")
     };
     private int selectedChapter = 1;
     private int autoSelectedChapter = 1;
@@ -1263,90 +944,46 @@ else
 
     private void StartNewGameWizard()
     {
-        isInitializingGame = true;
-        initStep = 1;
-        isCustomProtagonist = false;
-        selectedTemplate = null;
-        selectedTemplateId = 0;
-        customOpeningMessage = string.Empty;
-        customProtagonist = new()
-        {
-            Name = "",
-            Gender = "男",
-            Age = 17,
-            Appearance = "黑发眼眸，身着运动服",
-            IdentityText = "被召唤至异世界的少年",
-            SelfStatus = "正常",
-            LocationName = "王都",
-            BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
-            SpecialAttributes = "死亡回归:特殊",
-            ResourcesText = "手机; 方便面; 薯片"
-        };
-        includeSubaruAsNpc = true;
+        Progress.StartNewGameWizard();
     }
 
     private void GoToStep1()
     {
-        initStep = 1;
+        Progress.GoToStep1();
     }
 
     private void GoToStep2()
     {
-        initStep = 2;
+        Progress.GoToStep2();
     }
 
     private void GoToStep3()
     {
-        var location = isCustomProtagonist ? customProtagonist.LocationName : (selectedTemplateProtagonist?.LocationName ?? "王都");
-        if (location.Contains("宅邸") || location.Contains("罗兹瓦尔"))
-        {
-            autoSelectedChapter = 2;
-        }
-        else if (location.Contains("圣域") || location.Contains("克莱恩"))
-        {
-            autoSelectedChapter = 4;
-        }
-        else if (location.Contains("水门") || location.Contains("普利斯特拉"))
-        {
-            autoSelectedChapter = 5;
-        }
-        else
-        {
-            autoSelectedChapter = 1;
-        }
-        selectedChapter = autoSelectedChapter;
-        initStep = 3;
+        Progress.IsCustomProtagonist = isCustomProtagonist;
+        Progress.CustomProtagonist = customProtagonist;
+        Progress.SelectedTemplateProtagonist = selectedTemplateProtagonist;
+        Progress.GoToStep3();
     }
 
     private void GoToStep4()
     {
-        initStep = 4;
+        Progress.GoToStep4();
+    }
+
+    private void SelectChapter(int chapterNum)
+    {
+        Progress.SelectedChapter = chapterNum;
+        selectedChapter = chapterNum;
     }
 
     private void SelectTemplate(ProtagonistTemplate tpl)
     {
-        selectedTemplate = tpl;
-        selectedTemplateId = tpl.TemplateId;
-        isCustomProtagonist = false;
-        try
-        {
-            selectedTemplateProtagonist = ReadTemplateProtagonist(tpl.BaseData);
-        }
-        catch
-        {
-            selectedTemplateProtagonist = null;
-        }
+        Progress.SelectTemplate(tpl);
     }
 
     private void ToggleCustomProtagonist(bool custom)
     {
-        isCustomProtagonist = custom;
-        if (custom)
-        {
-            selectedTemplate = null;
-            selectedTemplateId = 0;
-            selectedTemplateProtagonist = null;
-        }
+        Progress.ToggleCustomProtagonist(custom);
     }
 
     private ProtagonistInfo ReadTemplateProtagonist(string baseData)
@@ -1375,110 +1012,14 @@ else
 
     private bool IsValidProtagonist()
     {
-        if (isCustomProtagonist)
-        {
-            return !string.IsNullOrWhiteSpace(customProtagonist.Name) &&
-                   !string.IsNullOrWhiteSpace(customProtagonist.LocationName) &&
-                   !string.IsNullOrWhiteSpace(customProtagonist.BaseAttributes);
-        }
-        return selectedTemplate != null;
+        return Progress.IsValidProtagonist();
     }
 
     private async Task EmbarkOnAdventure()
     {
-        isBusy = true;
-        errorMessage = null;
-        try
-        {
-            if (isCustomProtagonist)
-            {
-                var templateName = $"自定义主角：{customProtagonist.Name}";
-                var existing = await DbContext.ProtagonistTemplates
-                    .FirstOrDefaultAsync(t => t.TemplateName == templateName);
-                if (existing is not null)
-                {
-                    DbContext.ProtagonistTemplates.Remove(existing);
-                    await DbContext.SaveChangesAsync();
-                }
-
-                int includesSubaruInt = includeSubaruAsNpc ? 1 : 0;
-                var cleanProtagonist = new ProtagonistInfo
-                {
-                    RowId = 1,
-                    Name = customProtagonist.Name,
-                    Gender = customProtagonist.Gender,
-                    Age = customProtagonist.Age,
-                    Appearance = customProtagonist.Appearance,
-                    IdentityText = customProtagonist.IdentityText,
-                    SelfStatus = customProtagonist.SelfStatus ?? "正常",
-                    LocationName = customProtagonist.LocationName ?? "王都",
-                    BaseAttributes = customProtagonist.BaseAttributes,
-                    SpecialAttributes = customProtagonist.SpecialAttributes,
-                    ResourcesText = customProtagonist.ResourcesText
-                };
-
-                var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
-                var newTpl = new ProtagonistTemplate
-                {
-                    TemplateName = templateName,
-                    IncludesSubaru = includesSubaruInt,
-                    BaseData = baseData,
-                    IsDefault = 0
-                };
-                DbContext.ProtagonistTemplates.Add(newTpl);
-                await DbContext.SaveChangesAsync();
-
-                await TemplateService.ApplyTemplateAsync(newTpl.TemplateId, selectedChapter);
-            }
-            else
-            {
-                await TemplateService.ApplyTemplateAsync(selectedTemplateId, selectedChapter);
-            }
-
-            if (!string.IsNullOrWhiteSpace(customOpeningMessage))
-            {
-                var prologueText = customOpeningMessage.Trim();
-                if (prologueText.Length < 200)
-                {
-                    prologueText = prologueText + "\n" + new string(' ', 200 - prologueText.Length);
-                }
-                else if (prologueText.Length > 600)
-                {
-                    prologueText = prologueText.Substring(0, 600);
-                }
-
-                var nowStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-                var prologueEntry = new ChronicleEntry
-                {
-                    CodeIndex = "AM0000",
-                    TimeSpan = $"{nowStr} ~ {nowStr}",
-                    Summary = "背景介绍",
-                    ChronicleText = prologueText
-                };
-                DbContext.Chronicle.Add(prologueEntry);
-                await DbContext.SaveChangesAsync();
-            }
-
-            customOpeningMessage = string.Empty;
-            sessionRounds.Clear();
-            activeRound = null;
-            phase = RoundPhase.Idle;
-            isInitializingGame = false;
-            isStartingAdventure = false;
-            isPrologueStage = true;
-            
-            await LoadDatabaseStateAsync();
-            await AutoSaveChatSessionAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"开启冒险失败: {ex.Message}";
-        }
-        finally
-        {
-            isBusy = false;
-        }
+        await Progress.EmbarkOnAdventureAsync();
     }
+
 
     private string CleanEjsText(string? text)
     {
