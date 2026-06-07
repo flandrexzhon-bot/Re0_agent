@@ -196,6 +196,9 @@ public sealed class ImportantNpc
 
     [Column("past_experience")]
     public required string PastExperience { get; set; }
+
+    [Column("self_status")]
+    public string SelfStatus { get; set; } = "正常";
 }
 
 [Table("inventory")]

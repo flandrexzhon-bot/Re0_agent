@@ -1,0 +1,195 @@
+@page "/llm-logs"
+@using Re0Agent.Core.Services.Llm
+@implements IDisposable
+@inject LlmLogService LogService
+
+<PageTitle>大模型日志 - Re:Zero Agent</PageTitle>
+
+<div class="fate-book">
+    <section class="page-heading" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h1>📝 大模型调试日志</h1>
+            <p>实时查看智能体与大模型的提示词（Prompt）和生成响应（Response），包含耗时统计。</p>
+        </div>
+        <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-gold); font-size: 0.9rem; cursor: pointer; user-select: none;">
+                <input type="checkbox" @bind="autoRefresh" style="accent-color: var(--color-gold);" />
+                📡 自动刷新
+            </label>
+            <button class="btn-custom" @onclick="Refresh">🔄 刷新</button>
+            <button class="btn-custom" style="border-color: var(--color-crimson); color: var(--color-crimson-glow);" @onclick="ClearLogs">🗑️ 清空日志</button>
+        </div>
+    </section>
+
+    <!-- 过滤器 -->
+    <div class="work-surface" style="padding: 1rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <span class="text-gold" style="font-weight: bold;">🔍 过滤智能体:</span>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn-custom @(string.IsNullOrEmpty(selectedAgentFilter) ? "active" : "")" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" @onclick='() => FilterAgent("")'>全部</button>
+            @foreach (var agent in uniqueAgents)
+            {
+                <button class="btn-custom @(selectedAgentFilter == agent ? "active" : "")" style="padding: 0.25rem 0.75rem; font-size: 0.85rem;" @onclick='() => FilterAgent(agent)'>@agent</button>
+            }
+        </div>
+    </div>
+
+    @if (filteredLogs.Count == 0)
+    {
+        <div class="work-surface" style="text-align: center; padding: 3rem 1rem;">
+            <p style="color: var(--color-text-secondary); margin: 0;">📭 暂无匹配的大模型交互日志。</p>
+        </div>
+    }
+    else
+    {
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+            @foreach (var log in filteredLogs)
+            {
+                var isExpanded = expandedLogIds.Contains(log);
+                <div class="work-surface log-card @(isExpanded ? "expanded" : "")" style="border-left: 4px solid @(string.IsNullOrEmpty(log.ErrorMessage) ? "var(--color-gold)" : "var(--color-crimson)"); transition: all 0.25s ease;">
+                    <div class="log-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; padding: 0.5rem 0;" @onclick="() => ToggleExpand(log)">
+                        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                            <span class="agent-tag" style="background: rgba(207, 168, 107, 0.15); border: 1px solid var(--border-vintage); padding: 0.2rem 0.6rem; border-radius: 4px; color: var(--color-gold-glow); font-size: 0.85rem; font-weight: bold;">
+                                🤖 @log.AgentName
+                            </span>
+                            <span style="color: var(--color-text-secondary); font-size: 0.85rem;">⏱️ @log.Timestamp.ToString("HH:mm:ss.fff")</span>
+                            <span style="color: var(--color-text-secondary); font-size: 0.85rem;">⚡ @(log.LatencyMs > 0 ? $"{log.LatencyMs:N0} ms" : "跳过/直接返回")</span>
+                            @if (!string.IsNullOrEmpty(log.ErrorMessage))
+                            {
+                                <span style="color: var(--color-crimson-glow); font-size: 0.85rem; font-weight: bold;">❌ 失败</span>
+                            }
+                            else
+                            {
+                                <span style="color: #4CAF50; font-size: 0.85rem; font-weight: bold;">✔️ 成功</span>
+                            }
+                        </div>
+                        <span class="toggle-arrow" style="color: var(--color-gold); font-size: 1.2rem; transform: rotate(@(isExpanded ? "90deg" : "0deg")); transition: transform 0.2s; display: inline-block;">
+                            ▶
+                        </span>
+                    </div>
+
+                    @if (isExpanded)
+                    {
+                        <div class="log-detail" style="margin-top: 1rem; border-top: 1px solid rgba(207,168,107,0.15); padding-top: 1rem; display: flex; flex-direction: column; gap: 1rem;">
+                            @if (!string.IsNullOrEmpty(log.ErrorMessage))
+                            {
+                                <div class="error-panel" style="padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 0.5rem;">
+                                    <h4 style="margin: 0 0 0.5rem 0; color: var(--color-crimson-glow);">❌ 错误信息</h4>
+                                    <pre style="white-space: pre-wrap; font-family: monospace; font-size: 0.9rem; margin: 0; color: #ffb3b3;">@log.ErrorMessage</pre>
+                                </div>
+                            }
+
+                            <div class="log-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                                <!-- Prompt Column -->
+                                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    @if (!string.IsNullOrEmpty(log.SystemPrompt))
+                                    {
+                                        <div>
+                                            <h4 class="text-gold" style="margin: 0 0 0.25rem 0; font-size: 0.95rem;">System Prompt</h4>
+                                            <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(207,168,107,0.1); padding: 0.75rem; border-radius: 4px; max-height: 240px; overflow-y: auto;">
+                                                <pre style="white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; margin: 0; color: var(--color-text-secondary);">@log.SystemPrompt</pre>
+                                            </div>
+                                        </div>
+                                    }
+                                    <div>
+                                        <h4 class="text-gold" style="margin: 0 0 0.25rem 0; font-size: 0.95rem;">User Input / Context</h4>
+                                        <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(207,168,107,0.1); padding: 0.75rem; border-radius: 4px; max-height: 320px; overflow-y: auto;">
+                                            <pre style="white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; margin: 0; color: var(--color-text-secondary);">@log.UserPrompt</pre>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Response Column -->
+                                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <h4 class="text-gold" style="margin: 0 0 0.25rem 0; font-size: 0.95rem;">Model Response</h4>
+                                    <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(207,168,107,0.15); padding: 0.75rem; border-radius: 4px; min-height: 200px; max-height: 580px; overflow-y: auto; flex-grow: 1;">
+                                        @if (string.IsNullOrEmpty(log.ResponseContent))
+                                        {
+                                            <em style="color: var(--color-text-secondary); font-size: 0.9rem;">无响应内容（请求出错或被中断）</em>
+                                        }
+                                        else
+                                        {
+                                            <pre style="white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; margin: 0; color: #e6c89c;">@log.ResponseContent</pre>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string selectedAgentFilter = "";
+    private HashSet<LlmLogEntry> expandedLogIds = new();
+    private bool autoRefresh = true;
+    private System.Threading.Timer? timer;
+
+    protected override void OnInitialized()
+    {
+        timer = new System.Threading.Timer(_ =>
+        {
+            if (autoRefresh)
+            {
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, 1500, 1500);
+    }
+
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+
+    private void ClearLogs()
+    {
+        LogService.Clear();
+        expandedLogIds.Clear();
+        StateHasChanged();
+    }
+
+    private void FilterAgent(string agent)
+    {
+        selectedAgentFilter = agent;
+    }
+
+    private void ToggleExpand(LlmLogEntry log)
+    {
+        if (expandedLogIds.Contains(log))
+        {
+            expandedLogIds.Remove(log);
+        }
+        else
+        {
+            expandedLogIds.Add(log);
+        }
+    }
+
+    private List<LlmLogEntry> filteredLogs
+    {
+        get
+        {
+            var all = LogService.Logs;
+            if (string.IsNullOrEmpty(selectedAgentFilter))
+            {
+                return all.ToList();
+            }
+            return all.Where(l => l.AgentName == selectedAgentFilter).ToList();
+        }
+    }
+
+    private List<string> uniqueAgents
+    {
+        get
+        {
+            return LogService.Logs.Select(l => l.AgentName).Distinct().OrderBy(name => name).ToList();
+        }
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+}

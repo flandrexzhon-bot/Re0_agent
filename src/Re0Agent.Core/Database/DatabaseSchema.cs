@@ -101,7 +101,8 @@ public static class DatabaseSchema
           presence_status TEXT NOT NULL CHECK(presence_status IN ('在场', '离场')),
           relations_text TEXT,
           interaction_options TEXT CHECK(presence_status = '离场' OR (interaction_options IS NOT NULL AND LENGTH(TRIM(interaction_options)) > 0)),
-          past_experience TEXT NOT NULL CHECK(LENGTH(past_experience) <= 600)
+          past_experience TEXT NOT NULL CHECK(LENGTH(past_experience) <= 600),
+          self_status TEXT NOT NULL DEFAULT '正常'
         );
         """,
         """
@@ -143,7 +144,7 @@ public static class DatabaseSchema
           code_index TEXT NOT NULL UNIQUE CHECK(code_index GLOB 'AM[0-9][0-9][0-9][0-9]'),
           time_span TEXT NOT NULL CHECK(time_span GLOB '????-??-?? ??:?? ~ ????-??-?? ??:??'),
           summary TEXT NOT NULL CHECK(LENGTH(summary) <= 30),
-          chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 200 AND LENGTH(chronicle_text) <= 600)
+          chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 1000)
         );
         """,
         """

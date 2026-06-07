@@ -21,6 +21,8 @@ public static class DatabaseInitializer
 
             await EnsureSavePointUpgradeColumnsAsync(context, cancellationToken);
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureImportantNpcUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
         }
         finally
         {
@@ -93,6 +95,68 @@ public static class DatabaseInitializer
                 + column.Definition
                 + ";";
             await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+        }
+    }
+
+    private static async Task EnsureImportantNpcUpgradeColumnsAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(important_npc);";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        if (!existingColumns.Contains("self_status"))
+        {
+            var alterStatement = "ALTER TABLE important_npc ADD COLUMN self_status TEXT NOT NULL DEFAULT '正常';";
+            await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+        }
+    }
+
+    private static async Task EnsureChronicleUpgradeConstraintsAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        string tableSql = string.Empty;
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "SELECT sql FROM sqlite_master WHERE type='table' AND name='chronicle';";
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            if (result is not null)
+            {
+                tableSql = result.ToString() ?? "";
+            }
+        }
+
+        if (tableSql.Contains(">= 200 AND LENGTH(chronicle_text) <= 600", StringComparison.OrdinalIgnoreCase))
+        {
+            var migrationStatements = new[]
+            {
+                "ALTER TABLE chronicle RENAME TO chronicle_old;",
+                """
+                CREATE TABLE chronicle (
+                  row_id INTEGER PRIMARY KEY,
+                  code_index TEXT NOT NULL UNIQUE,
+                  time_span TEXT NOT NULL CHECK(time_span GLOB '????-??-?? ??:?? ~ ????-??-?? ??:??'),
+                  summary TEXT NOT NULL CHECK(LENGTH(summary) <= 30),
+                  chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 1000)
+                );
+                """,
+                "INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text) SELECT row_id, code_index, time_span, summary, chronicle_text FROM chronicle_old;",
+                "DROP TABLE chronicle_old;"
+            };
+
+            foreach (var stmt in migrationStatements)
+            {
+                await context.Database.ExecuteSqlRawAsync(stmt, cancellationToken);
+            }
         }
     }
 }

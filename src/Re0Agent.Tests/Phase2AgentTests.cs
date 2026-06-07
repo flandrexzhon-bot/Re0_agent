@@ -280,6 +280,86 @@ public sealed class Phase2AgentTests
         }
     }
 
+    [Fact]
+    public async Task OrchestratorEnsuresParsedNpcsExistInDatabase()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await Re0Agent.Core.Database.DatabaseInitializer.InitializeAsync(context);
+            
+            // Seed protagonist to determine currentLocation
+            context.ProtagonistInfo.Add(new ProtagonistInfo
+            {
+                RowId = 1,
+                Name = "菜月昴",
+                Gender = "男",
+                Age = 17,
+                Appearance = "黑发运动服",
+                IdentityText = "被召唤者",
+                SelfStatus = "正常",
+                LocationName = "小巷",
+                BaseAttributes = "感知:50",
+                ResourcesText = "无"
+            });
+            
+            // Seed a character that exists but is absent
+            context.ImportantNpcs.Add(new ImportantNpc
+            {
+                RowId = 1,
+                Name = "拉姆",
+                Gender = "女",
+                Age = 17,
+                BriefIntro = "女仆",
+                Appearance = "粉发女仆",
+                IdentityText = "罗兹瓦尔女仆",
+                BaseAttributes = "体质:50; 敏捷:50; 感知:50; 意志:50",
+                LocationName = "罗兹瓦尔宅邸",
+                PresenceStatus = "离场",
+                RelationsText = "拉姆:熟人",
+                InteractionOptions = "无",
+                PastExperience = "旧档案",
+                SelfStatus = "正常"
+            });
+            await context.SaveChangesAsync();
+
+            var orchestrator = CreateOrchestrator(context);
+
+            var round = new GameRound
+            {
+                RoundIndex = "R0001",
+                GmOpening = """
+                当前场景开场：在王都的小巷，气氛突然变得紧张起来。
+                - 1号位：雷姆
+                - 2号位：拉姆
+                - 最后行动：菜月昴
+                """
+            };
+
+            await orchestrator.RunNpcTurnsAsync(round);
+
+            var rem = await context.ImportantNpcs.FirstOrDefaultAsync(n => n.Name == "雷姆");
+            var ram = await context.ImportantNpcs.FirstOrDefaultAsync(n => n.Name == "拉姆");
+
+            // Verify 雷姆 was created dynamically with PresenceStatus = "在场" and currentLocation = "小巷"
+            Assert.NotNull(rem);
+            Assert.Equal("在场", rem.PresenceStatus);
+            Assert.Equal("小巷", rem.LocationName);
+            Assert.Equal("交谈; 观察; 离开", rem.InteractionOptions);
+
+            // Verify 拉姆 presence was updated from "离场" to "在场"
+            Assert.NotNull(ram);
+            Assert.Equal("在场", ram.PresenceStatus);
+            Assert.Equal("交谈; 观察; 离开", ram.InteractionOptions);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
     private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context)
     {
         var configResolver = new AgentConfigResolver(context);

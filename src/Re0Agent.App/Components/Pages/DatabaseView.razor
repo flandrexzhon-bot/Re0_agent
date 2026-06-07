@@ -1,9 +1,11 @@
 @page "/database"
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using Re0Agent.Core.Entities
 @using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
 @using Re0Agent.Core.Services.Agent
+@using Re0Agent.Core.Services.Llm
 @using Re0Agent.Core.Models
 @inject Re0AgentDbContext DbContext
 @inject SaveSystem SaveSys
@@ -11,6 +13,7 @@
 @inject FormAgent FormAgent
 @inject FormAgentSqlExecutor SqlExecutor
 @inject GameProgressService Progress
+@inject LlmLogService LogService
 
 
 <PageTitle>旧档案馆 - 命运账册</PageTitle>
@@ -684,9 +687,42 @@
     private int rollbackSaveId;
     private bool showDeathGlitch = false;
 
+    private bool _isDisposed = false;
+
     protected override async Task OnInitializedAsync()
     {
+        isBusy = LogService.IsManualFormFilling;
+        if (isBusy)
+        {
+            statusMessage = LogService.ManualFormFillingStatus;
+        }
+        else
+        {
+            if (LogService.ManualFormFillingError is not null)
+            {
+                errorMessage = LogService.ManualFormFillingError;
+                LogService.ManualFormFillingError = null;
+            }
+            else if (LogService.ManualFormFillingStatus is not null)
+            {
+                statusMessage = LogService.ManualFormFillingStatus;
+                LogService.ManualFormFillingStatus = null;
+            }
+        }
         await RefreshDataAsync();
+    }
+
+    public void Dispose()
+    {
+        _isDisposed = true;
+    }
+
+    private void SafeStateHasChanged()
+    {
+        if (!_isDisposed)
+        {
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task RefreshDataAsync()
@@ -967,10 +1003,14 @@
             return;
         }
 
+        LogService.IsManualFormFilling = true;
+        LogService.ManualFormFillingError = null;
+        LogService.ManualFormFillingStatus = "正在请求填表Agent分析当前剧情并生成SQL指令...";
+
         isBusy = true;
         errorMessage = null;
-        statusMessage = "正在请求填表Agent分析当前剧情并生成SQL指令...";
-        StateHasChanged();
+        statusMessage = LogService.ManualFormFillingStatus;
+        SafeStateHasChanged();
 
         try
         {
@@ -984,8 +1024,17 @@
                 formAttempt++;
                 try
                 {
-                    var sql = await FormAgent.GenerateSqlAsync(latestRound);
-                    formExecution = await SqlExecutor.ExecuteAsync(sql);
+                    LogService.ManualFormFillingStatus = $"正在请求填表Agent分析当前剧情并生成SQL指令... (第 {formAttempt}/{maxFormRetries} 次尝试)";
+                    if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
+                    SafeStateHasChanged();
+
+                    var sql = await FormAgent.GenerateSqlAsync(latestRound, CancellationToken.None);
+
+                    LogService.ManualFormFillingStatus = $"已生成 {sql.Count} 条SQL指令，正在执行数据库写入... (第 {formAttempt}/{maxFormRetries} 次尝试)";
+                    if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
+                    SafeStateHasChanged();
+
+                    formExecution = await SqlExecutor.ExecuteAsync(sql, CancellationToken.None);
                     formSuccess = true;
                 }
                 catch (Exception ex)
@@ -999,17 +1048,27 @@
 
             if (formSuccess && formExecution is not null)
             {
-                statusMessage = $"手动填表更新成功！已生成并执行 {formExecution.StatementsExecuted} 条SQL指令。";
-                await RefreshDataAsync();
+                LogService.ManualFormFillingStatus = $"手动填表更新成功！已生成并执行 {formExecution.StatementsExecuted} 条SQL指令。";
+                if (!_isDisposed)
+                {
+                    statusMessage = LogService.ManualFormFillingStatus;
+                    await RefreshDataAsync();
+                }
             }
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            LogService.ManualFormFillingError = ex.Message;
+            if (!_isDisposed) errorMessage = LogService.ManualFormFillingError;
         }
         finally
         {
-            isBusy = false;
+            LogService.IsManualFormFilling = false;
+            if (!_isDisposed)
+            {
+                isBusy = false;
+                SafeStateHasChanged();
+            }
         }
     }
 }

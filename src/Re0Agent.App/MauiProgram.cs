@@ -49,6 +49,7 @@ public static class MauiProgram
         builder.Services.AddScoped<ChatSessionService>();
         builder.Services.AddScoped<AgentOrchestrator>();
         builder.Services.AddSingleton<GameProgressService>();
+        builder.Services.AddSingleton<LlmLogService>();
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();

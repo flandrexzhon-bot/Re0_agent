@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
+using Re0Agent.Core.Entities;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Database;
 using Re0Agent.Core.Services.Dice;
@@ -75,11 +76,7 @@ public sealed class AgentOrchestrator(
         Func<GameRound, Task>? onStepCompleted = null,
         CancellationToken cancellationToken = default)
     {
-        // 1. Load active profiles from database
-        var dbProfiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
-        var dbNpcProfiles = dbProfiles.Where(p => !p.IsPlayerControlled).ToList();
-
-        // 2. Parse slots from GM opening
+        // 1. Parse slots from GM opening
         var parsedSlots = new List<(string Name, int Slot, bool IsPlayer)>();
         var lines = (round.GmOpening ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
@@ -107,7 +104,26 @@ public sealed class AgentOrchestrator(
             }
         }
 
-        // 3. Build NPC profiles list to run
+        // 2. Determine current location from protagonist for NPC insertion
+        var currentLocation = "王都";
+        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        if (protagonist is not null)
+        {
+            currentLocation = protagonist.LocationName;
+        }
+
+        // 3. Ensure all parsed NPCs exist in the database and are marked "在场"
+        foreach (var parsed in parsedSlots)
+        {
+            if (parsed.IsPlayer) continue;
+            await EnsureNpcExistsAsync(parsed.Name, currentLocation, cancellationToken);
+        }
+
+        // 4. Load active profiles from database (now including any newly created ones)
+        var dbProfiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+        var dbNpcProfiles = dbProfiles.Where(p => !p.IsPlayerControlled).ToList();
+
+        // 5. Build NPC profiles list to run
         var npcProfilesToRun = new List<(CharacterAgentProfile Profile, int Slot)>();
         var usedDbNpcs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -124,7 +140,7 @@ public sealed class AgentOrchestrator(
             }
             else
             {
-                // Create dynamic/temporary profile
+                // Fallback: Create dynamic/temporary profile
                 var tempProfile = new CharacterAgentProfile
                 {
                     CharacterName = parsed.Name,
@@ -442,6 +458,48 @@ public sealed class AgentOrchestrator(
                     round.Events.Add($"[EJS / GM 章节切换] 检测到章节变更指令，当前章节已切换为：第 {newChapter} 章");
                     break;
                 }
+            }
+        }
+    }
+
+    private async Task EnsureNpcExistsAsync(string npcName, string currentLocation, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(npcName)) return;
+
+        var existing = await dbContext.ImportantNpcs
+            .FirstOrDefaultAsync(n => n.Name.ToLower() == npcName.ToLower(), cancellationToken);
+
+        if (existing is null)
+        {
+            var newNpc = new ImportantNpc
+            {
+                Name = npcName,
+                Gender = "未知",
+                Age = 18,
+                BriefIntro = "由GM剧情引入的角色",
+                Appearance = "由GM剧情引入的角色",
+                IdentityText = "由GM剧情引入的角色",
+                BaseAttributes = "体质:50; 敏捷:50; 感知:50; 意志:50",
+                LocationName = currentLocation,
+                PresenceStatus = "在场",
+                RelationsText = "暂无详细记录",
+                InteractionOptions = "交谈; 观察; 离开",
+                PastExperience = "暂无详细记录",
+                SelfStatus = "正常"
+            };
+            dbContext.ImportantNpcs.Add(newNpc);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            if (existing.PresenceStatus != "在场")
+            {
+                existing.PresenceStatus = "在场";
+                if (string.IsNullOrWhiteSpace(existing.InteractionOptions) || existing.InteractionOptions == "无")
+                {
+                    existing.InteractionOptions = "交谈; 观察; 离开";
+                }
+                await dbContext.SaveChangesAsync(cancellationToken);
             }
         }
     }
