@@ -182,6 +182,25 @@ public sealed class GameProgressService
             if (SessionRounds.Count > 0)
             {
                 IsPrologueStage = false;
+                var lastRound = SessionRounds.Last();
+                if (lastRound.CompletedAt == null)
+                {
+                    ActiveRound = lastRound;
+                    if (Phase == RoundPhase.Idle)
+                    {
+                        Phase = RoundPhase.AwaitingPlayer;
+                    }
+                }
+                else
+                {
+                    ActiveRound = null;
+                    Phase = RoundPhase.Idle;
+                }
+            }
+            else
+            {
+                ActiveRound = null;
+                Phase = RoundPhase.Idle;
             }
             bool isChatEmpty = SessionRounds.Count == 0 && !IsPrologueStage;
             if ((!HasProtagonist || isChatEmpty) && !IsInitializingGame && !IsStartingAdventure)
