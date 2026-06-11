@@ -30,7 +30,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<HttpClient>();
         builder.Services.AddScoped<OpenAiCompatibleLlmClient>();
         builder.Services.AddScoped<ILlmClient, AgentLlmClient>();
-        builder.Services.AddSingleton<IBlackTeaImporter, BlackTeaImporter>();
         builder.Services.AddSingleton<ChapterVariantRenderer>();
         builder.Services.AddSingleton<IRagService, BlackTeaRagService>();
         builder.Services.AddSingleton<IDiceRoller, RandomDiceRoller>();

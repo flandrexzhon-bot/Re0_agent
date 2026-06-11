@@ -44,7 +44,7 @@ public sealed class Phase2AgentTests
     [Fact]
     public async Task RagServiceListsAllBuiltInEntries()
     {
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+        var ragService = new BlackTeaRagService(new ChapterVariantRenderer());
 
         var entries = await ragService.ListAllEntriesAsync();
 

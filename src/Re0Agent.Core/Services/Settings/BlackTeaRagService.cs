@@ -4,20 +4,14 @@ using System.Text.RegularExpressions;
 namespace Re0Agent.Core.Services.Settings;
 
 public sealed class BlackTeaRagService(
-    IBlackTeaImporter importer,
     ChapterVariantRenderer chapterVariantRenderer) : IRagService
 {
-    private const string DefaultRelativePath = "data/settings/REZero_BlackTea_v2.0.0.json";
-
-    private readonly SemaphoreSlim loadLock = new(1, 1);
-    private IReadOnlyList<WorldBookEntry>? cachedEntries;
-
-    public async Task<RagContext> QueryAsync(RagQuery query, CancellationToken cancellationToken = default)
+    public Task<RagContext> QueryAsync(RagQuery query, CancellationToken cancellationToken = default)
     {
-        var entries = await LoadEntriesAsync(cancellationToken);
+        var entries = BlackTeaWorldBook.Entries;
         if (entries.Count == 0)
         {
-            return new RagContext();
+            return Task.FromResult(new RagContext());
         }
 
         var allowedConstantIds = query.AllowedConstantEntryIds is null
@@ -89,43 +83,13 @@ public sealed class BlackTeaRagService(
             .Take(Math.Max(0, query.MaxNonConstantEntries))
             .ToList();
 
-        return BuildContext(constantMatches, keywordMatches, query.MaxCharacters);
+        return Task.FromResult(BuildContext(constantMatches, keywordMatches, query.MaxCharacters));
     }
 
-    public async Task<IReadOnlyList<WorldBookEntry>> ListAllEntriesAsync(
+    public Task<IReadOnlyList<WorldBookEntry>> ListAllEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        return await LoadEntriesAsync(cancellationToken);
-    }
-
-    private async Task<IReadOnlyList<WorldBookEntry>> LoadEntriesAsync(CancellationToken cancellationToken)
-    {
-        if (cachedEntries is not null)
-        {
-            return cachedEntries;
-        }
-
-        await loadLock.WaitAsync(cancellationToken);
-        try
-        {
-            if (cachedEntries is not null)
-            {
-                return cachedEntries;
-            }
-
-            var path = FindDefaultWorldBookPath();
-            var allEntries = path is null
-                ? []
-                : await importer.ImportAsync(path, cancellationToken);
-
-            cachedEntries = allEntries.ToList();
-
-            return cachedEntries;
-        }
-        finally
-        {
-            loadLock.Release();
-        }
+        return Task.FromResult(BlackTeaWorldBook.Entries);
     }
 
     private RagMatch? TryMatch(WorldBookEntry entry, string text, int chapter)
@@ -267,32 +231,6 @@ public sealed class BlackTeaRagService(
         builder.Append(block);
         acceptedMatches.Add(match);
         remaining -= block.Length;
-    }
-
-    private static string? FindDefaultWorldBookPath()
-    {
-        foreach (var basePath in CandidateBasePaths())
-        {
-            var current = new DirectoryInfo(basePath);
-            while (current is not null)
-            {
-                var candidate = Path.Combine(current.FullName, DefaultRelativePath);
-                if (File.Exists(candidate))
-                {
-                    return candidate;
-                }
-
-                current = current.Parent;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<string> CandidateBasePaths()
-    {
-        yield return AppContext.BaseDirectory;
-        yield return Environment.CurrentDirectory;
     }
 
     private static int? TryGetEntryChapter(WorldBookEntry entry)

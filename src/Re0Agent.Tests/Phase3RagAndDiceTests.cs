@@ -13,10 +13,9 @@ namespace Re0Agent.Tests;
 public sealed class Phase3RagAndDiceTests
 {
     [Fact]
-    public async Task BlackTeaImporterParsesWorldBookEntries()
+    public void BlackTeaWorldBookContainsBuiltInEntries()
     {
-        var importer = new BlackTeaImporter();
-        var entries = await importer.ImportAsync(WorldBookPath());
+        var entries = BlackTeaWorldBook.Entries;
 
         Assert.InRange(entries.Count, 200, 220);
         Assert.Contains(entries, entry => entry.Comment.Contains("基础", StringComparison.Ordinal) && entry.Constant);
@@ -26,7 +25,7 @@ public sealed class Phase3RagAndDiceTests
     [Fact]
     public async Task RagServiceInjectsConstantsKeywordMatchesAndCapsContent()
     {
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+        var ragService = new BlackTeaRagService(new ChapterVariantRenderer());
 
         var context = await ragService.QueryAsync(new RagQuery
         {
@@ -45,7 +44,7 @@ public sealed class Phase3RagAndDiceTests
     [Fact]
     public async Task RagServiceFiltersChaptersAndLoadsActiveChapterOnly()
     {
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+        var ragService = new BlackTeaRagService(new ChapterVariantRenderer());
 
         var context = await ragService.QueryAsync(new RagQuery
         {
@@ -63,7 +62,7 @@ public sealed class Phase3RagAndDiceTests
     [Fact]
     public async Task RagServiceCanExcludeChapterEntriesForCharacterScope()
     {
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+        var ragService = new BlackTeaRagService(new ChapterVariantRenderer());
 
         var context = await ragService.QueryAsync(new RagQuery
         {
@@ -79,10 +78,9 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Fact]
-    public async Task ChapterVariantRendererChoosesDifferentBranches()
+    public void ChapterVariantRendererChoosesDifferentBranches()
     {
-        var importer = new BlackTeaImporter();
-        var entries = await importer.ImportAsync(WorldBookPath());
+        var entries = BlackTeaWorldBook.Entries;
         var mansion = Assert.Single(entries.Where(entry => entry.Id == 25));
         var renderer = new ChapterVariantRenderer();
 
@@ -98,7 +96,7 @@ public sealed class Phase3RagAndDiceTests
     [Fact]
     public async Task PromptComposerIncludesRagContext()
     {
-        var ragContext = await new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer())
+        var ragContext = await new BlackTeaRagService(new ChapterVariantRenderer())
             .QueryAsync(new RagQuery { Text = "爱蜜莉雅", Chapter = 1 });
         var prompt = new PromptComposer().ComposeGmOpening(
             null,
@@ -344,23 +342,6 @@ public sealed class Phase3RagAndDiceTests
 
         await context.SaveChangesAsync();
         return context;
-    }
-
-    private static string WorldBookPath()
-    {
-        var root = FindRoot();
-        return Path.Combine(root.FullName, "data", "settings", "REZero_BlackTea_v2.0.0.json");
-    }
-
-    private static DirectoryInfo FindRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Re0Agent.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory ?? throw new DirectoryNotFoundException("Could not locate Re0Agent.sln.");
     }
 
     private static Re0AgentDbContext CreateContext(string databasePath)

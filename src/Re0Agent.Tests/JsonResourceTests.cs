@@ -1,51 +1,28 @@
-using System.Text;
-using System.Text.Json;
+using Re0Agent.Core.Database;
+using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Tests;
 
 public sealed class JsonResourceTests
 {
     [Fact]
-    public async Task SqlSheetJsonParsesAsUtf8AndExposesOriginalDdl()
+    public void EmbeddedSqlSheetCatalogExposesOriginalDdl()
     {
-        var root = FindRepositoryRoot();
-        var path = Path.Combine(root.FullName, "data", "settings", "骰子表格SQL_v4.1.json");
-        var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8);
+        var globalData = SqlSheetCatalog.GetRequired("sheet_global_data");
 
-        using var document = JsonDocument.Parse(jsonText);
-        var rootElement = document.RootElement;
-
-        Assert.True(rootElement.TryGetProperty("sheet_global_data", out var globalData));
-        var ddl = globalData.GetProperty("sourceData").GetProperty("ddl").GetString();
-
-        Assert.Contains("CREATE TABLE global_state", ddl);
-        Assert.True(rootElement.TryGetProperty("sheet_check_suggestions", out _));
+        Assert.Contains("CREATE TABLE global_state", globalData.Ddl);
+        Assert.Contains("current_location", globalData.Ddl);
+        Assert.Contains("当前详细地点", globalData.Content[0]);
+        Assert.Contains(SqlSheetCatalog.Sheets, sheet => sheet.Uid == "sheet_check_suggestions");
     }
 
     [Fact]
-    public async Task BlackTeaWorldBookJsonParsesAndContainsEntries()
+    public void EmbeddedBlackTeaWorldBookContainsEntries()
     {
-        var root = FindRepositoryRoot();
-        var path = Path.Combine(root.FullName, "data", "settings", "REZero_BlackTea_v2.0.0.json");
-        var jsonText = await File.ReadAllTextAsync(path, Encoding.UTF8);
+        var entries = BlackTeaWorldBook.Entries;
 
-        using var document = JsonDocument.Parse(jsonText);
-        var entries = document.RootElement
-            .GetProperty("originalData")
-            .GetProperty("entries");
-
-        Assert.InRange(entries.GetArrayLength(), 200, 220);
-    }
-
-    private static DirectoryInfo FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Re0Agent.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory ?? throw new DirectoryNotFoundException("Could not locate Re0Agent.sln.");
+        Assert.InRange(entries.Count, 200, 220);
+        Assert.Contains(entries, entry => entry.Comment.Contains("基础", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.Comment.StartsWith("第", StringComparison.Ordinal));
     }
 }
