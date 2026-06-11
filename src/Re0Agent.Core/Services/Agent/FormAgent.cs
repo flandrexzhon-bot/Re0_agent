@@ -30,7 +30,6 @@ public sealed class FormAgent(
             },
             cancellationToken);
 
-        round.UsedFakeClient |= response.UsedFakeClient;
         return ParseSqlPayload(response.Content);
     }
 

@@ -20,6 +20,12 @@ public sealed class BlackTeaRagService(
             return new RagContext();
         }
 
+        var allowedConstantIds = query.AllowedConstantEntryIds is null
+            ? null
+            : new HashSet<int>(query.AllowedConstantEntryIds);
+        var allowedNonConstantIds = query.AllowedNonConstantEntryIds is null
+            ? null
+            : new HashSet<int>(query.AllowedNonConstantEntryIds);
         var constantMatches = new List<RagMatch>();
         var nonConstantCandidates = new List<WorldBookEntry>();
 
@@ -30,11 +36,18 @@ public sealed class BlackTeaRagService(
                 continue;
             }
 
+            if (!query.IncludeChapterEntries && IsChapterSettingEntry(entry))
+            {
+                continue;
+            }
+
             var entryChapter = TryGetEntryChapter(entry);
             if (entryChapter.HasValue)
             {
                 // Chapter WorldBook - only read if it matches the current chapter
-                if (entryChapter.Value == query.Chapter)
+                if (query.IncludeChapterEntries
+                    && entryChapter.Value == query.Chapter
+                    && (allowedNonConstantIds is null || allowedNonConstantIds.Contains(entry.Id)))
                 {
                     constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
                 }
@@ -44,12 +57,18 @@ public sealed class BlackTeaRagService(
                 if (entry.Constant)
                 {
                     // Constant WorldBook - always read
-                    constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
+                    if (allowedConstantIds is null || allowedConstantIds.Contains(entry.Id))
+                    {
+                        constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
+                    }
                 }
                 else
                 {
                     // Non-constant WorldBook - only read if mentioned
-                    nonConstantCandidates.Add(entry);
+                    if (allowedNonConstantIds is null || allowedNonConstantIds.Contains(entry.Id))
+                    {
+                        nonConstantCandidates.Add(entry);
+                    }
                 }
             }
         }
@@ -298,5 +317,11 @@ public sealed class BlackTeaRagService(
             }
         }
         return null;
+    }
+
+    private static bool IsChapterSettingEntry(WorldBookEntry entry)
+    {
+        return TryGetEntryChapter(entry).HasValue
+            || entry.Comment.Contains("章节设定", StringComparison.Ordinal);
     }
 }

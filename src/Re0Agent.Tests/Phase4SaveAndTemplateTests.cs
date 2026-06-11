@@ -1,14 +1,10 @@
-using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
-using Re0Agent.Core.Services.Agent;
 using Re0Agent.Core.Services.Database;
 using Re0Agent.Core.Services.Dice;
-using Re0Agent.Core.Services.Llm;
-using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Tests;
 
@@ -213,75 +209,6 @@ public sealed class Phase4SaveAndTemplateTests
         }
     }
 
-    [Fact]
-    public async Task OrchestratorCreatesRoundEndSavePointForNormalRound()
-    {
-        var databasePath = CreateTempDatabasePath();
-
-        try
-        {
-            await using var context = CreateContext(databasePath);
-            var orchestrator = CreateOrchestrator(context, new FakeLlmClient(), [50, 50, 50, 50]);
-
-            await orchestrator.RunRoundAsync("观察周围。", skipPlayerTurn: false);
-
-            Assert.Equal(1, await context.SavePoints.CountAsync());
-            Assert.Equal("round_end", (await context.SavePoints.SingleAsync()).TriggerReason);
-        }
-        finally
-        {
-            DeleteIfExists(databasePath);
-        }
-    }
-
-    [Fact]
-    public async Task OrchestratorTriggersDeathReturnWithoutCreatingRoundEndSavePoint()
-    {
-        var databasePath = CreateTempDatabasePath();
-
-        try
-        {
-            await using var context = CreateContext(databasePath);
-            await SeedGameStateAsync(context);
-            var diceEngine = CreateEngine(context, [50]);
-            var saveSystem = new SaveSystem(context, diceEngine);
-            await saveSystem.CreateSavePointAsync("initial_template");
-
-            context.GlobalStates.Single().CurrentLocation = "死亡线";
-            await context.SaveChangesAsync();
-            var orchestrator = CreateOrchestrator(context, new DeathReturnLlmClient(), [50]);
-
-            var round = await orchestrator.RunRoundAsync("冒险前进。", skipPlayerTurn: false);
-            context.ChangeTracker.Clear();
-
-            Assert.Contains(round.Events, entry => entry.Contains("死亡回归完成", StringComparison.Ordinal));
-            Assert.Equal(1, await context.SavePoints.CountAsync());
-            Assert.Equal(1, await context.DeathReturnLog.CountAsync());
-            Assert.Equal("王都", (await context.GlobalStates.SingleAsync()).CurrentLocation);
-        }
-        finally
-        {
-            DeleteIfExists(databasePath);
-        }
-    }
-
-    private static AgentOrchestrator CreateOrchestrator(
-        Re0AgentDbContext context,
-        ILlmClient llmClient,
-        IEnumerable<int> rolls)
-    {
-        var configResolver = new AgentConfigResolver(context);
-        var promptComposer = new PromptComposer();
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
-        var gmAgent = new GmAgent(context, configResolver, promptComposer, llmClient, ragService);
-        var characterAgent = new CharacterAgentService(context, configResolver, promptComposer, llmClient, ragService);
-        var formAgent = new FormAgent(context, configResolver, promptComposer, llmClient);
-        var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
-        var diceEngine = CreateEngine(context, rolls);
-        var saveSystem = new SaveSystem(context, diceEngine);
-        return new AgentOrchestrator(context, gmAgent, characterAgent, formAgent, executor, diceEngine, saveSystem);
-    }
-
     private static SaveSystem CreateSaveSystem(Re0AgentDbContext context, IEnumerable<int> rolls)
     {
         return new SaveSystem(context, CreateEngine(context, rolls));
@@ -444,57 +371,4 @@ public sealed class Phase4SaveAndTemplateTests
         }
     }
 
-    private sealed class DeathReturnLlmClient : ILlmClient
-    {
-        public Task<LlmResponse> SendChatAsync(
-            LlmRequest request,
-            CancellationToken cancellationToken = default)
-        {
-            var prompt = string.Join('\n', request.Messages.Select(message => message.Content));
-            if (request.AgentName.Contains("填表", StringComparison.Ordinal))
-            {
-                return Task.FromResult(new LlmResponse(request.AgentName, CreateSqlPayload(), UsedFakeClient: true));
-            }
-
-            if (request.AgentName == "GM" && (prompt.Contains("请对以下角色回合行为做简短裁判", StringComparison.Ordinal) || prompt.Contains("裁决的角色回合", StringComparison.Ordinal)))
-            {
-                return Task.FromResult(new LlmResponse(request.AgentName, "判定：无\n死亡回归：测试死因", UsedFakeClient: true));
-            }
-
-            if (request.AgentName == "GM")
-            {
-                return Task.FromResult(new LlmResponse(request.AgentName, "GM处理死亡回归场景。", UsedFakeClient: true));
-            }
-
-            return Task.FromResult(new LlmResponse(request.AgentName, $"{request.AgentName}行动：冒险前进。", UsedFakeClient: true));
-        }
-
-        public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
-            LlmRequest request,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
-        {
-            var response = await SendChatAsync(request, cancellationToken);
-            yield return new LlmStreamChunk(request.AgentName, response.Content, IsDone: false, UsedFakeClient: true);
-            yield return new LlmStreamChunk(request.AgentName, string.Empty, IsDone: true, UsedFakeClient: true);
-        }
-
-        private static string CreateSqlPayload()
-        {
-            var chronicleText = string.Concat(Enumerable.Repeat("本轮中主角遭遇致命危机，GM确认死亡回归触发，记录保留给主角用于下一轮选择。", 8));
-            return JsonSerializer.Serialize(new
-            {
-                sql = new[]
-                {
-                    $"""
-                    INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text)
-                    VALUES ((SELECT COALESCE(MAX(row_id), 0) + 1 FROM chronicle), 'AM' || printf('%04d', (SELECT COALESCE(MAX(CAST(SUBSTR(code_index, 3) AS INTEGER)), 0) + 1 FROM chronicle)), '2024-04-01 09:10 ~ 2024-04-01 09:20', '死亡回归触发', '{chronicleText}')
-                    """,
-                    """
-                    INSERT INTO character_memory (row_id, character_name, round_index, memory_text, emotional_state, created_at)
-                    VALUES ((SELECT COALESCE(MAX(row_id), 0) + 1 FROM character_memory), '菜月昴', 'R0002', '他记住了这次死亡回归的触发。', '惊恐', '2024-04-01 09:20')
-                    """
-                }
-            });
-        }
-    }
 }

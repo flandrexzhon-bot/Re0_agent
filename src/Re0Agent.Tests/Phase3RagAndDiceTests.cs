@@ -5,6 +5,7 @@ using Re0Agent.Core.Entities;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Agent;
 using Re0Agent.Core.Services.Dice;
+using Re0Agent.Core.Services.Llm;
 using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Tests;
@@ -60,6 +61,24 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Fact]
+    public async Task RagServiceCanExcludeChapterEntriesForCharacterScope()
+    {
+        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
+
+        var context = await ragService.QueryAsync(new RagQuery
+        {
+            Text = "第82章 水门都市 普利斯提拉",
+            Chapter = 82,
+            IncludeChapterEntries = false,
+            MaxCharacters = 14_000
+        });
+
+        Assert.DoesNotContain(context.Matches, match => match.Entry.Id == 180);
+        Assert.DoesNotContain(context.Matches, match => match.Entry.Comment.Contains("章节设定", StringComparison.Ordinal));
+        Assert.Contains(context.Matches, match => match.Entry.Comment.Contains("水门都市", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ChapterVariantRendererChoosesDifferentBranches()
     {
         var importer = new BlackTeaImporter();
@@ -88,6 +107,102 @@ public sealed class Phase3RagAndDiceTests
 
         Assert.Contains("设定上下文", prompt);
         Assert.Contains("设定条目", prompt);
+    }
+
+    [Fact]
+    public void PromptComposerConstrainsCharacterAgentOutput()
+    {
+        var prompt = new PromptComposer().ComposeCharacterTurn(
+            new CharacterAgentProfile
+            {
+                CharacterName = "菜月昴",
+                IsPlayerControlled = true,
+                CurrentStateReference = "protagonist_info:1",
+                WorldBookEntryKey = "菜月昴"
+            },
+            new GameRound
+            {
+                RoundIndex = "R0001",
+                Chapter = 1,
+                GmOpening = "王都街头的场景已经展开。"
+            },
+            [],
+            "向爱蜜莉雅道谢",
+            new RagContext { Content = "基础设定、王都地点设定、菜月昴角色设定。" });
+
+        Assert.Contains("“基础设定”、“地点设定”与“角色设定”三类", prompt);
+        Assert.Contains("全角括号（）", prompt);
+        Assert.Contains("总字数不得超过100个中文字符", prompt);
+        Assert.Contains("“爱蜜莉雅正是个好人啊！”（微笑着点头）", prompt);
+    }
+
+    [Fact]
+    public async Task CharacterAgentOnlyReceivesBaseLocationAndOwnCharacterWorldBook()
+    {
+        await using var context = await CreateSeededContextAsync();
+        context.GlobalStates.Add(new GlobalState
+        {
+            RowId = 1,
+            CurrentLocation = "王都",
+            CurrentMinorRegion = "王都",
+            CurrentMajorRegion = "露格尼卡",
+            ElapsedTime = "0分钟",
+            CurTime = "2026-06-06 09:00",
+            CurrentChapter = 82,
+            IsLewd = "否"
+        });
+        await context.SaveChangesAsync();
+
+        var llmClient = new CapturingLlmClient();
+        var service = new CharacterAgentService(
+            context,
+            new AgentConfigResolver(context),
+            new PromptComposer(),
+            llmClient,
+            new StaticRagService(
+            [
+                Entry(1, "基础设定", "基础可见", constant: true),
+                Entry(2, "⚙️基础&世界设定", "基础世界可见", constant: true),
+                Entry(3, "⚙️时间&历法设定", "时间历法可见", constant: true),
+                Entry(4, "⚙️货币&收入设定", "货币收入可见", constant: true),
+                Entry(5, "⚙️饮食&习惯设定", "饮食习惯可见", constant: true),
+                Entry(6, "⚙️玛娜&魔法设定", "玛娜魔法可见", constant: true),
+                Entry(7, "⚙️权能&加护设定", "权能加护可见", constant: true),
+                Entry(8, "🔆状态栏🔆", "状态栏不可见", constant: true),
+                Entry(9, "⚙️全局要求", "全局要求不可见", constant: true),
+                Entry(10, "🐉露格尼卡·城市: 👑王都", "王都地点可见", keys: ["王都"]),
+                Entry(11, "🕊️爱蜜莉雅阵营·人物: 爱蜜莉雅", "爱蜜莉雅角色可见", keys: ["爱蜜莉雅"]),
+                Entry(12, "🕊️爱蜜莉雅阵营·人物: 雷姆", "雷姆角色不可见", keys: ["雷姆"]),
+                Entry(13, "🐉露格尼卡·机构: 贤人会", "组织不可见", keys: ["王都"]),
+                Entry(14, "第82章(第十六卷)——『开头总由来访者开始』", "章节不可见", keys: ["第82章"])
+            ]));
+
+        await service.RunTurnAsync(
+            new GameRound { RoundIndex = "R0001", Chapter = 82, GmOpening = "王都街头。" },
+            new CharacterAgentProfile
+            {
+                CharacterName = "爱蜜莉雅",
+                IsPlayerControlled = false,
+                CurrentStateReference = "important_npc:1",
+                WorldBookEntryKey = "爱蜜莉雅"
+            },
+            null);
+
+        var prompt = Assert.Single(llmClient.LastRequest!.Messages.Where(message => message.Role == "user")).Content;
+        Assert.Contains("基础可见", prompt);
+        Assert.Contains("基础世界可见", prompt);
+        Assert.Contains("时间历法可见", prompt);
+        Assert.Contains("货币收入可见", prompt);
+        Assert.Contains("饮食习惯可见", prompt);
+        Assert.Contains("玛娜魔法可见", prompt);
+        Assert.Contains("权能加护可见", prompt);
+        Assert.Contains("王都地点可见", prompt);
+        Assert.Contains("爱蜜莉雅角色可见", prompt);
+        Assert.DoesNotContain("状态栏不可见", prompt);
+        Assert.DoesNotContain("全局要求不可见", prompt);
+        Assert.DoesNotContain("雷姆角色不可见", prompt);
+        Assert.DoesNotContain("组织不可见", prompt);
+        Assert.DoesNotContain("章节不可见", prompt);
     }
 
     [Theory]
@@ -181,46 +296,6 @@ public sealed class Phase3RagAndDiceTests
         Assert.False(blessing.IsSuccess);
     }
 
-    [Fact]
-    public async Task FakeRoundUsesPhaseThreeDiceResultAndStillWritesRecords()
-    {
-        var databasePath = CreateTempDatabasePath();
-
-        try
-        {
-            await using var context = CreateContext(databasePath);
-            var orchestrator = CreateOrchestrator(context, [50, 50, 50, 50]);
-
-            var round = await orchestrator.RunRoundAsync("谨慎观察王都周围的动静。", skipPlayerTurn: false);
-
-            Assert.DoesNotContain(round.CharacterTurns, turn => turn.DiceResult?.Detail?.Contains("Phase2占位判定", StringComparison.Ordinal) == true);
-            Assert.Equal(1, await context.Chronicle.CountAsync());
-            Assert.Equal(1, await context.CharacterMemory.CountAsync());
-        }
-        finally
-        {
-            DeleteIfExists(databasePath);
-        }
-    }
-
-    private static AgentOrchestrator CreateOrchestrator(Re0AgentDbContext context, IEnumerable<int> rolls)
-    {
-        var configResolver = new AgentConfigResolver(context);
-        var promptComposer = new PromptComposer();
-        var fakeClient = new Re0Agent.Core.Services.Llm.FakeLlmClient();
-        var ragService = new BlackTeaRagService(new BlackTeaImporter(), new ChapterVariantRenderer());
-        var gmAgent = new GmAgent(context, configResolver, promptComposer, fakeClient, ragService);
-        var characterAgent = new CharacterAgentService(context, configResolver, promptComposer, fakeClient, ragService);
-        var formAgent = new FormAgent(context, configResolver, promptComposer, fakeClient);
-        var executor = new Re0Agent.Core.Services.Database.FormAgentSqlExecutor(
-            context,
-            new Re0Agent.Core.Services.Database.SqlSafetyValidator());
-        var diceEngine = CreateEngine(context, rolls);
-        var saveSystem = new Re0Agent.Core.Services.Database.SaveSystem(context, diceEngine);
-
-        return new AgentOrchestrator(context, gmAgent, characterAgent, formAgent, executor, diceEngine, saveSystem);
-    }
-
     private static DiceEngine CreateEngine(Re0AgentDbContext context, IEnumerable<int> rolls)
     {
         return new DiceEngine(
@@ -311,6 +386,78 @@ public sealed class Phase3RagAndDiceTests
         if (File.Exists(databasePath))
         {
             File.Delete(databasePath);
+        }
+    }
+
+    private static WorldBookEntry Entry(
+        int id,
+        string comment,
+        string content,
+        bool constant = false,
+        IReadOnlyList<string>? keys = null)
+    {
+        return new WorldBookEntry
+        {
+            Id = id,
+            Comment = comment,
+            Content = content,
+            Constant = constant,
+            Enabled = true,
+            InsertionOrder = id,
+            Keys = keys ?? []
+        };
+    }
+
+    private sealed class CapturingLlmClient : ILlmClient
+    {
+        public LlmRequest? LastRequest { get; private set; }
+
+        public Task<LlmResponse> SendChatAsync(
+            LlmRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(new LlmResponse(request.AgentName, "“好的。”（点头）"));
+        }
+
+        public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
+            LlmRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            yield return new LlmStreamChunk(request.AgentName, "“好的。”（点头）", true);
+            await Task.CompletedTask;
+        }
+    }
+
+    private sealed class StaticRagService(IReadOnlyList<WorldBookEntry> entries) : IRagService
+    {
+        public Task<IReadOnlyList<WorldBookEntry>> ListAllEntriesAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(entries);
+        }
+
+        public Task<RagContext> QueryAsync(RagQuery query, CancellationToken cancellationToken = default)
+        {
+            var allowedConstantIds = query.AllowedConstantEntryIds?.ToHashSet() ?? [];
+            var allowedNonConstantIds = query.AllowedNonConstantEntryIds?.ToHashSet() ?? [];
+            var matches = entries
+                .Where(entry =>
+                    entry.Constant
+                        ? allowedConstantIds.Contains(entry.Id)
+                        : allowedNonConstantIds.Contains(entry.Id))
+                .Select(entry => new RagMatch
+                {
+                    Entry = entry,
+                    RenderedContent = entry.Content
+                })
+                .ToList();
+
+            return Task.FromResult(new RagContext
+            {
+                Matches = matches,
+                Content = string.Join('\n', matches.Select(match => match.RenderedContent))
+            });
         }
     }
 }

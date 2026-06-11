@@ -152,7 +152,9 @@ public sealed class PromptComposer
         - 个人状态 (ImportantNpc / ProtagonistInfo): {profile.CurrentStateReference}
         - 基础背景设定 (WorldBook): {profile.WorldBookEntryKey ?? "暂无特定设定"}
 
-        【设定背景 (RAG 提取)】
+        【角色可见世界书】
+        以下内容已经被系统预先过滤，只包含“基础设定”、“地点设定”与“角色设定”三类。除此之外没有任何世界书信息可供你使用。
+        不得编造或引用章节剧情设定、未来剧情走向、组织设定、事件设定或其他角色的私密设定。
         {FormatRagContext(ragContext)}
 
         【个人记忆 (Character Memory)】
@@ -167,9 +169,10 @@ public sealed class PromptComposer
         {instructionPrompt}
 
         【输出指令要求】
-        1. 仅输出 {profile.CharacterName} 的动作、台词对话、内心活动或不作为。
-        2. 坚决不要代替其他角色或 GM 说话或采取行动，不要自问自答。
-        3. 用纯中文输出，不要包含类似 `_.set('chapter', ...);` 的任何世界书脚本代码。
+        1. 只输出 {profile.CharacterName} 的对话，以及必要时由全角括号（）包围的动作。
+        2. 总字数不得超过100个中文字符。
+        3. 不要输出旁白、内心独白、GM裁定、骰子命令、Markdown、章节脚本或其他角色的台词/动作。
+        4. 格式示例：“爱蜜莉雅正是个好人啊！”（微笑着点头）
         """;
     }
 

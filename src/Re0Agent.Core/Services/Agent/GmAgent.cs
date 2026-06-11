@@ -46,7 +46,6 @@ public sealed class GmAgent(
             },
             cancellationToken);
 
-        round.UsedFakeClient |= response.UsedFakeClient;
         return response.Content;
     }
 
@@ -77,7 +76,6 @@ public sealed class GmAgent(
             },
             cancellationToken);
 
-        round.UsedFakeClient |= response.UsedFakeClient;
         return response.Content;
     }
 
@@ -107,7 +105,6 @@ public sealed class GmAgent(
             },
             cancellationToken);
 
-        round.UsedFakeClient |= response.UsedFakeClient;
         return response.Content;
     }
 }

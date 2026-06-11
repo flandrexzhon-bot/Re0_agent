@@ -8,7 +8,6 @@ public sealed class GameRound
     public string? GmOpening { get; set; }
     public string? PlayerInput { get; set; }
     public string? GmSummary { get; set; }
-    public bool UsedFakeClient { get; set; }
     public DateTimeOffset StartedAt { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? CompletedAt { get; set; }
     public IList<CharacterTurn> CharacterTurns { get; set; } = new List<CharacterTurn>();

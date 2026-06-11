@@ -22,10 +22,10 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         if (!response.IsSuccessStatusCode)
         {
-            return new LlmResponse(request.AgentName, string.Empty, UsedFakeClient: false, body);
+            return new LlmResponse(request.AgentName, string.Empty, body);
         }
 
-        return new LlmResponse(request.AgentName, ReadAssistantContent(body), UsedFakeClient: false);
+        return new LlmResponse(request.AgentName, ReadAssistantContent(body));
     }
 
     public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
@@ -50,10 +50,10 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         await foreach (var delta in SseParser.ReadContentDeltasAsync(reader, cancellationToken))
         {
-            yield return new LlmStreamChunk(request.AgentName, delta, IsDone: false, UsedFakeClient: false);
+            yield return new LlmStreamChunk(request.AgentName, delta, IsDone: false);
         }
 
-        yield return new LlmStreamChunk(request.AgentName, string.Empty, IsDone: true, UsedFakeClient: false);
+        yield return new LlmStreamChunk(request.AgentName, string.Empty, IsDone: true);
     }
 
     private static HttpRequestMessage CreateHttpRequest(LlmRequest request, bool stream)
