@@ -38,6 +38,7 @@ public sealed class AgentLlmClient(
                 SystemPrompt = GetSystemPrompt(request),
                 UserPrompt = GetUserPrompt(request),
                 ResponseContent = res.Content,
+                ReasoningContent = res.ReasoningContent ?? string.Empty,
                 LatencyMs = sw.ElapsedMilliseconds
             });
             return res;

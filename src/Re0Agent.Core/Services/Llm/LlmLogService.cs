@@ -12,6 +12,7 @@ public sealed class LlmLogEntry
     public string SystemPrompt { get; set; } = string.Empty;
     public string UserPrompt { get; set; } = string.Empty;
     public string ResponseContent { get; set; } = string.Empty;
+    public string ReasoningContent { get; set; } = string.Empty;
     public string ErrorMessage { get; set; } = string.Empty;
     public double LatencyMs { get; set; }
 }

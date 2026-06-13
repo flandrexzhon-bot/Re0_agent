@@ -25,7 +25,8 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             return new LlmResponse(request.AgentName, string.Empty, body);
         }
 
-        return new LlmResponse(request.AgentName, ReadAssistantContent(body));
+        var (content, reasoning) = ReadAssistantContent(body);
+        return new LlmResponse(request.AgentName, content, ReasoningContent: reasoning);
     }
 
     public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
@@ -103,16 +104,56 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         return $"{trimmed.TrimEnd('/')}/chat/completions";
     }
 
-    private static string ReadAssistantContent(string body)
+    private static (string Content, string? Reasoning) ReadAssistantContent(string body)
     {
         using var document = JsonDocument.Parse(body);
         var choices = document.RootElement.GetProperty("choices");
         if (choices.GetArrayLength() == 0)
         {
-            return string.Empty;
+            return (string.Empty, null);
         }
 
         var message = choices[0].GetProperty("message");
-        return message.TryGetProperty("content", out var content) ? content.GetString() ?? string.Empty : string.Empty;
+        var content = message.TryGetProperty("content", out var c) ? c.GetString() ?? string.Empty : string.Empty;
+
+        // 推理模型（DeepSeek-R1 等）将思维链放在 reasoning_content / reasoning 字段。
+        string? reasoning = null;
+        if (message.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
+        {
+            reasoning = rc.GetString();
+        }
+        else if (message.TryGetProperty("reasoning", out var r) && r.ValueKind == JsonValueKind.String)
+        {
+            reasoning = r.GetString();
+        }
+
+        // 部分模型把思维链以 <think>...</think> 内联在 content 里，剥离出来单独展示。
+        if (string.IsNullOrEmpty(reasoning))
+        {
+            var (stripped, thought) = ExtractInlineThink(content);
+            if (thought is not null)
+            {
+                content = stripped;
+                reasoning = thought;
+            }
+        }
+
+        return (content, string.IsNullOrWhiteSpace(reasoning) ? null : reasoning);
+    }
+
+    private static (string Content, string? Thought) ExtractInlineThink(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return (content, null);
+
+        var match = System.Text.RegularExpressions.Regex.Match(
+            content,
+            @"<think>(.*?)</think>",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        if (!match.Success) return (content, null);
+
+        var thought = match.Groups[1].Value.Trim();
+        var stripped = content.Remove(match.Index, match.Length).Trim();
+        return (stripped, thought);
     }
 }
