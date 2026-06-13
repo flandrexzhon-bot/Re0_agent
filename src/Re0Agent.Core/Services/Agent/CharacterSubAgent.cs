@@ -50,12 +50,19 @@ public sealed class CharacterSubAgent(
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
+        // 角色调度员需要纵览全部人物条目（无论是否在册、是否关键字命中），强制注入所有 characters:* 类别。
+        var forceIncludeCategories = allowedCategories
+            .Where(k => k.StartsWith("characters:", StringComparison.Ordinal))
+            .ToList();
+
         var ragContext = await ragService.QueryAsync(
             new RagQuery
             {
                 Text = string.Join(' ', allProfiles.Select(p => p.CharacterName)),
                 Chapter = chapter,
-                AllowedCategories = allowedCategories
+                MaxCharacters = 24_000,
+                AllowedCategories = allowedCategories,
+                ForceIncludeCategories = forceIncludeCategories
             },
             cancellationToken);
 

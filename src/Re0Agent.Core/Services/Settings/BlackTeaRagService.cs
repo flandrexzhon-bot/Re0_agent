@@ -18,6 +18,10 @@ public sealed class BlackTeaRagService(
             ? null
             : new HashSet<string>(query.AllowedCategories, StringComparer.Ordinal);
 
+        var forceIncludeCategories = query.ForceIncludeCategories is null
+            ? null
+            : new HashSet<string>(query.ForceIncludeCategories, StringComparer.Ordinal);
+
         var constantMatches = new List<RagMatch>();
         var nonConstantCandidates = new List<WorldBookEntry>();
 
@@ -25,8 +29,10 @@ public sealed class BlackTeaRagService(
         {
             if (!entry.Enabled) continue;
 
+            var categoryKey = WorldBookCategory.GetKey(entry);
+
             if (allowedCategories is not null
-                && !allowedCategories.Contains(WorldBookCategory.GetKey(entry)))
+                && !allowedCategories.Contains(categoryKey))
             {
                 continue;
             }
@@ -41,7 +47,8 @@ public sealed class BlackTeaRagService(
                     constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
                 }
             }
-            else if (entry.Constant)
+            else if (entry.Constant
+                || (forceIncludeCategories is not null && forceIncludeCategories.Contains(categoryKey)))
             {
                 constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
             }
