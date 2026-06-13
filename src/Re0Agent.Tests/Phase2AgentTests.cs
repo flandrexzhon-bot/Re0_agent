@@ -47,6 +47,9 @@ public sealed class Phase2AgentTests
         Assert.True(validator.ValidateStatement("UPDATE important_npc SET self_status = '正常' WHERE name = '雷姆';").IsValid);
         // 字面量内的双连字符不应被误判为 SQL 注释。
         Assert.True(validator.ValidateStatement("UPDATE important_npc SET relations_text = '昴--信赖' WHERE name = '雷姆'").IsValid);
+        // 新引入角色允许 INSERT OR IGNORE / INSERT OR REPLACE。
+        Assert.True(validator.ValidateStatement("INSERT OR IGNORE INTO important_npc (name, gender) VALUES ('菲鲁特', '女')").IsValid);
+        Assert.True(validator.ValidateStatement("INSERT OR REPLACE INTO important_npc (name, gender) VALUES ('菲鲁特', '女')").IsValid);
     }
 
     [Fact]

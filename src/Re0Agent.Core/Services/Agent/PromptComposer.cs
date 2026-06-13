@@ -269,9 +269,11 @@ public sealed class PromptComposer
            - 可更新字段: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`。
 
         5. 表 `important_npc` （重要 NPC 的引入与状态维护）：
-           - 新引入角色：当本回合出现了数据库中尚不存在的重要角色时，必须 `INSERT INTO important_npc (...) VALUES (...)`，把该角色正式登记入表。
-           - 已有角色：使用 `UPDATE important_npc SET ... WHERE name = 'NPC姓名'` 更新其状态、位置等。
-           - 重要：角色姓名 `name` 必须使用其【全名/规范名】（例如填"罗兹瓦尔·L·梅瑟斯"而非"罗兹瓦尔"，"碧翠丝"而非"贝蒂"），避免同一角色因别名不同被重复登记。
+           - 先判断角色是否已在【当前数据库状态摘要】的「已在册NPC」列表里（按全名/规范名比对，注意别名）：
+             · 已在册 → 只能 `UPDATE important_npc SET ... WHERE name = '全名'` 更新状态/位置，禁止再 INSERT。
+             · 未在册的全新重要角色 → 用 `INSERT OR IGNORE INTO important_npc (...) VALUES (...)` 登记（务必带 OR IGNORE，以防同名冲突导致整批失败）。
+           - 重要：角色姓名 `name` 必须使用其【全名/规范名】（例如填"罗兹瓦尔·L·梅瑟斯"而非"罗兹瓦尔"，"碧翠丝"而非"贝蒂"），避免同一角色因别名不同被重复登记或触发唯一约束。
+           - 切勿对同一角色在同一批 SQL 里既 INSERT 又 UPDATE；不要为已在册角色重复 INSERT。
            - INSERT 必填字段: `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(格式如'体质:50; 敏捷:50; 感知:50; 意志:50'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`。
            - 可更新字段: `location_name`, `relations_text`, `interaction_options`, `self_status`, `brief_intro`, `appearance`, `identity_text`, `base_attributes`, `special_attributes` 等。
 

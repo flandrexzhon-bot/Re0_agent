@@ -142,7 +142,7 @@ public sealed partial class SqlSafetyValidator
         return null;
     }
 
-    [GeneratedRegex(@"^\s*INSERT\s+INTO\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^\s*INSERT\s+(?:OR\s+(?:IGNORE|REPLACE)\s+)?INTO\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex InsertTargetRegex();
 
     [GeneratedRegex(@"^\s*UPDATE\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

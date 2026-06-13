@@ -37,10 +37,15 @@ public sealed class FormAgent(
     {
         var global = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var npcCount = await dbContext.ImportantNpcs.CountAsync(cancellationToken);
+        var npcNames = await dbContext.ImportantNpcs.AsNoTracking()
+            .OrderBy(n => n.RowId)
+            .Select(n => n.Name)
+            .ToListAsync(cancellationToken);
         var memoryCount = await dbContext.CharacterMemory.CountAsync(cancellationToken);
 
-        return $"global={(global is null ? "none" : $"{global.CurrentLocation}/{global.CurTime}/chapter={global.CurrentChapter}")}; protagonist={protagonist?.Name ?? "none"}; npc_count={npcCount}; memory_count={memoryCount}";
+        var npcList = npcNames.Count == 0 ? "（无）" : string.Join("、", npcNames);
+
+        return $"global={(global is null ? "none" : $"{global.CurrentLocation}/{global.CurTime}/chapter={global.CurrentChapter}")}; protagonist={protagonist?.Name ?? "none"}; 已在册NPC({npcNames.Count}个)=[{npcList}]; memory_count={memoryCount}";
     }
 
     private static IReadOnlyList<string> ParseSqlPayload(string content)
