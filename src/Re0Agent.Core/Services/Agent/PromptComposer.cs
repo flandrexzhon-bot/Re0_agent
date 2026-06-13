@@ -14,6 +14,9 @@ public sealed class PromptComposer
     {
         var worldSettings = ragContext?.Content ?? "暂无设定。";
         var locationText = string.IsNullOrWhiteSpace(currentLocation) ? "未知" : currentLocation;
+        var protagonistName = allProfiles.FirstOrDefault(p => p.IsPlayerControlled)?.CharacterName ?? "菜月昴";
+        var npcNames = allProfiles.Where(p => !p.IsPlayerControlled).Select(p => p.CharacterName).ToList();
+        var npcRoster = npcNames.Count == 0 ? "（暂无在册NPC，可按设定与剧情引入合适角色）" : string.Join("、", npcNames);
 
         return $$"""
         [RESET ROLE AND TASK, RECEIVE NEW TASK]
@@ -22,10 +25,12 @@ public sealed class PromptComposer
         泉此方："知道了先生！"
         开普勒先生："这里是历史上下文{{history}}。"
         开普勒先生："当前所在地点是【{{locationText}}】，请优先考虑这个地点合理在场的角色。"
+        开普勒先生："本场的主角（玩家操控）是【{{protagonistName}}】，他必须固定排在『最后行动』。在册的其他角色有：{{npcRoster}}。"
+        开普勒先生："切记，你（泉此方）只是幕后的整理员、调度员，你绝对不能把自己『泉此方』排进任何位号，位号里只能出现这个异世界的角色（主角{{protagonistName}}、在册NPC，或你按剧情引入的Re:Zero原著重要角色）。"
         开普勒先生："你必须以清晰的列表输出位号安排，每个在场的实际角色（包含你新引入的重要角色）占一行，主角固定在最后行动。格式示例如下：
                    - 1号位：[NPC1姓名]
                    - 2号位：[NPC2姓名]
-                   - 最后行动：[主角姓名]
+                   - 最后行动：{{protagonistName}}
         "
         开普勒先生递给你一本书，上面写着设定与角色手册。
         里面写着：
@@ -38,7 +43,7 @@ public sealed class PromptComposer
         {思考内容}
         </konatan_planning~>
         <content>
-        {简体中文位号}（只输出位号内容 不输出任何其他内容）
+        {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
         </content>
 
         <Chain_of_Thought>
@@ -49,6 +54,7 @@ public sealed class PromptComposer
         - 当前是什么情况？
         - 根据上下文，有什么角色离场或入场吗？
         - 根据上下文，这回合让玩家玩的最舒服，不多余，不过少，最适合的参加角色是什么？
+        - 我（泉此方）只是调度员，绝不能把自己排进位号，主角是{{protagonistName}}，要固定排最后。
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
         </konatan_planning~>
 

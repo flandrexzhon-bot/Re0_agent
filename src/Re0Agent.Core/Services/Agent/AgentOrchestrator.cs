@@ -106,6 +106,9 @@ public sealed class AgentOrchestrator(
             }
         }
 
+        // 泉此方 是幕后调度员，绝不应作为角色出现在位号里；防御性过滤。
+        parsedSlots.RemoveAll(s => s.Name.Contains("泉此方", StringComparison.Ordinal));
+
         // 2. Determine current location from protagonist for NPC insertion
         var currentLocation = "王都";
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
