@@ -157,12 +157,17 @@ public sealed class AgentOrchestrator(
             }
         }
 
-        // Add any db NPCs that were NOT parsed in the GM opening, with fallback slot 999
-        foreach (var dbNpc in dbNpcProfiles)
+        // 位号安排是权威的：只有被角色调度Agent排进位号的NPC才出场。
+        // 仅当位号里完全没有解析出任何NPC时（解析失败兜底），才回退到全部在册NPC，避免空回合。
+        var hasParsedNpc = parsedSlots.Any(s => !s.IsPlayer);
+        if (!hasParsedNpc)
         {
-            if (!usedDbNpcs.Contains(dbNpc.CharacterName))
+            foreach (var dbNpc in dbNpcProfiles)
             {
-                npcProfilesToRun.Add((dbNpc, 999));
+                if (!usedDbNpcs.Contains(dbNpc.CharacterName))
+                {
+                    npcProfilesToRun.Add((dbNpc, 999));
+                }
             }
         }
 
