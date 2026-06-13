@@ -60,7 +60,8 @@ public sealed class CharacterSubAgent(
             {
                 Text = string.Join(' ', allProfiles.Select(p => p.CharacterName)),
                 Chapter = chapter,
-                MaxCharacters = 24_000,
+                // 仿 SillyTavern 1M 上下文：角色调度员需纵览全部人物条目，给予极大预算确保不被截断。
+                MaxCharacters = 1_000_000,
                 AllowedCategories = allowedCategories,
                 ForceIncludeCategories = forceIncludeCategories
             },
