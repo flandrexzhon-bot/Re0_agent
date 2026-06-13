@@ -10,6 +10,7 @@ namespace Re0Agent.Core.Services.Agent;
 public sealed class AgentOrchestrator(
     Re0AgentDbContext dbContext,
     GmAgent gmAgent,
+    CharacterSubAgent characterSubAgent,
     CharacterAgentService characterAgentService,
     FormAgent formAgent,
     FormAgentSqlExecutor sqlExecutor,
@@ -56,7 +57,8 @@ public sealed class AgentOrchestrator(
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         round.PendingProtagonistProfiles = profiles.Where(profile => profile.IsPlayerControlled).ToList();
 
-        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, cancellationToken);
+        round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, cancellationToken);
+        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, round.CharacterSubSlots, cancellationToken);
         round.Events.Add(round.GmOpening);
 
         if (onStepCompleted is not null)
@@ -76,9 +78,9 @@ public sealed class AgentOrchestrator(
         Func<GameRound, Task>? onStepCompleted = null,
         CancellationToken cancellationToken = default)
     {
-        // 1. Parse slots from GM opening
+        // 1. Parse slots from CharacterSub output
         var parsedSlots = new List<(string Name, int Slot, bool IsPlayer)>();
-        var lines = (round.GmOpening ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = (round.CharacterSubSlots ?? round.GmOpening ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
             if (line.Contains("最后行动", StringComparison.OrdinalIgnoreCase))
@@ -485,7 +487,6 @@ public sealed class AgentOrchestrator(
                 IdentityText = "由GM剧情引入的角色",
                 BaseAttributes = "体质:50; 敏捷:50; 感知:50; 意志:50",
                 LocationName = currentLocation,
-                PresenceStatus = "在场",
                 RelationsText = "暂无详细记录",
                 InteractionOptions = "交谈; 观察; 离开",
                 PastExperience = "暂无详细记录",
@@ -494,17 +495,10 @@ public sealed class AgentOrchestrator(
             dbContext.ImportantNpcs.Add(newNpc);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        else
+        else if (string.IsNullOrWhiteSpace(existing.InteractionOptions) || existing.InteractionOptions == "无")
         {
-            if (existing.PresenceStatus != "在场")
-            {
-                existing.PresenceStatus = "在场";
-                if (string.IsNullOrWhiteSpace(existing.InteractionOptions) || existing.InteractionOptions == "无")
-                {
-                    existing.InteractionOptions = "交谈; 观察; 离开";
-                }
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
+            existing.InteractionOptions = "交谈; 观察; 离开";
+            await dbContext.SaveChangesAsync(cancellationToken);
         }
     }
 }

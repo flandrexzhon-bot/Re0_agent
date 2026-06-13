@@ -16,6 +16,9 @@ public sealed class GameRound
     /// <summary>两阶段交互：BeginRoundAsync 后待执行的主角 profile（NPC 已先行动）。</summary>
     public IReadOnlyList<CharacterAgentProfile> PendingProtagonistProfiles { get; set; } = [];
 
+    /// <summary>CharacterSub agent 输出的位号安排（在 GM 开场前确定）。</summary>
+    public string? CharacterSubSlots { get; set; }
+
     /// <summary>命中死亡回归时的死因；非空表示本回合触发死亡回归。</summary>
     public string? DeathReturnCause { get; set; }
 

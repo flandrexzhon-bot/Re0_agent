@@ -39,6 +39,7 @@ public static class MauiProgram
         builder.Services.AddScoped<AgentConfigResolver>();
         builder.Services.AddScoped<PromptComposer>();
         builder.Services.AddScoped<GmAgent>();
+        builder.Services.AddScoped<CharacterSubAgent>();
         builder.Services.AddScoped<CharacterAgentService>();
         builder.Services.AddScoped<FormAgent>();
         builder.Services.AddScoped<SqlSafetyValidator>();

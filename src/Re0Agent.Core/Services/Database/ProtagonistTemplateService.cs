@@ -268,7 +268,6 @@ public sealed class ProtagonistTemplateService(
             BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
             SpecialAttributes = "死亡回归:特殊",
             LocationName = protagonist.LocationName,
-            PresenceStatus = "在场",
             RelationsText = $"{protagonist.Name}:同行",
             InteractionOptions = "交谈,同行",
             PastExperience = "作为异世界来客卷入当前事件。"
@@ -336,7 +335,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:40; 敏捷:65; 智力:85; 意志:75",
                 SpecialAttributes = "微精灵使:极高",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:初见",
                 InteractionOptions = "交谈,送礼,切磋",
                 PastExperience = "在王都寻找丢失的徽章时遭遇袭击。"
@@ -353,7 +351,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:80; 敏捷:90; 智力:95; 意志:90",
                 SpecialAttributes = "阴魔法:精通; 终焉化:终极",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:防备",
                 InteractionOptions = "抚摸,交谈",
                 PastExperience = "守护爱蜜莉雅的猫型精灵。"
@@ -370,7 +367,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:30; 敏捷:85; 智力:60; 意志:70",
                 SpecialAttributes = "风之加护:速度极快",
                 LocationName = "王都贫民街",
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:陌生",
                 InteractionOptions = "交谈,交易",
                 PastExperience = "受委托盗取了爱蜜莉雅的徽章。"
@@ -387,7 +383,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:70; 敏捷:35; 智力:65; 意志:75",
                 SpecialAttributes = "巨人血统:怪力",
                 LocationName = "王都贫民街",
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:陌生",
                 InteractionOptions = "交谈,交易",
                 PastExperience = "在赃物库照料菲鲁特的巨人族老人。"
@@ -404,7 +399,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:99; 敏捷:99; 智力:90; 意志:99",
                 SpecialAttributes = "避箭加护:免疫远程; 剑圣加护:无敌",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:友好",
                 InteractionOptions = "求教,交谈",
                 PastExperience = "在王都巡逻时听到呼救而介入战斗。"
@@ -424,7 +418,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:45; 敏捷:60; 智力:80; 意志:75",
                 SpecialAttributes = "风魔法:熟练; 千里眼:视界共享",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:冷漠",
                 InteractionOptions = "学习家务,交谈",
                 PastExperience = "曾是鬼族神童，失去角后寄身于宅邸。"
@@ -441,7 +434,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:65; 敏捷:70; 智力:70; 意志:80",
                 SpecialAttributes = "水魔法:熟练; 鬼化:战力暴增",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:戒备",
                 InteractionOptions = "协助工作,交谈",
                 PastExperience = "对姐姐心存愧疚，极其勤恳地维持宅邸运转。"
@@ -458,7 +450,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:30; 敏捷:50; 智力:95; 意志:90",
                 SpecialAttributes = "空间传送:禁书库连接; 阴魔法:极致",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:嫌弃",
                 InteractionOptions = "阅读,搭讪",
                 PastExperience = "在禁书库中等待「那个人」长达四百年。"
@@ -475,7 +466,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:40; 敏捷:65; 智力:85; 意志:75",
                 SpecialAttributes = "微精灵使:极高",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:信赖",
                 InteractionOptions = "学习,交谈",
                 PastExperience = "带主角回到宅邸休养。"
@@ -492,7 +482,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:80; 敏捷:90; 智力:95; 意志:90",
                 SpecialAttributes = "阴魔法:精通; 终焉化:终极",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:友好",
                 InteractionOptions = "抚摸,交谈",
                 PastExperience = "守护爱蜜莉雅的猫型精灵。"
@@ -509,7 +498,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:75; 敏捷:80; 智力:98; 意志:85",
                 SpecialAttributes = "六翼加护:六属魔法极致",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:审视",
                 InteractionOptions = "谈话,请教",
                 PastExperience = "宅邸主人，支持爱蜜莉雅进行王选。"
@@ -529,7 +517,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:65; 敏捷:70; 智力:70; 意志:95",
                 SpecialAttributes = "水魔法:精通; 鬼化:战力暴增",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:狂热",
                 InteractionOptions = "倾诉,协同战斗",
                 PastExperience = "在无数次轮回中被主角拯救，视主角为自己的英雄。"
@@ -546,7 +533,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:45; 敏捷:60; 智力:80; 意志:75",
                 SpecialAttributes = "风魔法:熟练; 千里眼:视界共享",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:毒舌",
                 InteractionOptions = "交谈",
                 PastExperience = "留在宅邸处理事务，并提防外部威胁。"
@@ -563,7 +549,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:35; 敏捷:75; 智力:90; 意志:80",
                 SpecialAttributes = "水之加护:顶级治愈魔法",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:淡然",
                 InteractionOptions = "治疗,交谈",
                 PastExperience = "代表库珥修阵营在王都负责联络与医疗事务。"
@@ -580,7 +565,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:85; 敏捷:90; 智力:80; 意志:95",
                 SpecialAttributes = "剑鬼技艺:超凡剑术",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:欣赏",
                 InteractionOptions = "切磋,讨教",
                 PastExperience = "为报妻仇苦练剑术一生的复仇者。"
@@ -597,7 +581,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:40; 敏捷:65; 智力:85; 意志:75",
                 SpecialAttributes = "微精灵使:极高",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:担忧",
                 InteractionOptions = "解释,交谈",
                 PastExperience = "来到王都参加王选，极力避免主角卷入危险。"
@@ -614,7 +597,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:70; 敏捷:75; 智力:90; 意志:95",
                 SpecialAttributes = "风之加护:看穿谎言与斩击风刃",
                 LocationName = "库珥修宅邸",
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:敬重",
                 InteractionOptions = "结盟,交谈",
                 PastExperience = "以极强的手腕和公正态度统率公爵领。"
@@ -634,7 +616,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:75; 敏捷:70; 智力:75; 意志:80",
                 SpecialAttributes = "兽化:战斗力翻倍",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:友好",
                 InteractionOptions = "打听消息,交谈",
                 PastExperience = "在宅邸人手空缺时受雇重返岗位。"
@@ -651,7 +632,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:25; 敏捷:50; 智力:65; 意志:70",
                 SpecialAttributes = "无",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:仰慕",
                 InteractionOptions = "交谈,关怀",
                 PastExperience = "在魔兽事件中被拯救，决定成为女仆报答。"
@@ -668,7 +648,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:0; 敏捷:0; 智力:0; 意志:0",
                 SpecialAttributes = "无",
                 LocationName = "宅邸客房",
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:羁绊",
                 InteractionOptions = "探望",
                 PastExperience = "与暴食大罪司教遭遇战中被夺去存在感。"
@@ -685,7 +664,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:40; 敏捷:65; 智力:85; 意志:75",
                 SpecialAttributes = "微精灵使:极高",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:依赖",
                 InteractionOptions = "交谈,同行",
                 PastExperience = "准备出发前往圣域解决结界危机。"
@@ -702,7 +680,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:30; 敏捷:50; 智力:95; 意志:90",
                 SpecialAttributes = "空间传送:禁书库连接; 阴魔法:极致",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:复杂",
                 InteractionOptions = "质问,交谈",
                 PastExperience = "因福音书内容与内心防线与主角对峙。"
@@ -719,7 +696,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:85; 敏捷:80; 智力:50; 意志:85",
                 SpecialAttributes = "地灵加护:大地之上恢复提升",
                 LocationName = "圣域",
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:敌视",
                 InteractionOptions = "挑衅,切磋",
                 PastExperience = "以极强实力和古怪谚语防卫着圣域的结界。"
@@ -739,7 +715,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:40; 敏捷:65; 智力:85; 意志:85",
                 SpecialAttributes = "大精灵契约:与碧翠丝共斗; 冰魔法:极高",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:相爱",
                 InteractionOptions = "执手,交谈",
                 PastExperience = "受安娜塔西亚邀请，携手主角等人前往水门都市。"
@@ -756,7 +731,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:30; 敏捷:60; 智力:95; 意志:95",
                 SpecialAttributes = "阴魔法:精通; 结界防卫:超凡",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:相伴",
                 InteractionOptions = "牵手,交谈",
                 PastExperience = "跨出禁书库，选择主角作为自己唯一的契约者。"
@@ -773,7 +747,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:20; 敏捷:40; 智力:95; 意志:80",
                 SpecialAttributes = "商业嗅觉:无双",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:商业盟友",
                 InteractionOptions = "商业交谈,送礼",
                 PastExperience = "设计引诱各王选阵营齐聚普利斯特拉以图后效。"
@@ -790,7 +763,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:80; 敏捷:85; 智力:85; 意志:90",
                 SpecialAttributes = "诱精加护:六属准精契约",
                 LocationName = protagonist.LocationName,
-                PresenceStatus = "在场",
                 RelationsText = $"{protagonist.Name}:挚友",
                 InteractionOptions = "切磋,交谈",
                 PastExperience = "协助安娜塔西亚打理水门都市的安全事务。"
@@ -807,7 +779,6 @@ public sealed class ProtagonistTemplateService(
                 BaseAttributes = "力量:99; 敏捷:99; 智力:50; 意志:90",
                 SpecialAttributes = "狮子的心脏:时间停滞; 小国王:无敌范围",
                 LocationName = "水门都市深处",
-                PresenceStatus = "离场",
                 RelationsText = $"{protagonist.Name}:敌对",
                 InteractionOptions = "激怒,开战",
                 PastExperience = "正准备突袭水门都市夺取自己的「新娘」。"

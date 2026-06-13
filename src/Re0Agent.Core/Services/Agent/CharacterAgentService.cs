@@ -29,7 +29,6 @@ public sealed class CharacterAgentService(
 
         var npcs = await dbContext.ImportantNpcs
             .AsNoTracking()
-            .Where(npc => npc.PresenceStatus == "在场")
             .OrderBy(npc => npc.RowId)
             .ToListAsync(cancellationToken);
 

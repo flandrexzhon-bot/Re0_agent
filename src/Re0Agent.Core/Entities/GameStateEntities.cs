@@ -185,9 +185,6 @@ public sealed class ImportantNpc
     [Column("location_name")]
     public required string LocationName { get; set; }
 
-    [Column("presence_status")]
-    public required string PresenceStatus { get; set; }
-
     [Column("relations_text")]
     public string? RelationsText { get; set; }
 

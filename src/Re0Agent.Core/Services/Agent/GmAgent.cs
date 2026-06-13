@@ -16,6 +16,7 @@ public sealed class GmAgent(
     public async Task<string> CreateOpeningAsync(
         GameRound round,
         IReadOnlyList<CharacterAgentProfile> profiles,
+        string slotList,
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("GM", "GM", cancellationToken);
@@ -23,7 +24,7 @@ public sealed class GmAgent(
         var ragContext = await ragService.QueryAsync(
             new RagQuery
             {
-                Text = $"{state?.CurrentMajorRegion} {state?.CurrentMinorRegion} {state?.CurrentLocation} {round.PlayerInput} {string.Join(' ', profiles.Select(profile => profile.CharacterName))}",
+                Text = $"{state?.CurrentMajorRegion} {state?.CurrentMinorRegion} {state?.CurrentLocation} {round.PlayerInput}",
                 Chapter = round.Chapter
             },
             cancellationToken);
@@ -41,7 +42,7 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, ragContext, prologue))
+                    LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, slotList, ragContext, prologue))
                 ]
             },
             cancellationToken);

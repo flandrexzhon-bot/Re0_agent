@@ -48,8 +48,7 @@ public sealed class GameProgressService
     public string? LocationDescription { get; private set; }
     public string? LocationRegion { get; private set; }
 
-    public List<ImportantNpc> PresentNpcs { get; private set; } = new();
-    public List<ImportantNpc> AbsentNpcs { get; private set; } = new();
+    public List<ImportantNpc> AllNpcs { get; private set; } = new();
     public List<string> AllCharacterNames { get; private set; } = new();
     public List<Re0Agent.Core.Entities.AgentConfig> AgentConfigs { get; private set; } = new();
 
@@ -57,6 +56,7 @@ public sealed class GameProgressService
     public string SelectedNpcPreset { get; set; } = string.Empty;
     public string SelectedDicePreset { get; set; } = string.Empty;
     public string SelectedMemoryPreset { get; set; } = string.Empty;
+    public string SelectedCharacterSubPreset { get; set; } = string.Empty;
     public double DelaySeconds { get; set; } = 0.0;
 
     public List<CharacterBinding> CharacterBindings { get; private set; } = new();
@@ -247,8 +247,7 @@ public sealed class GameProgressService
             }
 
             // Load presets, npcs, routings
-            PresentNpcs = await db.ImportantNpcs.AsNoTracking().Where(n => n.PresenceStatus == "在场").ToListAsync(cancellationToken);
-            AbsentNpcs = await db.ImportantNpcs.AsNoTracking().Where(n => n.PresenceStatus == "离场").ToListAsync(cancellationToken);
+            AllNpcs = await db.ImportantNpcs.AsNoTracking().OrderBy(n => n.RowId).ToListAsync(cancellationToken);
             AllCharacterNames = await db.ImportantNpcs.AsNoTracking().Select(n => n.Name).ToListAsync(cancellationToken);
             AgentConfigs = await db.AgentConfig.AsNoTracking().Where(c => c.Enabled == 1).ToListAsync(cancellationToken);
 
@@ -257,6 +256,7 @@ public sealed class GameProgressService
             SelectedNpcPreset = routings.FirstOrDefault(r => r.RoutingKey == "NPC")?.PresetName ?? string.Empty;
             SelectedDicePreset = routings.FirstOrDefault(r => r.RoutingKey == "Dice")?.PresetName ?? string.Empty;
             SelectedMemoryPreset = routings.FirstOrDefault(r => r.RoutingKey == "Memory")?.PresetName ?? string.Empty;
+            SelectedCharacterSubPreset = routings.FirstOrDefault(r => r.RoutingKey == "CharacterSub")?.PresetName ?? string.Empty;
 
             var delayStr = routings.FirstOrDefault(r => r.RoutingKey == "Delay")?.PresetName;
             if (double.TryParse(delayStr, out var dVal))
@@ -289,46 +289,6 @@ public sealed class GameProgressService
         catch (Exception ex)
         {
             ErrorMessage = $"加载状态错误: {ex.Message}";
-        }
-    }
-
-    public async Task UpdateNpcPresenceAsync(int rowId, string presenceStatus, CancellationToken cancellationToken = default)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<Re0AgentDbContext>();
-        try
-        {
-            var npc = await db.ImportantNpcs.FirstOrDefaultAsync(n => n.RowId == rowId, cancellationToken);
-            if (npc is not null)
-            {
-                npc.PresenceStatus = presenceStatus;
-                
-                // If setting to 在场, make sure interaction_options is not empty to satisfy CHECK constraint
-                if (presenceStatus == "在场" && (string.IsNullOrWhiteSpace(npc.InteractionOptions) || npc.InteractionOptions == "无"))
-                {
-                    npc.InteractionOptions = "交谈; 观察; 离开";
-                }
-                
-                await db.SaveChangesAsync(cancellationToken);
-                
-                // Add a system event log
-                var latestRound = SessionRounds.LastOrDefault();
-                if (latestRound is not null)
-                {
-                    latestRound.Events.Add($"玩家调整人物在场状态：{npc.Name} 变更为 {presenceStatus}");
-                    var sessionService = scope.ServiceProvider.GetRequiredService<ChatSessionService>();
-                    var json = JsonSerializer.Serialize(SessionRounds, JsonOptions);
-                    await sessionService.SaveActiveSessionStateAsync(json, cancellationToken);
-                }
-                
-                await LoadDatabaseStateAsync(cancellationToken);
-                NotifyStateChanged();
-            }
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"修改角色在场状态失败: {ex.Message}";
-            NotifyStateChanged();
         }
     }
 
@@ -702,6 +662,9 @@ public sealed class GameProgressService
 
             if (!string.IsNullOrWhiteSpace(SelectedMemoryPreset))
                 newRoutings.Add(new ApiRouting { RoutingKey = "Memory", PresetName = SelectedMemoryPreset });
+
+            if (!string.IsNullOrWhiteSpace(SelectedCharacterSubPreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "CharacterSub", PresetName = SelectedCharacterSubPreset });
 
             foreach (var b in CharacterBindings)
             {

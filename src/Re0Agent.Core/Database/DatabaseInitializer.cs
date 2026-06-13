@@ -22,7 +22,8 @@ public static class DatabaseInitializer
             await EnsureSavePointUpgradeColumnsAsync(context, cancellationToken);
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
             await EnsureImportantNpcUpgradeColumnsAsync(context, cancellationToken);
-            await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
+            await EnsureImportantNpcDropPresenceStatusAsync(context, cancellationToken);
+        await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
         }
         finally
         {
@@ -117,6 +118,54 @@ public static class DatabaseInitializer
         {
             var alterStatement = "ALTER TABLE important_npc ADD COLUMN self_status TEXT NOT NULL DEFAULT '正常';";
             await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+        }
+    }
+
+    private static async Task EnsureImportantNpcDropPresenceStatusAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(important_npc);";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        if (!existingColumns.Contains("presence_status")) return;
+
+        var migration = new[]
+        {
+            "ALTER TABLE important_npc RENAME TO important_npc_old;",
+            """
+            CREATE TABLE important_npc (
+              row_id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL UNIQUE,
+              gender TEXT NOT NULL,
+              age INTEGER NOT NULL CHECK(age >= 0),
+              brief_intro TEXT NOT NULL CHECK(LENGTH(brief_intro) <= 30),
+              appearance TEXT NOT NULL CHECK(LENGTH(appearance) <= 60),
+              identity_text TEXT NOT NULL CHECK(LENGTH(identity_text) <= 40),
+              base_attributes TEXT NOT NULL,
+              special_attributes TEXT,
+              location_name TEXT NOT NULL,
+              relations_text TEXT,
+              interaction_options TEXT,
+              past_experience TEXT NOT NULL CHECK(LENGTH(past_experience) <= 600),
+              self_status TEXT NOT NULL DEFAULT '正常'
+            );
+            """,
+            "INSERT INTO important_npc (row_id, name, gender, age, brief_intro, appearance, identity_text, base_attributes, special_attributes, location_name, relations_text, interaction_options, past_experience, self_status) SELECT row_id, name, gender, age, brief_intro, appearance, identity_text, base_attributes, special_attributes, location_name, relations_text, interaction_options, past_experience, self_status FROM important_npc_old;",
+            "DROP TABLE important_npc_old;"
+        };
+
+        foreach (var stmt in migration)
+        {
+            await context.Database.ExecuteSqlRawAsync(stmt, cancellationToken);
         }
     }
 

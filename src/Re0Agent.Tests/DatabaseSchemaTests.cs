@@ -135,7 +135,6 @@ public sealed class DatabaseSchemaTests
                 BaseAttributes = "体质:50 敏捷:60 魔法:85",
                 SpecialAttributes = "精灵术:90 冰魔法:85",
                 LocationName = "王都",
-                PresenceStatus = "在场",
                 RelationsText = "菜月昴:同伴",
                 InteractionOptions = "交谈,同行",
                 PastExperience = "在王都与主角同行。"

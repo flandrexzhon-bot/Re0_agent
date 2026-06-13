@@ -452,73 +452,33 @@ else
                         </div>
                     </div>
 
-                    <!-- 2. 在场角色 -->
+                    <!-- 2. 羁绊角色 -->
                     <div class="sidebar-section">
                         <div class="sidebar-section-title">
-                            👥 在场角色 (@presentNpcs.Count)
+                            👥 羁绊角色 (@allNpcs.Count)
                         </div>
                         <div class="sidebar-section-body">
-                            @if (presentNpcs.Count == 0)
+                            @if (allNpcs.Count == 0)
                             {
                                 <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
-                                    无在场其他角色
+                                    暂无其他角色
                                 </div>
                             }
                             else
                             {
                                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                    @foreach (var npc in presentNpcs)
+                                    @foreach (var npc in allNpcs)
                                     {
                                         <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-vintage); padding: 0.5rem; border-radius: 4px;">
                                             <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--color-gold); align-items: center;">
                                                 <span>@npc.Name</span>
-                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                                    <span style="font-size: 0.75rem; font-weight: normal; color: var(--color-text-secondary);">@npc.Gender / @(npc.Age)岁</span>
-                                                    <button type="button" @onclick='() => Progress.UpdateNpcPresenceAsync(npc.RowId, "离场")' @onclick:stopPropagation="true" style="background: transparent; border: none; padding: 0 0.15rem; color: #cc6666; font-size: 0.75rem; cursor: pointer; line-height: 1;" title="设为离场">
-                                                        ✕
-                                                    </button>
-                                                </div>
+                                                <span style="font-size: 0.75rem; font-weight: normal; color: var(--color-text-secondary);">@npc.Gender / @(npc.Age)岁</span>
                                             </div>
                                             <div style="font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 0.25rem;">@npc.BriefIntro</div>
                                             @if (!string.IsNullOrWhiteSpace(npc.RelationsText))
                                             {
                                                 <div style="font-size: 0.75rem; color: var(--color-gold-glow); margin-top: 0.25rem;">羁绊: @npc.RelationsText</div>
                                             }
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-
-                    <!-- 离场角色 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title" style="color: var(--color-text-secondary);">
-                            💤 离场角色 (@absentNpcs.Count)
-                        </div>
-                        <div class="sidebar-section-body">
-                            @if (absentNpcs.Count == 0)
-                            {
-                                <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
-                                    无离场其他角色
-                                </div>
-                            }
-                            else
-                            {
-                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                    @foreach (var npc in absentNpcs)
-                                    {
-                                        <div style="background: rgba(0,0,0,0.1); border: 1px dashed rgba(207,168,107,0.25); padding: 0.4rem; border-radius: 4px; opacity: 0.75;">
-                                            <div style="display: flex; justify-content: space-between; font-weight: bold; color: var(--color-text-secondary); align-items: center;">
-                                                <span>@npc.Name</span>
-                                                <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                                    <span style="font-size: 0.75rem; font-weight: normal; color: rgba(255,255,255,0.3);">@npc.Gender / @(npc.Age)岁</span>
-                                                    <button type="button" @onclick='() => Progress.UpdateNpcPresenceAsync(npc.RowId, "在场")' @onclick:stopPropagation="true" style="background: transparent; border: none; padding: 0 0.15rem; color: #66cc66; font-size: 0.75rem; cursor: pointer; line-height: 1;" title="设为在场">
-                                                        ➕
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 0.2rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@npc.BriefIntro</div>
                                         </div>
                                     }
                                 </div>
@@ -614,6 +574,16 @@ else
                                 <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">Memory (填表)：</label>
                                 <select class="form-select parchment-input" @bind="selectedMemoryPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
                                     <option value="">-- 未选择 (默认首个) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">任务接力 (角色调度)：</label>
+                                <select class="form-select parchment-input" @bind="selectedCharacterSubPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (回退 GM) --</option>
                                     @foreach (var p in agentConfigs)
                                     {
                                         <option value="@p.AgentName">@p.AgentName</option>
@@ -750,8 +720,7 @@ else
     private string? locationRegion;
 
     // Model configuration parameters
-    private List<ImportantNpc> presentNpcs = new();
-    private List<ImportantNpc> absentNpcs = new();
+    private List<ImportantNpc> allNpcs = new();
     private List<string> allCharacterNames = new();
     private List<Re0Agent.Core.Entities.AgentConfig> agentConfigs = new();
 
@@ -759,6 +728,7 @@ else
     private string selectedNpcPreset = string.Empty;
     private string selectedDicePreset = string.Empty;
     private string selectedMemoryPreset = string.Empty;
+    private string selectedCharacterSubPreset = string.Empty;
     private double delaySeconds = 0.0;
 
     private List<GameProgressService.CharacterBinding> characterBindings = new();
@@ -832,8 +802,7 @@ else
             
             locationDescription = Progress.LocationDescription;
             locationRegion = Progress.LocationRegion;
-            presentNpcs = Progress.PresentNpcs;
-            absentNpcs = Progress.AbsentNpcs;
+            allNpcs = Progress.AllNpcs;
             allCharacterNames = Progress.AllCharacterNames;
             agentConfigs = Progress.AgentConfigs;
             
@@ -847,6 +816,7 @@ else
             selectedNpcPreset = Progress.SelectedNpcPreset;
             selectedDicePreset = Progress.SelectedDicePreset;
             selectedMemoryPreset = Progress.SelectedMemoryPreset;
+            selectedCharacterSubPreset = Progress.SelectedCharacterSubPreset;
             delaySeconds = Progress.DelaySeconds;
             
             characterBindings = Progress.CharacterBindings;
@@ -921,6 +891,7 @@ else
         Progress.SelectedNpcPreset = selectedNpcPreset;
         Progress.SelectedDicePreset = selectedDicePreset;
         Progress.SelectedMemoryPreset = selectedMemoryPreset;
+        Progress.SelectedCharacterSubPreset = selectedCharacterSubPreset;
         Progress.DelaySeconds = delaySeconds;
 
         await Progress.SaveRoutingConfigAsync();

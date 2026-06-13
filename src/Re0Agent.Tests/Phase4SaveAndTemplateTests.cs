@@ -338,7 +338,6 @@ public sealed class Phase4SaveAndTemplateTests
             BaseAttributes = "感知:60; 魔法:80",
             SpecialAttributes = name == "菜月昴" ? "死亡回归:特殊" : "精灵术:90",
             LocationName = "王都",
-            PresenceStatus = "在场",
             RelationsText = "菜月昴:同伴",
             InteractionOptions = "交谈,同行",
             PastExperience = "在王都与主角同行。"

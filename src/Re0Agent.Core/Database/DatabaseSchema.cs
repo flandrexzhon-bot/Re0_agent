@@ -98,9 +98,8 @@ public static class DatabaseSchema
           base_attributes TEXT NOT NULL,
           special_attributes TEXT,
           location_name TEXT NOT NULL,
-          presence_status TEXT NOT NULL CHECK(presence_status IN ('在场', '离场')),
           relations_text TEXT,
-          interaction_options TEXT CHECK(presence_status = '离场' OR (interaction_options IS NOT NULL AND LENGTH(TRIM(interaction_options)) > 0)),
+          interaction_options TEXT,
           past_experience TEXT NOT NULL CHECK(LENGTH(past_experience) <= 600),
           self_status TEXT NOT NULL DEFAULT '正常'
         );

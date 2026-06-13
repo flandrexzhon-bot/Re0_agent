@@ -103,6 +103,7 @@ public sealed class Phase3RagAndDiceTests
         var prompt = new PromptComposer().ComposeGmOpening(
             null,
             [new CharacterAgentProfile { CharacterName = "菜月昴", IsPlayerControlled = true, CurrentStateReference = "protagonist_info:1" }],
+            "- 最后行动：菜月昴",
             ragContext);
 
         Assert.Contains("设定上下文", prompt);
@@ -336,7 +337,6 @@ public sealed class Phase3RagAndDiceTests
             BaseAttributes = "魔法:60; 体质:50",
             SpecialAttributes = "精灵术:90; 冰魔法:85",
             LocationName = "王都",
-            PresenceStatus = "在场",
             RelationsText = "菜月昴:同伴",
             InteractionOptions = "交谈,同行",
             PastExperience = "在王都与主角同行。"

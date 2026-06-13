@@ -22,6 +22,22 @@ public sealed class AgentConfigResolver(Re0AgentDbContext dbContext)
                 .Select(r => r.PresetName)
                 .FirstOrDefaultAsync(cancellationToken);
         }
+        else if (agentType == "CharacterSub")
+        {
+            // 任务接力（角色调度）模型，未配置时回退到 GM 模型
+            targetPresetName = await dbContext.ApiRoutings
+                .Where(r => r.RoutingKey == "CharacterSub")
+                .Select(r => r.PresetName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(targetPresetName))
+            {
+                targetPresetName = await dbContext.ApiRoutings
+                    .Where(r => r.RoutingKey == "GM")
+                    .Select(r => r.PresetName)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
         else if (agentType == "Form")
         {
             targetPresetName = await dbContext.ApiRoutings
