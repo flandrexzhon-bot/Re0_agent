@@ -52,9 +52,11 @@ public sealed class PromptComposer
         思考使用语言：简体中文
         <konatan_planning~>
         - 当前是什么情况？
+        
         - 根据上下文，有什么角色离场或入场吗？
+
         - 根据上下文，这回合让玩家玩的最舒服，不多余，不过少，最适合的参加角色是什么？
-        - 我（泉此方）只是调度员，绝不能把自己排进位号，主角是{{protagonistName}}，要固定排最后。
+
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
         </konatan_planning~>
 

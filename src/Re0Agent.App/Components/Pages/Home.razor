@@ -351,9 +351,18 @@ else
                     点击「开始大回合」，GM 将铺陈场景、在场角色依次行动；待群像落定后，再轮到你书写主角的抉择。
                 </p>
                 <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                    <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
-                        @(phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning ? "角色行动中..." : "▶ 开始大回合")
-                    </button>
+                    @if (phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning || phase == RoundPhase.Finalizing)
+                    {
+                        <button class="primary-action" type="button" style="background: var(--color-danger, #b03a3a); border-color: var(--color-danger, #b03a3a);" @onclick="StopRound">
+                            ⏹ 停止 (调试)
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
+                            ▶ 开始大回合
+                        </button>
+                    }
                 </div>
             }
         </section>
@@ -840,6 +849,11 @@ else
     private async Task BeginRoundAsync()
     {
         await Progress.BeginRoundAsync();
+    }
+
+    private void StopRound()
+    {
+        Progress.StopRound();
     }
 
 

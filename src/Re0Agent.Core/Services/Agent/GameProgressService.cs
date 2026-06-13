@@ -30,6 +30,14 @@ public sealed class GameProgressService
     public GameRound? ActiveRound { get; private set; }
     public List<GameRound> SessionRounds { get; } = new();
 
+    private CancellationTokenSource? _roundCts;
+
+    /// <summary>请求中止当前正在运行的大回合（GM/NPC/结算阶段）。用于调试。</summary>
+    public void StopRound()
+    {
+        _roundCts?.Cancel();
+    }
+
     public List<ChatSession> ChatSessions { get; private set; } = new();
     public int ActiveSessionId { get; private set; }
     public string NewSessionName { get; set; } = string.Empty;
@@ -347,6 +355,8 @@ public sealed class GameProgressService
         IsBusy = true;
         Phase = RoundPhase.GmRunning;
         ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
         NotifyStateChanged();
 
         _ = Task.Run(async () =>
@@ -369,7 +379,7 @@ public sealed class GameProgressService
                     await AutoSaveChatSessionAsync();
                     NotifyStateChanged();
                     await Task.Delay(10);
-                });
+                }, cancellationToken: token);
 
                 ActiveRound = round;
                 lock (SessionRounds)
@@ -403,7 +413,7 @@ public sealed class GameProgressService
                     await AutoSaveChatSessionAsync();
                     NotifyStateChanged();
                     await Task.Delay(10);
-                });
+                }, cancellationToken: token);
 
                 if (round.DeathReturnTriggered)
                 {
@@ -414,6 +424,12 @@ public sealed class GameProgressService
                 // 3. Awaiting Player
                 Phase = RoundPhase.AwaitingPlayer;
             }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已手动中止本回合。";
+                RollbackActiveRound();
+                Phase = RoundPhase.Idle;
+            }
             catch (Exception ex)
             {
                 ErrorMessage = ex.Message;
@@ -422,6 +438,8 @@ public sealed class GameProgressService
             }
             finally
             {
+                _roundCts?.Dispose();
+                _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
                 await LoadDatabaseStateAsync();
@@ -443,6 +461,8 @@ public sealed class GameProgressService
         IsBusy = true;
         Phase = RoundPhase.Finalizing;
         ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
         NotifyStateChanged();
 
         _ = Task.Run(async () =>
@@ -463,9 +483,14 @@ public sealed class GameProgressService
                     await AutoSaveChatSessionAsync();
                     NotifyStateChanged();
                     await Task.Delay(10);
-                });
+                }, cancellationToken: token);
 
                 await HandleRoundCompletionAsync(round);
+            }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已手动中止本回合结算。";
+                Phase = RoundPhase.AwaitingPlayer;
             }
             catch (Exception ex)
             {
@@ -474,6 +499,8 @@ public sealed class GameProgressService
             }
             finally
             {
+                _roundCts?.Dispose();
+                _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
                 await LoadDatabaseStateAsync();
