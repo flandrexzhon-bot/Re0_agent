@@ -153,8 +153,6 @@ public sealed class PromptComposer
         - 基础背景设定 (WorldBook): {profile.WorldBookEntryKey ?? "暂无特定设定"}
 
         【角色可见世界书】
-        以下内容已经被系统预先过滤，只包含“基础设定”、“地点设定”与“角色设定”三类。除此之外没有任何世界书信息可供你使用。
-        不得编造或引用章节剧情设定、未来剧情走向、组织设定、事件设定或其他角色的私密设定。
         {FormatRagContext(ragContext)}
 
         【个人记忆 (Character Memory)】

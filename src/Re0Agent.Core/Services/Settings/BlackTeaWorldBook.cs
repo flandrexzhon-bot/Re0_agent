@@ -9,7 +9,6 @@ public static class BlackTeaWorldBook
     [
         new WorldBookEntry
         {
-            Id = 0,
             Keys = [],
             SecondaryKeys = [],
             Comment = "变量提示词",
@@ -33,7 +32,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 10,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️基础&世界设定",
@@ -82,7 +80,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 11,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️时间&历法设定",
@@ -132,7 +129,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 12,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️货币&收入设定",
@@ -185,7 +181,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 13,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️饮食&习惯设定",
@@ -258,7 +253,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 14,
             Keys = ["魔法", "玛娜", "吟唱", "咏唱", "法术", "OI", "AI", "EI", "UI"],
             SecondaryKeys = [],
             Comment = "⚙️玛娜&魔法设定",
@@ -440,7 +434,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 16,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️权能&加护设定",
@@ -539,7 +532,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 17,
             Keys = ["艾美拉达"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔艾美拉达·露格尼卡",
@@ -608,7 +600,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 18,
             Keys = [],
             SecondaryKeys = [],
             Comment = "🏛️过去&历史占位",
@@ -625,7 +616,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 19,
             Keys = ["大灾厄", "大災厄", "监视塔"],
             SecondaryKeys = [],
             Comment = "📜大灾厄📜",
@@ -700,7 +690,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 20,
             Keys = [],
             SecondaryKeys = [],
             Comment = "🏛️过去&历史占位",
@@ -716,7 +705,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 21,
             Keys = ["流星", "虫笛", "隐身斗篷", "兽护轮", "虚影装", "星之杖", "对话镜"],
             SecondaryKeys = [],
             Comment = "⚙️流星&道具设定",
@@ -806,7 +794,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 22,
             Keys = [],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡亲龙王国",
@@ -902,7 +889,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 23,
             Keys = ["普利斯提拉", "水门都市", "水门"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·城市: 🌊水门都市'普利斯提拉'",
@@ -976,7 +962,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 24,
             Keys = ["露格尼卡", "王都", "王城", "都城", "首都"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·城市: 👑王都",
@@ -1060,7 +1045,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 25,
             Keys = ["罗兹瓦尔", "宅邸", "府邸", "爱蜜莉雅", "拉姆", "雷姆", "菜月昴", "梅瑟斯", "梅扎斯", "罗兹瓦尔宅邸"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·地点: 🤡罗兹瓦尔宅邸",
@@ -1156,7 +1140,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 26,
             Keys = ["阿拉姆村", "阿拉姆", "村子", "拉姆", "雷姆"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·地点: 🏡阿拉姆村",
@@ -1202,7 +1185,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 27,
             Keys = ["圣域", "艾姬多娜", "强欲魔女"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·地点: 💫圣域",
@@ -1278,7 +1260,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 28,
             Keys = ["艾利欧尔", "爱蜜莉雅"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·地点: 🌲艾利欧尔大森林",
@@ -1345,7 +1326,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 29,
             Keys = ["佛拉基亚", "帝国"],
             SecondaryKeys = [],
             Comment = "⚔️神圣弗拉基亚帝国",
@@ -1452,7 +1432,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 30,
             Keys = ["卡拉拉基"],
             SecondaryKeys = [],
             Comment = "⚖️卡拉拉基都市国家",
@@ -1553,7 +1532,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 31,
             Keys = ["古斯提科"],
             SecondaryKeys = [],
             Comment = "🙏古斯提科圣王国",
@@ -1649,7 +1627,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 32,
             Keys = ["爱蜜莉雅", "艾米莉亚", "半魔", "半妖精", "帕克", "EMT"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 爱蜜莉雅",
@@ -1959,7 +1936,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 33,
             Keys = ["爱蜜莉雅", "帕克", "终焉之兽", "大精灵", "人工精灵"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 帕克",
@@ -2190,7 +2166,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 35,
             Keys = ["菜月昴", "昴", "斯巴鲁", "巴鲁斯"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 菜月昴",
@@ -2547,7 +2522,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 36,
             Keys = ["拉姆", "鬼族"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 拉姆",
@@ -2805,7 +2779,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 37,
             Keys = ["雷姆", "蕾姆", "鬼族"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 雷姆",
@@ -3064,7 +3037,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 38,
             Keys = ["罗兹瓦尔", "梅扎斯", "罗兹亲", "小丑", "边境伯"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 罗兹瓦尔·L·梅瑟斯",
@@ -3353,7 +3325,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 39,
             Keys = ["贝蒂", "碧翠丝", "贝阿特丽丝", "贝翠丝"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 碧翠丝",
@@ -3727,7 +3698,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 40,
             Keys = ["奥托", "苏文", "内政官"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 奥托·苏文",
@@ -3999,7 +3969,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 41,
             Keys = ["帕特拉修"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·地龙: 帕特拉修",
@@ -4061,7 +4030,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 42,
             Keys = ["加菲尔", "加菲", "汀泽尔", "华丽猛虎", "嘉飞尔"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 加菲尔·汀泽尔",
@@ -4395,7 +4363,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 43,
             Keys = ["法兰黛莉卡", "黛莉卡", "鲍曼"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 法兰黛莉卡·鲍曼",
@@ -4515,7 +4482,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 44,
             Keys = ["琉兹", "毕尔玛", "圣域"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 琉兹·毕尔玛",
@@ -4634,7 +4600,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 45,
             Keys = ["佩特拉", "雷蒂", "贝特拉", "佩托拉"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 佩特拉·雷蒂",
@@ -4745,7 +4710,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 46,
             Keys = ["梅莉", "波特鲁特", "梅丽"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 梅莉·波特鲁特",
@@ -4995,7 +4959,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 47,
             Keys = ["菲鲁特"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 菲鲁特",
@@ -5255,7 +5218,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 48,
             Keys = ["莱因哈鲁特", "剑圣", "莱茵哈鲁特"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 莱因哈鲁特·范·阿斯特雷亚",
@@ -5575,7 +5537,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 49,
             Keys = ["罗姆爷", "瓦尔加", "克罗姆威尔"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 罗姆爷",
@@ -5811,7 +5772,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 50,
             Keys = ["加斯顿", "阿顿"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 加斯顿",
@@ -5918,7 +5878,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 51,
             Keys = ["拉珍斯", "霍夫曼", "阿珍"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 拉珍斯",
@@ -6037,7 +5996,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 52,
             Keys = ["汉巴利", "阿汉"],
             SecondaryKeys = [],
             Comment = "🏃‍♀️菲鲁特阵营·人物: 汉巴利",
@@ -6149,7 +6107,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 53,
             Keys = ["普莉希拉", "血色新娘", "寡妇", "血色新娘", "跋利耶尔", "血染花嫁"],
             SecondaryKeys = [],
             Comment = "💃🏻普莉希拉阵营·人物: 普莉希拉·跋利耶尔",
@@ -6374,7 +6331,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 54,
             Keys = ["阿尔迪巴兰", "阿尔"],
             SecondaryKeys = [],
             Comment = "💃🏻普莉希拉阵营·人物: 阿尔迪巴兰",
@@ -6652,7 +6608,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 55,
             Keys = ["库珥修", "卡尔斯腾"],
             SecondaryKeys = [],
             Comment = "🎖️ 库珥修阵营·人物: 库珥修·卡尔斯腾",
@@ -6935,7 +6890,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 56,
             Keys = ["剑鬼", "威尔海姆"],
             SecondaryKeys = [],
             Comment = "🎖️ 库珥修阵营·人物: 威尔海姆·范·阿斯特雷亚",
@@ -7189,7 +7143,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 57,
             Keys = ["菲利克斯", "阿盖尔", "菲利斯", "菲利酱", "青", "菲莉丝"],
             SecondaryKeys = [],
             Comment = "🎖️ 库珥修阵营·人物: 菲利克斯·阿盖尔",
@@ -7427,7 +7380,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 58,
             Keys = ["亨克尔", "海因凯尔", "海因克尔"],
             SecondaryKeys = [],
             Comment = "💃🏻普莉希拉阵营·人物: 亨克尔·阿斯特雷亚",
@@ -7541,7 +7493,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 59,
             Keys = ["安娜塔西亚", "安娜", "多娜狐"],
             SecondaryKeys = [],
             Comment = "🦊安娜阵营·人物: 安娜塔西亚·合辛",
@@ -7764,7 +7715,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 60,
             Keys = ["多娜狐", "围巾多娜", "安娜塔西亚", "安娜"],
             SecondaryKeys = [],
             Comment = "🦊安娜阵营·人物: 多娜狐",
@@ -7860,7 +7810,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 61,
             Keys = ["尤里乌斯", "尤克里乌斯", "最优骑士"],
             SecondaryKeys = [],
             Comment = "🦊安娜阵营·人物: 尤里乌斯·尤克里乌斯",
@@ -8100,7 +8049,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 62,
             Keys = ["约书亚", "约修亚", "安娜阵营"],
             SecondaryKeys = [],
             Comment = "🦊安娜阵营·人物: 约书亚·尤克里乌斯",
@@ -8219,7 +8167,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 63,
             Keys = ["铁牙", "铁之牙", "铁狼之牙"],
             SecondaryKeys = [],
             Comment = "🐺安娜阵营·组织: 铁牙佣兵团",
@@ -8267,7 +8214,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 64,
             Keys = ["里卡多", "威尔", "里卡德"],
             SecondaryKeys = [],
             Comment = "🐺安娜阵营·人物: 里卡多·威尔金",
@@ -8387,7 +8333,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 65,
             Keys = ["铁牙", "帕尔巴顿", "三胞胎", "蜜蜜", "咪咪"],
             SecondaryKeys = [],
             Comment = "🐺安娜阵营·人物: 蜜蜜·帕尔巴顿",
@@ -8495,7 +8440,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 66,
             Keys = ["铁牙", "帕尔巴顿", "三胞胎", "黑塔罗"],
             SecondaryKeys = [],
             Comment = "🐺安娜阵营·人物: 黑塔罗·帕尔巴顿",
@@ -8598,7 +8542,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 67,
             Keys = ["铁牙", "帕尔巴顿", "三胞胎", "缇碧"],
             SecondaryKeys = [],
             Comment = "🐺安娜阵营·人物: 缇碧·帕尔巴顿",
@@ -8703,7 +8646,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 68,
             Keys = ["愤怒", "西莉乌斯", "叙吕厄斯", "席里乌斯"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『愤怒·司教』西莉乌斯·罗曼尼康帝",
@@ -8830,7 +8772,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 69,
             Keys = ["贤人会", "麦克罗托夫", "波尔多"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·机构: 贤人会",
@@ -9052,7 +8993,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 70,
             Keys = ["王国军", "近卫骑士团", "骑士"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·机构: 王国军",
@@ -9139,7 +9079,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 71,
             Keys = ["王国军", "近卫骑士团", "骑士", "马可仕", "吉尔达克"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔马可仕·吉尔达克",
@@ -9262,7 +9201,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 72,
             Keys = ["魔女教", "愤怒", "怠惰", "强欲", "色欲", "暴食", "恶食", "饱食", "福音书"],
             SecondaryKeys = [],
             Comment = "📓 魔女教",
@@ -9392,7 +9330,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 73,
             Keys = ["色欲", "卡佩拉", "艾美拉达", "爱梅拉妲"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『色欲·司教』卡佩拉·艾美拉达·露格尼卡",
@@ -9589,7 +9526,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 74,
             Keys = ["强欲魔女", "艾姬多娜", "艾奇多娜", "多娜"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [强欲·魔女] 艾姬多娜",
@@ -9713,7 +9649,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 76,
             Keys = ["罗伊", "暴食", "阿尔法德", "恶食"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『暴食·恶食·司教』罗伊·阿尔法德",
@@ -9825,7 +9760,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 77,
             Keys = ["虚饰", "潘多拉", "潘多拉"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [虚饰·魔女] 潘多拉",
@@ -9946,7 +9880,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 78,
             Keys = ["强欲", "雷古勒斯", "柯尼亚斯", "雷格鲁斯"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『强欲·司教』雷古勒斯·柯尼亚斯",
@@ -10073,7 +10006,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 79,
             Keys = ["露伊", "阿尔内布", "暴食", "饱食"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『暴食·饱食·司教』露伊·阿尔内布",
@@ -10172,7 +10104,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 80,
             Keys = ["莱伊", "巴登凯托斯", "暴食", "美食"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『暴食·美食·司教』莱伊·巴登凯托斯",
@@ -10280,7 +10211,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 81,
             Keys = ["嫉妒", "莎提拉", "死亡回归", "死亡回溯", "莎缇拉"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [嫉妒·魔女] 莎提拉",
@@ -10405,7 +10335,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 82,
             Keys = ["八臂", "库尔干", "库尔刚", "库鲁刚", "斗神"],
             SecondaryKeys = [],
             Comment = "⚔️弗拉基亚·角色: 🆔八臂·库尔刚",
@@ -10529,7 +10458,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 83,
             Keys = ["莉莉安娜", "马斯可芮德", "歌姬"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔莉莉安娜·马斯可芮德",
@@ -10644,7 +10572,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 84,
             Keys = ["奇力塔卡", "谬丝", "十人会", "普利斯提拉", "水门都市"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔奇力塔卡·谬丝",
@@ -10756,7 +10683,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 85,
             Keys = ["白龙之鳞", "谬丝", "奇力塔卡"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·组织: 白龙之鳞",
@@ -10812,7 +10738,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 86,
             Keys = ["艾尔莎", "葛兰西尔特", "猎肠者"],
             SecondaryKeys = [],
             Comment = "🙏古斯提科·角色: 🆔艾尔莎·葛兰西尔特",
@@ -11016,7 +10941,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 87,
             Keys = ["白鲸"],
             SecondaryKeys = [],
             Comment = "🐋魔兽: 『白鲸』",
@@ -11079,7 +11003,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 88,
             Keys = ["大兔", "多兔"],
             SecondaryKeys = [],
             Comment = "🐇魔兽: 『大兔』",
@@ -11130,7 +11053,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 89,
             Keys = ["黑蛇"],
             SecondaryKeys = [],
             Comment = "🐍魔兽: 『黑蛇』",
@@ -11191,7 +11113,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 90,
             Keys = ["魔兽", "红蝎", "百足棺", "狼伽姆", "沃尔加姆", "雪荒", "基尔提拉乌", "影狮子", "双头犬", "岩豚", "双头蛇", "黑翼鼠", "一角鼠", "艾尔基纳", "刚猿"],
             SecondaryKeys = [],
             Comment = "👹魔兽: ⚠️≈5K tokens, 自行决定开/关, 或切换为绿色灯",
@@ -11378,7 +11299,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 91,
             Keys = ["特蕾西亚", "前剑圣"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔特蕾西亚·范·阿斯特雷亚",
@@ -11499,7 +11419,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 92,
             Keys = ["培提尔其乌斯", "培提尔其乌斯", "罗曼尼康帝", "怠惰", "裘斯", "贝特鲁吉乌斯"],
             SecondaryKeys = [],
             Comment = "📓 魔女教·人物: 『怠惰·司教』培提尔其乌斯·罗曼尼康帝",
@@ -11620,7 +11539,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 93,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️种族占位",
@@ -11728,7 +11646,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 94,
             Keys = ["第1章"],
             SecondaryKeys = [],
             Comment = "第1章(第一卷)——『开始的结束』",
@@ -11844,7 +11761,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 95,
             Keys = ["第2章"],
             SecondaryKeys = [],
             Comment = "第2章(第一卷)——『太迟的抵抗』",
@@ -11964,7 +11880,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 96,
             Keys = ["第3章"],
             SecondaryKeys = [],
             Comment = "第3章(第一卷)——『结束与开始』",
@@ -12072,7 +11987,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 97,
             Keys = ["第4章"],
             SecondaryKeys = [],
             Comment = "第4章(第一卷)——『第四次的正直』",
@@ -12242,7 +12156,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 98,
             Keys = ["第5章"],
             SecondaryKeys = [],
             Comment = "第5章(第一卷)——『从零开始的异世界生活』",
@@ -12441,7 +12354,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 99,
             Keys = ["第6章"],
             SecondaryKeys = [],
             Comment = "第6章(第一卷)——『月亮都看在眼里』",
@@ -12609,7 +12521,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 100,
             Keys = ["第7章"],
             SecondaryKeys = [],
             Comment = "第7章(第二卷)——『自觉的感情』",
@@ -12775,7 +12686,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 101,
             Keys = ["第8章"],
             SecondaryKeys = [],
             Comment = "第8章(第二卷)——『约定之晨尚远』",
@@ -12955,7 +12865,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 102,
             Keys = ["第9章"],
             SecondaryKeys = [],
             Comment = "第9章(第二卷)——『锁链的声响』",
@@ -13167,7 +13076,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 103,
             Keys = ["第10章"],
             SecondaryKeys = [],
             Comment = "第10章(第二卷)——『薄暮之时的捉迷藏』",
@@ -13316,7 +13224,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 104,
             Keys = ["第11章"],
             SecondaryKeys = [],
             Comment = "第11章(第二卷)——『期望的早晨』",
@@ -13476,7 +13383,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 105,
             Keys = ["第12章"],
             SecondaryKeys = [],
             Comment = "第12章(第三卷)——『菜月,昴重新开始』",
@@ -13620,7 +13526,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 106,
             Keys = ["第13章"],
             SecondaryKeys = [],
             Comment = "第13章(第三卷)——『哭过喊过就会停止哭泣』",
@@ -13767,7 +13672,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 107,
             Keys = ["第14章"],
             SecondaryKeys = [],
             Comment = "第14章(第三卷)——『勇气的意义』",
@@ -13912,7 +13816,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 108,
             Keys = ["第15章"],
             SecondaryKeys = [],
             Comment = "第15章(第三卷)——『鬼上身的作法』",
@@ -14069,7 +13972,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 109,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️诅咒&解咒设定",
@@ -14136,7 +14038,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 111,
             Keys = ["第16章"],
             SecondaryKeys = [],
             Comment = "第16章(第三卷)——『ALL IN』",
@@ -14292,7 +14193,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 112,
             Keys = ["第17章"],
             SecondaryKeys = [],
             Comment = "第17章(第三卷)——『未来的事』",
@@ -14449,7 +14349,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 113,
             Keys = ["第18章"],
             SecondaryKeys = [],
             Comment = "第18章(第四卷)—— 『再访王都』",
@@ -14621,7 +14520,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 114,
             Keys = ["第19章"],
             SecondaryKeys = [],
             Comment = "第19章(第四卷)——『加持，再会，约定』",
@@ -14783,7 +14681,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 115,
             Keys = ["第20章"],
             SecondaryKeys = [],
             Comment = "第20章(第四卷)——『感情恶劣到爆的与会成员』",
@@ -14960,7 +14857,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 116,
             Keys = ["第21章"],
             SecondaryKeys = [],
             Comment = "第21章(第四卷)——『国王候补人选及其骑士们』",
@@ -15129,7 +15025,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 117,
             Keys = ["第22章"],
             SecondaryKeys = [],
             Comment = "第22章(第四卷)——『自称骑士——菜月·昴』",
@@ -15284,7 +15179,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 118,
             Keys = ["第23章"],
             SecondaryKeys = [],
             Comment = "第23章(第四卷)——『骑士们的想法』",
@@ -15392,7 +15286,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 120,
             Keys = ["第24章"],
             SecondaryKeys = [],
             Comment = "第24章(第五卷)——『腐败的精神』",
@@ -15530,7 +15423,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 121,
             Keys = ["第25章"],
             SecondaryKeys = [],
             Comment = "第25章(第五卷)——『开始变化的事态与雷姆的意志』",
@@ -15670,7 +15562,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 122,
             Keys = ["第26章"],
             SecondaryKeys = [],
             Comment = "第26章(第五卷)——『名为绝望的疾病』",
@@ -15831,7 +15722,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 123,
             Keys = ["第27章"],
             SecondaryKeys = [],
             Comment = "第27章(第五卷)——『疯狂的外侧』",
@@ -15953,7 +15843,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 124,
             Keys = ["第28章"],
             SecondaryKeys = [],
             Comment = "第28章(第五卷)——『第二次遭遇』",
@@ -16114,7 +16003,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 125,
             Keys = ["第29章"],
             SecondaryKeys = [],
             Comment = "第29章(第五卷)——『憎恨的种子』",
@@ -16224,7 +16112,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 126,
             Keys = ["第30章"],
             SecondaryKeys = [],
             Comment = "第30章(第六卷)——『拙稚的谈判』",
@@ -16293,7 +16180,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 127,
             Keys = ["第31章"],
             SecondaryKeys = [],
             Comment = "第31章(第六卷)——『猪的欲望』",
@@ -16367,7 +16253,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 128,
             Keys = ["第32章"],
             SecondaryKeys = [],
             Comment = "第32章(第六卷)——『白鲸之颚』",
@@ -16439,7 +16324,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 129,
             Keys = ["第33章"],
             SecondaryKeys = [],
             Comment = "第33章(第六卷)——『无法诉诸言语』",
@@ -16514,7 +16398,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 130,
             Keys = ["第34章"],
             SecondaryKeys = [],
             Comment = "第34章(第六卷)——『从零开始』",
@@ -16586,7 +16469,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 131,
             Keys = ["第35章"],
             SecondaryKeys = [],
             Comment = "第35章(第六卷)——『被分到的卡片』",
@@ -16657,7 +16539,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 132,
             Keys = ["第36章"],
             SecondaryKeys = [],
             Comment = "第36章(第七卷)——『被分到的手牌』",
@@ -16732,7 +16613,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 133,
             Keys = ["第37章"],
             SecondaryKeys = [],
             Comment = "第37章(第七卷)——『决战前夕』",
@@ -16807,7 +16687,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 134,
             Keys = ["第38章"],
             SecondaryKeys = [],
             Comment = "第38章(第七卷)——『白鲸攻略战』",
@@ -16885,7 +16764,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 135,
             Keys = ["第39章"],
             SecondaryKeys = [],
             Comment = "第39章(第七卷)——『对抗绝望的赌注』",
@@ -16962,7 +16840,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 136,
             Keys = ["第40章"],
             SecondaryKeys = [],
             Comment = "第40章(第七卷)——『威尔海姆·范·阿斯特雷亚』",
@@ -17040,7 +16917,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 137,
             Keys = ["第41章"],
             SecondaryKeys = [],
             Comment = "第41章(第七卷)——『通往梅札斯领地之路』",
@@ -17118,7 +16994,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 139,
             Keys = ["第42章"],
             SecondaryKeys = [],
             Comment = "第42章(第八卷)——『怠惰一闪』",
@@ -17195,7 +17070,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 140,
             Keys = ["第43章"],
             SecondaryKeys = [],
             Comment = "第43章(第八卷)——『——战斗吧』",
@@ -17271,7 +17145,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 141,
             Keys = ["第44章"],
             SecondaryKeys = [],
             Comment = "第44章(第八卷)——『回来的意义』",
@@ -17344,7 +17217,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 142,
             Keys = ["拉塞尔", "费洛", "商会", "六舌"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·角色: 🆔拉塞尔·费洛",
@@ -17501,7 +17373,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 143,
             Keys = ["第45章"],
             SecondaryKeys = [],
             Comment = "第45章(第八卷)——『阴险狠毒的怠惰』",
@@ -17580,7 +17451,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 144,
             Keys = ["第46章"],
             SecondaryKeys = [],
             Comment = "第46章(第八卷)——『履行契约』",
@@ -17655,7 +17525,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 145,
             Keys = ["第47章"],
             SecondaryKeys = [],
             Comment = "第47章(第九卷)——『Re:Star』",
@@ -17728,7 +17597,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 146,
             Keys = ["第48章"],
             SecondaryKeys = [],
             Comment = "第48章(第九卷)——『名为温暖的福音』",
@@ -17806,7 +17674,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 147,
             Keys = ["第49章"],
             SecondaryKeys = [],
             Comment = "第49章(第九卷)——『准备好的舞台后』",
@@ -17886,7 +17753,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 148,
             Keys = ["第50章"],
             SecondaryKeys = [],
             Comment = "第50章(第九卷)——『自称骑士和最优秀骑士』",
@@ -17963,7 +17829,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 149,
             Keys = ["第51章"],
             SecondaryKeys = [],
             Comment = "第51章(第九卷)——『怠惰的末路』",
@@ -18042,7 +17907,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 150,
             Keys = ["第52章"],
             SecondaryKeys = [],
             Comment = "第52章(第九卷)——『——只是这样的故事』",
@@ -18123,7 +17987,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 151,
             Keys = ["第53章"],
             SecondaryKeys = [],
             Comment = "第53章(第十卷)——『千辛万苦抵达的地方』",
@@ -18209,7 +18072,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 152,
             Keys = ["第54章"],
             SecondaryKeys = [],
             Comment = "第54章(第十卷)——『通往圣域的路上』",
@@ -18294,7 +18156,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 153,
             Keys = ["第55章"],
             SecondaryKeys = [],
             Comment = "第55章(第十卷)——『久候多时的重逢』&『亲子』",
@@ -18390,7 +18251,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 154,
             Keys = ["第56章"],
             SecondaryKeys = [],
             Comment = "第56章(第十卷)——『踏出的一步』",
@@ -18479,7 +18339,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 155,
             Keys = ["第57章"],
             SecondaryKeys = [],
             Comment = "第57章(第十一卷)——『女仆·女仆·女仆』",
@@ -18575,7 +18434,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 156,
             Keys = ["第58章"],
             SecondaryKeys = [],
             Comment = "第58章(第十一卷)——『少女的福音』",
@@ -18672,7 +18530,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 157,
             Keys = ["第59章"],
             SecondaryKeys = [],
             Comment = "第59章(第十一卷)——『朋友』",
@@ -18760,7 +18617,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 158,
             Keys = ["第60章"],
             SecondaryKeys = [],
             Comment = "第60章(第十一卷)——『生命的价值』",
@@ -18847,7 +18703,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 159,
             Keys = ["第61章"],
             SecondaryKeys = [],
             Comment = "第61章(第十一卷)——『魔女们的茶会』&『我爱你爱你爱你——』",
@@ -18932,7 +18787,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 160,
             Keys = ["第62章"],
             SecondaryKeys = [],
             Comment = "第62章(第十二卷)——『爱我爱我爱我——』&『我知道地狱是什么样子』",
@@ -19016,7 +18870,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 161,
             Keys = ["第63章"],
             SecondaryKeys = [],
             Comment = "第63章(第十二卷)——『始自四百年前的吶喊』",
@@ -19112,7 +18965,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 162,
             Keys = ["第64章"],
             SecondaryKeys = [],
             Comment = "第64章(第十二卷)——『死亡的味道』",
@@ -19198,7 +19050,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 163,
             Keys = ["第65章"],
             SecondaryKeys = [],
             Comment = "第65章(第十二卷)——『Ending List』&『魔女的茶会』",
@@ -19286,7 +19137,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 164,
             Keys = ["第66章"],
             SecondaryKeys = [],
             Comment = "第66章(第十三卷)——『让人泫然欲泣的声音』",
@@ -19371,7 +19221,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 165,
             Keys = ["第67章"],
             SecondaryKeys = [],
             Comment = "第67章(第十三卷)——『置胜算于度外』",
@@ -19456,7 +19305,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 166,
             Keys = ["第68章"],
             SecondaryKeys = [],
             Comment = "第68章(第十三卷)——『STRAIGHT BET』",
@@ -19542,7 +19390,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 167,
             Keys = ["第69章"],
             SecondaryKeys = [],
             Comment = "第69章(第十三卷)——『谎言,骗子,唬烂精』&『奥托·苏文』",
@@ -19628,7 +19475,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 168,
             Keys = ["第70章"],
             SecondaryKeys = [],
             Comment = "第70章(第十三卷)——『相信的理由』&『奎恩之石一个人爬不上去』",
@@ -19714,7 +19560,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 169,
             Keys = ["第71章"],
             SecondaryKeys = [],
             Comment = "第71章(第十三卷)——『情书』",
@@ -19800,7 +19645,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 170,
             Keys = ["第72章"],
             SecondaryKeys = [],
             Comment = "第72章(第十四卷)——『艾利欧尔大森林的永久冻土』&『在唇瓣抹上殷红』",
@@ -19892,7 +19736,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 171,
             Keys = ["第73章"],
             SecondaryKeys = [],
             Comment = "第73章(第十四卷)——『将谎言化作希望』",
@@ -19974,7 +19817,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 172,
             Keys = ["第74章"],
             SecondaryKeys = [],
             Comment = "第74章(第十四卷)——『咆哮的重逢』",
@@ -20058,7 +19900,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 173,
             Keys = ["第75章"],
             SecondaryKeys = [],
             Comment = "第75章(第十五卷)——『在罗兹瓦尔宅邸的最后一天』",
@@ -20144,7 +19985,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 174,
             Keys = ["第76章"],
             SecondaryKeys = [],
             Comment = "第76章(第十五卷)——『映照在水面上的幸福』",
@@ -20227,7 +20067,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 175,
             Keys = ["第77章"],
             SecondaryKeys = [],
             Comment = "第77章(第十五卷)——『森林的漆黑之王•基尔缇拉乌来袭』&『下次一定会举行茶会』",
@@ -20313,7 +20152,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 176,
             Keys = ["第78章"],
             SecondaryKeys = [],
             Comment = "第78章(第十五卷)——『连鲜血和内脏都一并疼爱』&『从复仇开始』",
@@ -20396,7 +20234,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 177,
             Keys = ["第79章"],
             SecondaryKeys = [],
             Comment = "第79章(第十五卷)——『──选我吧』",
@@ -20480,7 +20317,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 178,
             Keys = ["第80章"],
             SecondaryKeys = [],
             Comment = "第80章(第十五卷)——『雪的脸型』&『各自的妥协』",
@@ -20565,7 +20401,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 179,
             Keys = ["第81章"],
             SecondaryKeys = [],
             Comment = "第81章(第十五卷)——『月光下，踩着随性的舞步』&『──再度降临』",
@@ -20641,7 +20476,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 180,
             Keys = ["第82章"],
             SecondaryKeys = [],
             Comment = "第82章(第十六卷)——『开头总由来访者开始』",
@@ -20730,7 +20564,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 181,
             Keys = ["第83章"],
             SecondaryKeys = [],
             Comment = "第83章(第十六卷)——『水门都市普利斯提拉』",
@@ -20829,7 +20662,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 182,
             Keys = ["第84章"],
             SecondaryKeys = [],
             Comment = "第84章(第十六卷)——『意外的重逢,该来的重逢,意料外的重逢』",
@@ -20924,7 +20756,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 183,
             Keys = ["第85章"],
             SecondaryKeys = [],
             Comment = "第85章(第十六卷)——『聒噪的寂静』",
@@ -21011,7 +20842,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 184,
             Keys = ["第86章"],
             SecondaryKeys = [],
             Comment = "第86章(第十六卷)——『剧场型恶意』",
@@ -21092,7 +20922,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 185,
             Keys = ["第92章"],
             SecondaryKeys = [],
             Comment = "第92章(第十八卷)——『败战处理』",
@@ -21191,7 +21020,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 186,
             Keys = ["第87章"],
             SecondaryKeys = [],
             Comment = "第87章(第十七卷)——『草率的解答』",
@@ -21271,7 +21099,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 187,
             Keys = ["第88章"],
             SecondaryKeys = [],
             Comment = "第88章(第十七卷)——『冰炎的结局』",
@@ -21359,7 +21186,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 188,
             Keys = ["第89章"],
             SecondaryKeys = [],
             Comment = "第89章(第十七卷)——『魔女教灾害对策总部』",
@@ -21439,7 +21265,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 189,
             Keys = ["第90章"],
             SecondaryKeys = [],
             Comment = "第90章(第十七卷)——『Gorgeous·Tiger』",
@@ -21518,7 +21343,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 190,
             Keys = ["第91章"],
             SecondaryKeys = [],
             Comment = "第91章(第十七卷)——『都市厅舍夺还作战』",
@@ -21648,7 +21472,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 191,
             Keys = ["第93章"],
             SecondaryKeys = [],
             Comment = "第93章(第十八卷)——『骑士的条件』",
@@ -21767,7 +21590,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 192,
             Keys = ["第94章"],
             SecondaryKeys = [],
             Comment = "第94章(第十八卷)——『最新的英雄与最古老的英雄』",
@@ -21892,7 +21714,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 193,
             Keys = ["第95章"],
             SecondaryKeys = [],
             Comment = "第95章(第十八卷)——『名留青史的繁星』",
@@ -21998,7 +21819,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 194,
             Keys = ["第96章"],
             SecondaryKeys = [],
             Comment = "第96章(第十八卷)——『迟早会喜欢上的人』",
@@ -22106,7 +21926,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 195,
             Keys = ["第97章"],
             SecondaryKeys = [],
             Comment = "第97章(第十九卷)——『混战都市』",
@@ -22194,7 +22013,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 197,
             Keys = ["第98章"],
             SecondaryKeys = [],
             Comment = "第98章(第十九卷)——『强欲攻略战开幕』",
@@ -22295,7 +22113,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 198,
             Keys = ["第99章"],
             SecondaryKeys = [],
             Comment = "第99章(第十九卷)——『燃烧都市赞歌』",
@@ -22393,7 +22210,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 199,
             Keys = ["第100章"],
             SecondaryKeys = [],
             Comment = "第100章(第十九卷)——『在绝缘状上签名』",
@@ -22505,7 +22321,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 200,
             Keys = ["第101章"],
             SecondaryKeys = [],
             Comment = "第101章(第十九卷)——『莉莉安娜·马斯可芮德』",
@@ -22611,7 +22426,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 201,
             Keys = ["第102章"],
             SecondaryKeys = [],
             Comment = "第102章(第十九卷)——『——我相信你』",
@@ -22732,7 +22546,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 202,
             Keys = ["第103章"],
             SecondaryKeys = [],
             Comment = "第103章(第十九卷)——『雷古勒斯·柯尼亚斯』",
@@ -22822,7 +22635,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 203,
             Keys = ["第104章"],
             SecondaryKeys = [],
             Comment = "第104章(第二十卷)——『月下的狂想曲』",
@@ -22902,7 +22714,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 204,
             Keys = ["第105章"],
             SecondaryKeys = [],
             Comment = "第105章(第二十卷)——『丑陋的晚餐会』",
@@ -22983,7 +22794,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 205,
             Keys = ["第106章"],
             SecondaryKeys = [],
             Comment = "第106章(第二十卷)——『领域的被害者』",
@@ -23060,7 +22870,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 206,
             Keys = ["第107章"],
             SecondaryKeys = [],
             Comment = "第107章(第二十卷)——『战士的称赞』",
@@ -23141,7 +22950,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 207,
             Keys = ["第108章"],
             SecondaryKeys = [],
             Comment = "第108章(第二十卷)——『剑鬼恋歌──断章』",
@@ -23215,7 +23023,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 208,
             Keys = ["第109章"],
             SecondaryKeys = [],
             Comment = "第109章(第二十卷)——『特蕾西亚·范·阿斯特雷亚』",
@@ -23291,7 +23098,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 209,
             Keys = ["第110章"],
             SecondaryKeys = [],
             Comment = "第110章(第二十卷)——『普利斯提拉攻防战结果』",
@@ -23375,7 +23181,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 210,
             Keys = ["第111章"],
             SecondaryKeys = [],
             Comment = "第111章(第二十卷)——『水面留下波纹』",
@@ -23461,7 +23266,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 211,
             Keys = ["色欲魔女", "卡蜜拉", "卡米拉"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [色欲·魔女] 卡蜜拉",
@@ -23576,7 +23380,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 212,
             Keys = ["堤丰", "傲慢"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [傲慢·魔女] 堤丰",
@@ -23697,7 +23500,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 213,
             Keys = ["塞赫麦特", "怠惰魔女"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [嫉妒·魔女] 塞赫麦特",
@@ -23810,7 +23612,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 214,
             Keys = ["密涅瓦", "愤怒魔女"],
             SecondaryKeys = [],
             Comment = "🧹魔女·人物: [愤怒·魔女] 密涅瓦",
@@ -23931,7 +23732,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 215,
             Keys = [],
             SecondaryKeys = [],
             Comment = "🔆状态栏🔆",
@@ -23947,7 +23747,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 216,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️全局要求",
@@ -23966,7 +23765,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 217,
             Keys = [],
             SecondaryKeys = [],
             Comment = "🔆章节设定(自动切章节)",
@@ -24023,7 +23821,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 219,
             Keys = ["六舌", "拉塞尔"],
             SecondaryKeys = [],
             Comment = "🐉露格尼卡·机构: 六舌",
@@ -24107,7 +23904,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 220,
             Keys = [],
             SecondaryKeys = [],
             Comment = "[initvar]",
@@ -24125,7 +23921,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 221,
             Keys = [],
             SecondaryKeys = [],
             Comment = "⚙️种族占位",
@@ -24141,7 +23936,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 222,
             Keys = ["龙", "龙族", "龙人", "地龙", "飞龙", "水龙", "龙血"],
             SecondaryKeys = [],
             Comment = "🐉龙族",
@@ -24280,7 +24074,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 223,
             Keys = ["鬼族", "鬼"],
             SecondaryKeys = [],
             Comment = "👻鬼族",
@@ -24340,7 +24133,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 224,
             Keys = ["不死者", "僵尸", "尸兵"],
             SecondaryKeys = [],
             Comment = "✝️僵尸",
@@ -24412,7 +24204,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 225,
             Keys = ["王室", "绑架"],
             SecondaryKeys = [],
             Comment = "📜王室绑架📜",
@@ -24472,7 +24263,6 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Id = 226,
             Keys = ["亚人战争"],
             SecondaryKeys = [],
             Comment = "📜亚人战争📜",

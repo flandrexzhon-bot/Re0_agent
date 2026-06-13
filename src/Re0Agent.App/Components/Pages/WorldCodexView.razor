@@ -52,7 +52,7 @@
             {
                 <details class="blacktea-entry">
                     <summary>
-                        <span style="color: var(--color-gold-glow); font-family: var(--font-heading);">@(string.IsNullOrWhiteSpace(entry.Comment) ? $"条目 #{entry.Id}" : entry.Comment)</span>
+                        <span style="color: var(--color-gold-glow); font-family: var(--font-heading);">@(string.IsNullOrWhiteSpace(entry.Comment) ? "(未命名条目)" : entry.Comment)</span>
                         @if (entry.Constant)
                         {
                             <span class="latest-bookmark" style="margin-left: 0.5rem;">常驻</span>
@@ -104,59 +104,24 @@
         }
     }
 
-    private string GetEntryCategory(WorldBookEntry entry)
+    // category key → UI tab key mapping (复用 WorldBookCategory 统一分类逻辑)
+    private static string ToTabKey(WorldBookEntry entry)
     {
-        var comment = entry.Comment ?? "";
-        
-        // Output Prompts
-        if (comment == "变量提示词" || 
-            comment == "🔆状态栏🔆" || 
-            comment == "🔆章节设定(自动切章节)" || 
-            comment == "[initvar]" || 
-            comment.StartsWith("⚙️全局要求"))
+        var key = WorldBookCategory.GetKey(entry);
+        return key switch
         {
-            return "output_prompts";
-        }
-        
-        // Chapters Plot
-        if (comment.StartsWith("第") && comment.Contains("章"))
-        {
-            return "plots";
-        }
-        
-        // Character Templates
-        if (comment.Contains("角色") || 
-            comment.Contains("人物") || 
-            comment.Contains("阵营·"))
-        {
-            return "characters";
-        }
-        
-        // Location Settings
-        if (comment.Contains("地点") || 
-            comment.Contains("城市") || 
-            comment.Contains("区域") || 
-            comment.Contains("大地图") || 
-            comment.Contains("帝国") || 
-            comment.Contains("国家") || 
-            comment.Contains("王国") || 
-            comment.Contains("城邦") || 
-            comment == "⚔️神圣弗拉基亚帝国" || 
-            comment == "⚖️卡拉拉基都市国家" || 
-            comment == "🐉露格尼卡亲龙王国" || 
-            comment == "🙏古斯提科圣王国")
-        {
-            return "locations";
-        }
-        
-        // World Settings (Default)
-        return "world";
+            "output_prompts"                                              => "output_prompts",
+            "plots"                                                       => "plots",
+            var k when k.StartsWith("characters:") || k == "characters"  => "characters",
+            var k when k.StartsWith("locations:")  || k == "locations"   => "locations",
+            _                                                             => "world"
+        };
     }
 
     private int GetCategoryCount(string category)
     {
         if (worldBookEntries is null) return 0;
-        return worldBookEntries.Count(e => GetEntryCategory(e) == category);
+        return worldBookEntries.Count(e => ToTabKey(e) == category);
     }
 
     private IReadOnlyList<WorldBookEntry> FilteredBlackTea
@@ -164,11 +129,10 @@
         get
         {
             if (worldBookEntries is null) return [];
-            
-            var categorized = worldBookEntries
-                .Where(e => GetEntryCategory(e) == activeBlackTeaCategory);
 
-            if (string.IsNullOrWhiteSpace(blackTeaFilter)) 
+            var categorized = worldBookEntries.Where(e => ToTabKey(e) == activeBlackTeaCategory);
+
+            if (string.IsNullOrWhiteSpace(blackTeaFilter))
                 return categorized.ToList();
 
             var term = blackTeaFilter.Trim();

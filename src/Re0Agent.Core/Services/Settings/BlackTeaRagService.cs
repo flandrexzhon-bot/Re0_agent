@@ -14,63 +14,46 @@ public sealed class BlackTeaRagService(
             return Task.FromResult(new RagContext());
         }
 
-        var allowedConstantIds = query.AllowedConstantEntryIds is null
+        var allowedCategories = query.AllowedCategories is null
             ? null
-            : new HashSet<int>(query.AllowedConstantEntryIds);
-        var allowedNonConstantIds = query.AllowedNonConstantEntryIds is null
-            ? null
-            : new HashSet<int>(query.AllowedNonConstantEntryIds);
+            : new HashSet<string>(query.AllowedCategories, StringComparer.Ordinal);
+
         var constantMatches = new List<RagMatch>();
         var nonConstantCandidates = new List<WorldBookEntry>();
 
         foreach (var entry in entries)
         {
-            if (!entry.Enabled)
+            if (!entry.Enabled) continue;
+
+            if (allowedCategories is not null
+                && !allowedCategories.Contains(WorldBookCategory.GetKey(entry)))
             {
                 continue;
             }
 
-            if (!query.IncludeChapterEntries && IsChapterSettingEntry(entry))
-            {
-                continue;
-            }
+            if (!query.IncludeChapterEntries && IsChapterSettingEntry(entry)) continue;
 
             var entryChapter = TryGetEntryChapter(entry);
             if (entryChapter.HasValue)
             {
-                // Chapter WorldBook - only read if it matches the current chapter
-                if (query.IncludeChapterEntries
-                    && entryChapter.Value == query.Chapter
-                    && (allowedNonConstantIds is null || allowedNonConstantIds.Contains(entry.Id)))
+                if (query.IncludeChapterEntries && entryChapter.Value == query.Chapter)
                 {
                     constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
                 }
             }
+            else if (entry.Constant)
+            {
+                constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
+            }
             else
             {
-                if (entry.Constant)
-                {
-                    // Constant WorldBook - always read
-                    if (allowedConstantIds is null || allowedConstantIds.Contains(entry.Id))
-                    {
-                        constantMatches.Add(CreateMatch(entry, 0, [], query.Chapter));
-                    }
-                }
-                else
-                {
-                    // Non-constant WorldBook - only read if mentioned
-                    if (allowedNonConstantIds is null || allowedNonConstantIds.Contains(entry.Id))
-                    {
-                        nonConstantCandidates.Add(entry);
-                    }
-                }
+                nonConstantCandidates.Add(entry);
             }
         }
 
         constantMatches = constantMatches
             .OrderBy(match => TryGetEntryChapter(match.Entry).HasValue ? -1000 : match.Entry.InsertionOrder)
             .ThenBy(match => match.Entry.InsertionOrder)
-            .ThenBy(match => match.Entry.Id)
             .ToList();
 
         var keywordMatches = nonConstantCandidates
@@ -79,7 +62,6 @@ public sealed class BlackTeaRagService(
             .Select(match => match!)
             .OrderByDescending(match => match.Score)
             .ThenBy(match => match.Entry.InsertionOrder)
-            .ThenBy(match => match.Entry.Id)
             .Take(Math.Max(0, query.MaxNonConstantEntries))
             .ToList();
 
@@ -95,16 +77,10 @@ public sealed class BlackTeaRagService(
     private RagMatch? TryMatch(WorldBookEntry entry, string text, int chapter)
     {
         var primaryMatches = MatchKeys(entry.Keys, text, entry.UseRegex);
-        if (primaryMatches.Count == 0)
-        {
-            return null;
-        }
+        if (primaryMatches.Count == 0) return null;
 
         var secondaryMatches = MatchKeys(entry.SecondaryKeys, text, entry.UseRegex);
-        if (entry.SecondaryKeys.Count > 0 && secondaryMatches.Count == 0)
-        {
-            return null;
-        }
+        if (entry.SecondaryKeys.Count > 0 && secondaryMatches.Count == 0) return null;
 
         var matchedKeys = primaryMatches.Concat(secondaryMatches).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var score = primaryMatches.Count * 10 + secondaryMatches.Count * 4;
@@ -112,11 +88,7 @@ public sealed class BlackTeaRagService(
         return CreateMatch(entry, score, matchedKeys, chapter);
     }
 
-    private RagMatch CreateMatch(
-        WorldBookEntry entry,
-        int score,
-        IReadOnlyList<string> matchedKeys,
-        int chapter)
+    private RagMatch CreateMatch(WorldBookEntry entry, int score, IReadOnlyList<string> matchedKeys, int chapter)
     {
         return new RagMatch
         {
@@ -132,17 +104,11 @@ public sealed class BlackTeaRagService(
         var matches = new List<string>();
         foreach (var key in keys)
         {
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                continue;
-            }
-
-            if (MatchesKey(key, text, useRegex))
+            if (!string.IsNullOrWhiteSpace(key) && MatchesKey(key, text, useRegex))
             {
                 matches.Add(key);
             }
         }
-
         return matches;
     }
 
@@ -152,22 +118,13 @@ public sealed class BlackTeaRagService(
         {
             try
             {
-                return Regex.IsMatch(
-                    text,
-                    key,
+                return Regex.IsMatch(text, key,
                     RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
                     TimeSpan.FromMilliseconds(100));
             }
-            catch (ArgumentException)
-            {
-                // Invalid BlackTea regex keys fall back to plain keyword matching.
-            }
-            catch (RegexMatchTimeoutException)
-            {
-                return false;
-            }
+            catch (ArgumentException) { }
+            catch (RegexMatchTimeoutException) { return false; }
         }
-
         return text.Contains(key, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -183,11 +140,7 @@ public sealed class BlackTeaRagService(
 
         foreach (var match in constantMatches)
         {
-            if (remaining <= reservedForKeywords)
-            {
-                break;
-            }
-
+            if (remaining <= reservedForKeywords) break;
             AppendMatch(match, builder, acceptedMatches, ref remaining, remaining - reservedForKeywords);
         }
 
@@ -196,11 +149,7 @@ public sealed class BlackTeaRagService(
             AppendMatch(match, builder, acceptedMatches, ref remaining, remaining);
         }
 
-        return new RagContext
-        {
-            Matches = acceptedMatches,
-            Content = builder.ToString().Trim()
-        };
+        return new RagContext { Matches = acceptedMatches, Content = builder.ToString().Trim() };
     }
 
     private static void AppendMatch(
@@ -210,23 +159,17 @@ public sealed class BlackTeaRagService(
         ref int remaining,
         int perCallBudget)
     {
-        if (string.IsNullOrWhiteSpace(match.RenderedContent) || remaining <= 0 || perCallBudget <= 0)
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(match.RenderedContent) || remaining <= 0 || perCallBudget <= 0) return;
 
         var block = $"""
-        <设定条目 id="{match.Entry.Id}" name="{match.Entry.Comment}">
+        <设定条目 name="{match.Entry.Comment}">
         {match.RenderedContent}
         </设定条目>
 
         """;
 
         var budget = Math.Min(remaining, perCallBudget);
-        if (block.Length > budget)
-        {
-            block = block[..budget];
-        }
+        if (block.Length > budget) block = block[..budget];
 
         builder.Append(block);
         acceptedMatches.Add(match);
@@ -237,21 +180,15 @@ public sealed class BlackTeaRagService(
     {
         if (!string.IsNullOrEmpty(entry.Comment))
         {
-            var match = Regex.Match(entry.Comment, @"第(\d+)章");
-            if (match.Success)
-            {
-                return int.Parse(match.Groups[1].Value);
-            }
+            var m = Regex.Match(entry.Comment, @"第(\d+)章");
+            if (m.Success) return int.Parse(m.Groups[1].Value);
         }
         foreach (var key in entry.Keys)
         {
             if (!string.IsNullOrEmpty(key))
             {
-                var match = Regex.Match(key, @"第(\d+)章");
-                if (match.Success)
-                {
-                    return int.Parse(match.Groups[1].Value);
-                }
+                var m = Regex.Match(key, @"第(\d+)章");
+                if (m.Success) return int.Parse(m.Groups[1].Value);
             }
         }
         return null;

@@ -13,17 +13,6 @@ public sealed class CharacterAgentService(
     ILlmClient llmClient,
     IRagService ragService)
 {
-    private static readonly string[] BaseSettingCommentMarkers =
-    [
-        "基础设定",
-        "基础&世界设定",
-        "时间&历法设定",
-        "货币&收入设定",
-        "饮食&习惯设定",
-        "玛娜&魔法设定",
-        "权能&加护设定"
-    ];
-
     public async Task<IReadOnlyList<CharacterAgentProfile>> LoadActiveProfilesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -75,17 +64,17 @@ public sealed class CharacterAgentService(
             .OrderByDescending(memory => memory.RowId)
             .Take(8)
             .ToListAsync(cancellationToken);
-        var visibleRag = await BuildCharacterVisibleRagAsync(profile, cancellationToken);
+
+        var allowedCategories = await BuildAllowedCategoriesAsync(profile, cancellationToken);
         var ragContext = await ragService.QueryAsync(
             new RagQuery
             {
-                Text = visibleRag.QueryText,
+                Text = string.Join(' ', allowedCategories.Where(k => k.Contains(':')).Select(k => k[(k.IndexOf(':') + 1)..])),
                 Chapter = round.Chapter,
-                MaxNonConstantEntries = visibleRag.NonConstantEntryIds.Count,
+                MaxNonConstantEntries = 8,
                 MaxCharacters = 8_000,
                 IncludeChapterEntries = false,
-                AllowedConstantEntryIds = visibleRag.ConstantEntryIds,
-                AllowedNonConstantEntryIds = visibleRag.NonConstantEntryIds
+                AllowedCategories = allowedCategories
             },
             cancellationToken);
 
@@ -105,14 +94,25 @@ public sealed class CharacterAgentService(
         return response.Content;
     }
 
-    private async Task<CharacterVisibleRag> BuildCharacterVisibleRagAsync(
+    private async Task<IReadOnlyList<string>> BuildAllowedCategoriesAsync(
         CharacterAgentProfile profile,
         CancellationToken cancellationToken)
     {
-        var characterTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddTerm(characterTerms, profile.CharacterName);
-        AddTerm(characterTerms, profile.WorldBookEntryKey);
+        var categories = new List<string> { "world_settings" };
 
+        // 角色自身
+        var characterKey = profile.WorldBookEntryKey ?? profile.CharacterName;
+        if (!string.IsNullOrWhiteSpace(characterKey))
+        {
+            categories.AddRange(
+                (await ragService.ListAllEntriesAsync(cancellationToken))
+                    .Select(WorldBookCategory.GetKey)
+                    .Where(k => k.StartsWith("characters:", StringComparison.Ordinal)
+                        && MatchesTerm(k["characters:".Length..], characterKey))
+                    .Distinct(StringComparer.Ordinal));
+        }
+
+        // 所在地点
         var locationTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         AddTerm(locationTerms, state?.CurrentLocation);
@@ -133,112 +133,25 @@ public sealed class CharacterAgentService(
             AddTerm(locationTerms, npcLocation);
         }
 
-        var entries = await ragService.ListAllEntriesAsync(cancellationToken);
-        var constantEntryIds = entries
-            .Where(IsBaseSettingEntry)
-            .Select(entry => entry.Id)
-            .ToArray();
-        var nonConstantEntryIds = entries
-            .Where(entry => !entry.Constant && !IsChapterSettingEntry(entry))
-            .Where(entry =>
-                (IsLocationSettingEntry(entry) && LocationEntryMatchesAnyTerm(entry, locationTerms))
-                || (IsCharacterSettingEntry(entry) && CharacterEntryMatchesAnyTerm(entry, characterTerms)))
-            .Select(entry => entry.Id)
-            .ToArray();
+        if (locationTerms.Count > 0)
+        {
+            categories.AddRange(
+                (await ragService.ListAllEntriesAsync(cancellationToken))
+                    .Select(WorldBookCategory.GetKey)
+                    .Where(k => k.StartsWith("locations:", StringComparison.Ordinal)
+                        && locationTerms.Any(t => MatchesTerm(k["locations:".Length..], t)))
+                    .Distinct(StringComparer.Ordinal));
+        }
 
-        var queryTerms = characterTerms
-            .Concat(locationTerms)
-            .Where(term => !string.IsNullOrWhiteSpace(term))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .DefaultIfEmpty("基础设定");
-
-        return new CharacterVisibleRag(
-            string.Join(' ', queryTerms),
-            constantEntryIds,
-            nonConstantEntryIds);
+        return categories;
     }
+
+    private static bool MatchesTerm(string subject, string term) =>
+        subject.Contains(term, StringComparison.OrdinalIgnoreCase)
+        || term.Contains(subject, StringComparison.OrdinalIgnoreCase);
 
     private static void AddTerm(HashSet<string> terms, string? value)
     {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            terms.Add(value.Trim());
-        }
+        if (!string.IsNullOrWhiteSpace(value)) terms.Add(value.Trim());
     }
-
-    private static bool IsBaseSettingEntry(WorldBookEntry entry)
-    {
-        if (!entry.Constant || IsChapterSettingEntry(entry))
-        {
-            return false;
-        }
-
-        return BaseSettingCommentMarkers.Any(marker =>
-            entry.Comment.Contains(marker, StringComparison.Ordinal));
-    }
-
-    private static bool IsChapterSettingEntry(WorldBookEntry entry)
-    {
-        return entry.Comment.Contains("章节设定", StringComparison.Ordinal)
-            || entry.Comment.Contains("章(", StringComparison.Ordinal)
-            || entry.Keys.Any(key => key.StartsWith("第", StringComparison.Ordinal) && key.EndsWith("章", StringComparison.Ordinal));
-    }
-
-    private static bool IsLocationSettingEntry(WorldBookEntry entry)
-    {
-        var comment = entry.Comment;
-        return comment.Contains("·地点:", StringComparison.Ordinal)
-            || comment.Contains("·城市:", StringComparison.Ordinal)
-            || comment.Contains("地点:", StringComparison.Ordinal)
-            || comment.Contains("城市:", StringComparison.Ordinal)
-            || comment.Contains("地点：", StringComparison.Ordinal)
-            || comment.Contains("城市：", StringComparison.Ordinal);
-    }
-
-    private static bool IsCharacterSettingEntry(WorldBookEntry entry)
-    {
-        var comment = entry.Comment;
-        return comment.Contains("·人物:", StringComparison.Ordinal)
-            || comment.Contains("·角色:", StringComparison.Ordinal)
-            || comment.Contains("人物:", StringComparison.Ordinal)
-            || comment.Contains("角色:", StringComparison.Ordinal)
-            || comment.Contains("人物：", StringComparison.Ordinal)
-            || comment.Contains("角色：", StringComparison.Ordinal);
-    }
-
-    private static bool LocationEntryMatchesAnyTerm(WorldBookEntry entry, IEnumerable<string> terms)
-    {
-        return terms.Any(term => EntrySubjectOrKeyMatchesTerm(entry, term));
-    }
-
-    private static bool CharacterEntryMatchesAnyTerm(WorldBookEntry entry, IEnumerable<string> terms)
-    {
-        return terms.Any(term => EntrySubjectOrKeyMatchesTerm(entry, term));
-    }
-
-    private static bool EntrySubjectOrKeyMatchesTerm(WorldBookEntry entry, string term)
-    {
-        if (string.IsNullOrWhiteSpace(term))
-        {
-            return false;
-        }
-
-        var subject = ExtractEntrySubject(entry.Comment);
-        return subject.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || term.Contains(subject, StringComparison.OrdinalIgnoreCase)
-            || entry.Keys.Concat(entry.SecondaryKeys).Any(key =>
-                key.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || term.Contains(key, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static string ExtractEntrySubject(string comment)
-    {
-        var separatorIndex = Math.Max(comment.LastIndexOf(':'), comment.LastIndexOf('：'));
-        return separatorIndex < 0 ? comment.Trim() : comment[(separatorIndex + 1)..].Trim();
-    }
-
-    private sealed record CharacterVisibleRag(
-        string QueryText,
-        IReadOnlyCollection<int> ConstantEntryIds,
-        IReadOnlyCollection<int> NonConstantEntryIds);
 }

@@ -2,7 +2,6 @@ namespace Re0Agent.Core.Services.Settings;
 
 public sealed class WorldBookEntry
 {
-    public int Id { get; init; }
     public IReadOnlyList<string> Keys { get; init; } = [];
     public IReadOnlyList<string> SecondaryKeys { get; init; } = [];
     public string Comment { get; init; } = string.Empty;

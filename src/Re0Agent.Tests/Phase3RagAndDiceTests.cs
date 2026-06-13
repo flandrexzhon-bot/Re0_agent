@@ -53,10 +53,10 @@ public sealed class Phase3RagAndDiceTests
             MaxCharacters = 14_000
         });
 
-        // 1. Assert Chapter 82 (ID 180) is loaded (as it is the active chapter)
-        Assert.Contains(context.Matches, match => match.Entry.Id == 180);
-        // 2. Assert Chapter 83 (ID 181) is NOT loaded (as it belongs to a different chapter)
-        Assert.DoesNotContain(context.Matches, match => match.Entry.Id == 181);
+        // Chapter 82 entry should be loaded (active chapter)
+        Assert.Contains(context.Matches, match => match.Entry.Comment.Contains("第82章", StringComparison.Ordinal));
+        // Chapter 83 entry should NOT be loaded (different chapter)
+        Assert.DoesNotContain(context.Matches, match => match.Entry.Comment.Contains("第83章", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -72,7 +72,7 @@ public sealed class Phase3RagAndDiceTests
             MaxCharacters = 14_000
         });
 
-        Assert.DoesNotContain(context.Matches, match => match.Entry.Id == 180);
+        Assert.DoesNotContain(context.Matches, match => match.Entry.Comment.Contains("第82章", StringComparison.Ordinal));
         Assert.DoesNotContain(context.Matches, match => match.Entry.Comment.Contains("章节设定", StringComparison.Ordinal));
         Assert.Contains(context.Matches, match => match.Entry.Comment.Contains("水门都市", StringComparison.Ordinal));
     }
@@ -81,7 +81,9 @@ public sealed class Phase3RagAndDiceTests
     public void ChapterVariantRendererChoosesDifferentBranches()
     {
         var entries = BlackTeaWorldBook.Entries;
-        var mansion = Assert.Single(entries.Where(entry => entry.Id == 25));
+        var mansion = Assert.Single(entries.Where(entry =>
+            entry.Comment.Contains("·地点:", StringComparison.Ordinal) &&
+            entry.Comment.Contains("罗兹瓦尔宅邸", StringComparison.Ordinal)));
         var renderer = new ChapterVariantRenderer();
 
         var chapter77 = renderer.Render(mansion.Content, 77);
@@ -128,7 +130,7 @@ public sealed class Phase3RagAndDiceTests
             "向爱蜜莉雅道谢",
             new RagContext { Content = "基础设定、王都地点设定、菜月昴角色设定。" });
 
-        Assert.Contains("“基础设定”、“地点设定”与“角色设定”三类", prompt);
+        Assert.Contains("world_settings", prompt);
         Assert.Contains("全角括号（）", prompt);
         Assert.Contains("总字数不得超过100个中文字符", prompt);
         Assert.Contains("“爱蜜莉雅正是个好人啊！”（微笑着点头）", prompt);
@@ -159,20 +161,20 @@ public sealed class Phase3RagAndDiceTests
             llmClient,
             new StaticRagService(
             [
-                Entry(1, "基础设定", "基础可见", constant: true),
-                Entry(2, "⚙️基础&世界设定", "基础世界可见", constant: true),
-                Entry(3, "⚙️时间&历法设定", "时间历法可见", constant: true),
-                Entry(4, "⚙️货币&收入设定", "货币收入可见", constant: true),
-                Entry(5, "⚙️饮食&习惯设定", "饮食习惯可见", constant: true),
-                Entry(6, "⚙️玛娜&魔法设定", "玛娜魔法可见", constant: true),
-                Entry(7, "⚙️权能&加护设定", "权能加护可见", constant: true),
-                Entry(8, "🔆状态栏🔆", "状态栏不可见", constant: true),
-                Entry(9, "⚙️全局要求", "全局要求不可见", constant: true),
-                Entry(10, "🐉露格尼卡·城市: 👑王都", "王都地点可见", keys: ["王都"]),
-                Entry(11, "🕊️爱蜜莉雅阵营·人物: 爱蜜莉雅", "爱蜜莉雅角色可见", keys: ["爱蜜莉雅"]),
-                Entry(12, "🕊️爱蜜莉雅阵营·人物: 雷姆", "雷姆角色不可见", keys: ["雷姆"]),
-                Entry(13, "🐉露格尼卡·机构: 贤人会", "组织不可见", keys: ["王都"]),
-                Entry(14, "第82章(第十六卷)——『开头总由来访者开始』", "章节不可见", keys: ["第82章"])
+                Entry("基础设定", "基础可见", constant: true),
+                Entry("⚙️基础&世界设定", "基础世界可见", constant: true),
+                Entry("⚙️时间&历法设定", "时间历法可见", constant: true),
+                Entry("⚙️货币&收入设定", "货币收入可见", constant: true),
+                Entry("⚙️饮食&习惯设定", "饮食习惯可见", constant: true),
+                Entry("⚙️玛娜&魔法设定", "玛娜魔法可见", constant: true),
+                Entry("⚙️权能&加护设定", "权能加护可见", constant: true),
+                Entry("🔆状态栏🔆", "状态栏不可见", constant: true),
+                Entry("⚙️全局要求", "全局要求不可见", constant: true),
+                Entry("🐉露格尼卡·城市: 👑王都", "王都地点可见", keys: ["王都"]),
+                Entry("🕊️爱蜜莉雅阵营·人物: 爱蜜莉雅", "爱蜜莉雅角色可见", keys: ["爱蜜莉雅"]),
+                Entry("🕊️爱蜜莉雅阵营·人物: 雷姆", "雷姆角色不可见", keys: ["雷姆"]),
+                Entry("🐉露格尼卡·机构: 贤人会", "组织不可见", keys: ["王都"]),
+                Entry("第82章(第十六卷)——『开头总由来访者开始』", "章节不可见", keys: ["第82章"])
             ]));
 
         await service.RunTurnAsync(
@@ -360,18 +362,7 @@ public sealed class Phase3RagAndDiceTests
         return Path.Combine(directory, $"{Guid.NewGuid():N}.db");
     }
 
-    private static void DeleteIfExists(string databasePath)
-    {
-        SqliteConnection.ClearAllPools();
-
-        if (File.Exists(databasePath))
-        {
-            File.Delete(databasePath);
-        }
-    }
-
     private static WorldBookEntry Entry(
-        int id,
         string comment,
         string content,
         bool constant = false,
@@ -379,12 +370,11 @@ public sealed class Phase3RagAndDiceTests
     {
         return new WorldBookEntry
         {
-            Id = id,
             Comment = comment,
             Content = content,
             Constant = constant,
             Enabled = true,
-            InsertionOrder = id,
+            InsertionOrder = 0,
             Keys = keys ?? []
         };
     }
@@ -420,13 +410,9 @@ public sealed class Phase3RagAndDiceTests
 
         public Task<RagContext> QueryAsync(RagQuery query, CancellationToken cancellationToken = default)
         {
-            var allowedConstantIds = query.AllowedConstantEntryIds?.ToHashSet() ?? [];
-            var allowedNonConstantIds = query.AllowedNonConstantEntryIds?.ToHashSet() ?? [];
+            var allowedCategories = query.AllowedCategories?.ToHashSet(StringComparer.Ordinal);
             var matches = entries
-                .Where(entry =>
-                    entry.Constant
-                        ? allowedConstantIds.Contains(entry.Id)
-                        : allowedNonConstantIds.Contains(entry.Id))
+                .Where(entry => allowedCategories is null || allowedCategories.Contains(WorldBookCategory.GetKey(entry)))
                 .Select(entry => new RagMatch
                 {
                     Entry = entry,
