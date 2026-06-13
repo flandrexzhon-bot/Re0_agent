@@ -15,6 +15,7 @@ public sealed class AgentOrchestrator(
     FormAgent formAgent,
     FormAgentSqlExecutor sqlExecutor,
     DiceEngine diceEngine,
+    CharacterNameResolver nameResolver,
     SaveSystem saveSystem)
 {
     public async Task<GameRound> RunRoundAsync(
@@ -109,6 +110,10 @@ public sealed class AgentOrchestrator(
         // 泉此方 是幕后调度员，绝不应作为角色出现在位号里；防御性过滤。
         parsedSlots.RemoveAll(s => s.Name.Contains("泉此方", StringComparison.Ordinal));
 
+        // 加载别名字典：同一角色的不同称呼（如"罗兹瓦尔"↔"罗兹瓦尔·L·梅瑟斯"）归一到规范名，
+        // 避免被当成新角色重复引入。
+        var aliasGroups = await nameResolver.LoadGroupsAsync(cancellationToken);
+
         // 2. Determine current location from protagonist for NPC insertion
         var currentLocation = "王都";
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
@@ -121,7 +126,7 @@ public sealed class AgentOrchestrator(
         foreach (var parsed in parsedSlots)
         {
             if (parsed.IsPlayer) continue;
-            await EnsureNpcExistsAsync(parsed.Name, currentLocation, cancellationToken);
+            await EnsureNpcExistsAsync(parsed.Name, currentLocation, aliasGroups, cancellationToken);
         }
 
         // 4. Load active profiles from database (now including any newly created ones)
@@ -136,8 +141,12 @@ public sealed class AgentOrchestrator(
         {
             if (parsed.IsPlayer) continue;
 
-            // Find matching db profile
-            var dbMatch = dbNpcProfiles.FirstOrDefault(p => p.CharacterName.Equals(parsed.Name, StringComparison.OrdinalIgnoreCase));
+            // 别名感知匹配：先精确，再按规范名归一比较。
+            var dbMatch = dbNpcProfiles.FirstOrDefault(p =>
+                    p.CharacterName.Equals(parsed.Name, StringComparison.OrdinalIgnoreCase))
+                ?? dbNpcProfiles.FirstOrDefault(p =>
+                    CharacterNameResolver.IsSameCharacter(aliasGroups, p.CharacterName, parsed.Name));
+
             if (dbMatch is not null)
             {
                 npcProfilesToRun.Add((dbMatch, parsed.Slot));
@@ -476,12 +485,20 @@ public sealed class AgentOrchestrator(
         }
     }
 
-    private async Task EnsureNpcExistsAsync(string npcName, string currentLocation, CancellationToken cancellationToken)
+    private async Task EnsureNpcExistsAsync(string npcName, string currentLocation, IReadOnlyList<CharacterNameResolver.AliasGroup> aliasGroups, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(npcName)) return;
 
+        // 别名感知去重：先按名字精确查，再按规范名归一比对所有在册 NPC。
         var existing = await dbContext.ImportantNpcs
             .FirstOrDefaultAsync(n => n.Name.ToLower() == npcName.ToLower(), cancellationToken);
+
+        if (existing is null)
+        {
+            var allNpcs = await dbContext.ImportantNpcs.ToListAsync(cancellationToken);
+            existing = allNpcs.FirstOrDefault(n =>
+                CharacterNameResolver.IsSameCharacter(aliasGroups, n.Name, npcName));
+        }
 
         if (existing is null)
         {
