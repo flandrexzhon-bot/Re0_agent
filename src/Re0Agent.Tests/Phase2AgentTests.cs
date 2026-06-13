@@ -39,6 +39,14 @@ public sealed class Phase2AgentTests
         Assert.False(validator.ValidateStatement("DROP TABLE chronicle").IsValid);
         Assert.False(validator.ValidateStatement("INSERT INTO save_points (save_id) VALUES (1)").IsValid);
         Assert.False(validator.ValidateStatement("UPDATE chronicle SET summary = 'a'; UPDATE chronicle SET summary = 'b'").IsValid);
+
+        // 字符串字面量内的分号是合法值的一部分（如属性串），不应被当成多语句。
+        Assert.True(validator.ValidateStatement("UPDATE important_npc SET base_attributes = '体质:95; 敏捷:98; 感知:95; 意志:90' WHERE name = '罗兹瓦尔·L·梅瑟斯'").IsValid);
+        Assert.True(validator.ValidateStatement("INSERT INTO important_npc (name, base_attributes) VALUES ('碧翠丝', '体质:40; 敏捷:60; 感知:99; 意志:80')").IsValid);
+        // 末尾单个分号仍合法。
+        Assert.True(validator.ValidateStatement("UPDATE important_npc SET self_status = '正常' WHERE name = '雷姆';").IsValid);
+        // 字面量内的双连字符不应被误判为 SQL 注释。
+        Assert.True(validator.ValidateStatement("UPDATE important_npc SET relations_text = '昴--信赖' WHERE name = '雷姆'").IsValid);
     }
 
     [Fact]
