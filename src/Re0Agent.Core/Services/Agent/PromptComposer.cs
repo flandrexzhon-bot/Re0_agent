@@ -72,7 +72,9 @@ public sealed class PromptComposer
         IReadOnlyList<CharacterAgentProfile> profiles,
         string slotList,
         RagContext? ragContext = null,
-        string? prologue = null)
+        string? prologue = null,
+        string? dbSummary = null,
+        string? lastChronicle = null)
     {
         var stateText = globalState is null
             ? "当前数据库无global_state，请自行规划合理的开局描述。"
@@ -82,6 +84,20 @@ public sealed class PromptComposer
             ? ""
             : $"\n        - 玩家设定的开场白/当前正在发生的事 (开场直接发生): {prologue}";
 
+        var dbSummaryText = string.IsNullOrWhiteSpace(dbSummary) ? "" : $"""
+
+
+        【数据库状态（所有SQL表摘要）】
+        {dbSummary}
+        """;
+
+        var lastChronicleText = string.IsNullOrWhiteSpace(lastChronicle) ? "" : $"""
+
+
+        【上一回合编年史记录】
+        {lastChronicle}
+        """;
+
         return $"""
         【身份与角色】
         你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent。
@@ -89,8 +105,9 @@ public sealed class PromptComposer
 
         【当前游戏环境与状态】
         - 全局状态: {stateText}{prologueText}
+        {dbSummaryText}{lastChronicleText}
 
-        【设定背景 (RAG 提取)】
+        【设定背景 (RAG 提取 — world_settings/locations/在场角色)】
         {FormatRagContext(ragContext)}
 
         【职责与输出指令】
@@ -105,17 +122,21 @@ public sealed class PromptComposer
         """;
     }
 
-    public string ComposeGmJudgement(CharacterTurn turn, RagContext? ragContext = null)
+    public string ComposeGmJudgement(CharacterTurn turn, RagContext? ragContext = null, string? charAttrs = null)
     {
+        var attrsText = string.IsNullOrWhiteSpace(charAttrs) ? "（无数据）" : charAttrs;
         return $"""
         【身份与角色】
-        你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent。你是世界的总控制者与裁判。
+        你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent (投骰裁判)。你是世界的总控制者与裁判。
 
         【待裁决的角色回合】
         - 角色姓名: {turn.CharacterName}
         - 行为描述: {turn.ActionText}
 
-        【设定背景 (RAG 提取)】
+        【角色属性（来自数据库）】
+        {attrsText}
+
+        【设定背景 (RAG 提取 — 角色世界书条目)】
         {FormatRagContext(ragContext)}
 
         【规则与裁判指南 (CoC7 骰子与 Re:Zero 规则)】

@@ -38,6 +38,21 @@ public sealed class AgentConfigResolver(Re0AgentDbContext dbContext)
                     .FirstOrDefaultAsync(cancellationToken);
             }
         }
+        else if (agentType == "DiceGM")
+        {
+            targetPresetName = await dbContext.ApiRoutings
+                .Where(r => r.RoutingKey == "Dice")
+                .Select(r => r.PresetName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(targetPresetName))
+            {
+                targetPresetName = await dbContext.ApiRoutings
+                    .Where(r => r.RoutingKey == "GM")
+                    .Select(r => r.PresetName)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
         else if (agentType == "Form")
         {
             targetPresetName = await dbContext.ApiRoutings
