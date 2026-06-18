@@ -161,6 +161,9 @@ public sealed class GameProgressService
 
         try
         {
+            // 首次启动时数据库可能尚未建表（建表原本只在开始回合时触发），先确保表结构就绪。
+            await DatabaseInitializer.InitializeAsync(db, cancellationToken);
+
             var state = await db.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
             CurrentChapter = state?.CurrentChapter ?? 1;
 
