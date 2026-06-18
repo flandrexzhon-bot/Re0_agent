@@ -1060,8 +1060,18 @@ else
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
+        // 0. Remove <think>...</think> reasoning blocks (including stray opening/closing tags)
+        var cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"<think>[\s\S]*?</think>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // 0b. Drop any unmatched <think> opener and everything after it, or a leftover </think> closer
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<think>[\s\S]*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?think>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        // 0c. Unwrap <content>...</content> so only the narrative body shows
+        var contentMatch = System.Text.RegularExpressions.Regex.Match(cleaned, @"<content>([\s\S]*?)</content>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (contentMatch.Success) cleaned = contentMatch.Groups[1].Value;
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?content>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         // 1. Remove <update>...</update> blocks (including the tags themselves)
-        var cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"<update>[\s\S]*?</update>", "");
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<update>[\s\S]*?</update>", "");
 
         // 2. Remove any individual _.set(...) statements (like _.set('chapter', X); or _.set('chapter', 'location'))
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"_\.set\(\s*['""].*?['""]\s*,\s*.*?\);?", "");

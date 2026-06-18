@@ -521,8 +521,8 @@ button:disabled {
 }
 
 .grimoire-entry.gm-narrative .entry-body {
-    font-style: italic;
-    color: var(--color-gold-glow);
+    font-style: normal;
+    color: var(--color-text-primary);
     font-size: 1.05rem;
     line-height: 1.6;
     white-space: pre-wrap;
