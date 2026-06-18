@@ -452,7 +452,7 @@ public sealed class GameProgressService
         return Task.CompletedTask;
     }
 
-    public Task SubmitPlayerTurnAsync(string playerInput, bool skipPlayerTurn)
+    public Task SubmitPlayerTurnAsync(string playerInput, bool skipPlayerTurn, bool directOutput = true)
     {
         if (IsBusy || ActiveRound is null)
         {
@@ -475,7 +475,7 @@ public sealed class GameProgressService
                 using var scope = _scopeFactory.CreateScope();
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
 
-                var round = await orchestrator.CompletePlayerTurnAsync(ActiveRound, playerInput, skipPlayerTurn, onStepCompleted: async (r) =>
+                var round = await orchestrator.CompletePlayerTurnAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
                 {
                     ActiveRound = r;
                     lock (SessionRounds)

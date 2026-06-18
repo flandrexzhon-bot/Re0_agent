@@ -109,45 +109,6 @@ public sealed class GmAgent(
         return response.Content;
     }
 
-    public async Task<string> SummarizeAsync(
-        GameRound round,
-        CancellationToken cancellationToken = default)
-    {
-        var config = await configResolver.FindConfigAsync("GM", "GM", cancellationToken);
-
-        var aliasGroups = await nameResolver.LoadGroupsAsync(cancellationToken);
-        var charCategories = round.CharacterTurns
-            .Select(t => CharacterNameResolver.ResolveCanonical(aliasGroups, t.CharacterName) ?? t.CharacterName)
-            .Distinct()
-            .Select(c => $"characters:{c}")
-            .ToList();
-
-        var ragContext = await ragService.QueryAsync(
-            new RagQuery
-            {
-                Text = $"{round.GmOpening} {string.Join(' ', round.CharacterTurns.Select(t => $"{t.CharacterName} {t.ActionText} {t.GmJudgement}"))}",
-                Chapter = round.Chapter,
-                AllowedCategories = ["world_settings", "locations", "plots"],
-                ForceIncludeCategories = charCategories
-            },
-            cancellationToken);
-
-        var response = await llmClient.SendChatAsync(
-            new LlmRequest
-            {
-                AgentName = "GM",
-                Options = AgentConfigResolver.ToLlmOptions(config),
-                Messages =
-                [
-                    LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmSummary(round, ragContext))
-                ]
-            },
-            cancellationToken);
-
-        return response.Content;
-    }
-
     private async Task<string> BuildDbSummaryAsync(CancellationToken cancellationToken)
     {
         var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);

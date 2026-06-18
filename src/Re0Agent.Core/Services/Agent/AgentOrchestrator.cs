@@ -37,7 +37,7 @@ public sealed class AgentOrchestrator(
             return round;
         }
 
-        return await CompletePlayerTurnAsync(round, playerInput, skipPlayerTurn, onStepCompleted: null, cancellationToken);
+        return await CompletePlayerTurnAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, cancellationToken);
     }
 
     /// <summary>
@@ -184,7 +184,7 @@ public sealed class AgentOrchestrator(
 
         foreach (var profile in sortedNpcProfiles)
         {
-            var turn = await RunCharacterTurnAsync(round, profile, playerInput: null, skip: false, cancellationToken);
+            var turn = await RunCharacterTurnAsync(round, profile, playerInput: null, skip: false, directOutput: false, cancellationToken);
             if (turn.DiceResult is not null && round.DeathReturnCause is null)
             {
                 round.DeathReturnCause = TryReadDeathReturnCause(turn.GmJudgement);
@@ -215,6 +215,7 @@ public sealed class AgentOrchestrator(
         GameRound round,
         string? playerInput,
         bool skipPlayerTurn,
+        bool directOutput = true,
         Func<GameRound, Task>? onStepCompleted = null,
         CancellationToken cancellationToken = default)
     {
@@ -224,7 +225,7 @@ public sealed class AgentOrchestrator(
         {
             foreach (var profile in round.PendingProtagonistProfiles)
             {
-                var turn = await RunCharacterTurnAsync(round, profile, playerInput, skipPlayerTurn, cancellationToken);
+                var turn = await RunCharacterTurnAsync(round, profile, playerInput, skipPlayerTurn, directOutput, cancellationToken);
                 if (!turn.Skipped && turn.DiceResult is not null && round.DeathReturnCause is null)
                 {
                     round.DeathReturnCause = TryReadDeathReturnCause(turn.GmJudgement);
@@ -248,6 +249,7 @@ public sealed class AgentOrchestrator(
         CharacterAgentProfile profile,
         string? playerInput,
         bool skip,
+        bool directOutput,
         CancellationToken cancellationToken)
     {
         var turn = new CharacterTurn
@@ -269,11 +271,19 @@ public sealed class AgentOrchestrator(
         }
         else
         {
-            turn.ActionText = await characterAgentService.RunTurnAsync(
-                round,
-                profile,
-                profile.IsPlayerControlled ? playerInput : null,
-                cancellationToken);
+            if (profile.IsPlayerControlled && directOutput && !string.IsNullOrWhiteSpace(playerInput))
+            {
+                // 直接输出：玩家文本原样作为主角行动，不经过角色 agent 加工。
+                turn.ActionText = playerInput;
+            }
+            else
+            {
+                turn.ActionText = await characterAgentService.RunTurnAsync(
+                    round,
+                    profile,
+                    profile.IsPlayerControlled ? playerInput : null,
+                    cancellationToken);
+            }
 
             turn.GmJudgement = await gmAgent.JudgeTurnAsync(round, turn, cancellationToken);
             turn.DiceResult = await diceEngine.ExecuteAsync(turn.GmJudgement, cancellationToken);
@@ -292,11 +302,8 @@ public sealed class AgentOrchestrator(
         Func<GameRound, Task>? onStepCompleted,
         CancellationToken cancellationToken)
     {
-        round.GmSummary = await gmAgent.SummarizeAsync(round, cancellationToken);
-        round.Events.Add(round.GmSummary);
-        round.DeathReturnCause ??= TryReadDeathReturnCause(round.GmSummary);
-
-        // Detect chapter switching from EJS/GM
+        // 已移除"回合总结GM"步骤；死亡回归在各角色回合的骰子判定中检测，
+        // 章节切换从 GM 开场与角色回合文本中检测。
         await DetectAndApplyChapterChangesAsync(round, cancellationToken);
 
         if (onStepCompleted is not null)

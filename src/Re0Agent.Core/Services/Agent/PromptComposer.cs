@@ -125,6 +125,7 @@ public sealed class PromptComposer
         正文内容要求：
         用说书人式的语言描述，自己动作用（）包裹
         先使用白描描写环境，然后稍微推动剧情发展，留下悬念但不能剧透！！！
+        只扮演“开普勒”，不扮演任何其他角色，仅为剧情指导。
         例如："好的小此已经给了我人物位号数据，这次第一位是爱蜜莉雅，第二位是。。。。。（说完）"（这段一定输出）
         "这次剧情有点火热"（点点头）
         "蕾姆正在门口提着流星锤等着莱月昴呢！我们的主角会怎么做呢？让我们拭目以待吗。"（举起水杯喝一口水）"好现在是角色们的回合。"
@@ -140,6 +141,7 @@ public sealed class PromptComposer
         - 我拿到了些什么信息？
         - 如何推动剧情发展？
         - 如何和角色互动？
+        - 确认自己只扮演“开普勒”，不扮演任何其他角色。
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
         </think>
         开普勒准备好啦，激情开写！思考要用的语言是简体中文来着。
@@ -178,40 +180,6 @@ public sealed class PromptComposer
         1. 只有关键、有悬念且影响命运的行动才应当触发检定。如果该动作绝对成功或不需要随机性，使用"判定：无"或"判定：必成"/"判定：必败"。
         2. 若此判定将导致主角死亡，必须在输出中额外追加独立的一行（不得与判定指令合并）："死亡回归：<死因描述>"。例如：
            死亡回归：在小巷中被混混刀刃刺穿腹部失血过多死亡。
-        """;
-    }
-
-    public string ComposeGmSummary(GameRound round, RagContext? ragContext = null)
-    {
-        var turns = string.Join('\n', round.CharacterTurns.Select(turn =>
-            $"{turn.OrderNumber}. {turn.CharacterName}: {(turn.Skipped ? "跳过" : turn.ActionText)} | 裁判: {turn.GmJudgement} | 骰点: {FormatDiceResult(turn.DiceResult)} | 回应: {turn.ResultResponse}"));
-
-        return $"""
-        【身份与角色】
-        你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent。
-
-        【本回合进程摘要】
-        - 回合编号: {round.RoundIndex}
-        - 设定背景: {FormatRagContext(ragContext)}
-        - 角色行动与判定记录:
-        {turns}
-
-        【职责与输出指令】
-        1. 全面概括并总结本大回合，并适当加入环境与场景描写（光线、气味、声音、氛围的变化），字数不超过250字
-        2. 轻微推进当前剧情，为下一轮的事件发展做铺垫。
-        3. 若主角在判定中死亡，在总结的最后一行，必须输出："死亡回归：<死因描述>"。
-
-        【输出要求】
-        - 必须使用中文。
-        - 语言风格应兼具互动小说的史诗感与桌游回合的代入感。
-        - 若根据本回合的进程，故事应当推进至下一个章节，你可以在总结的末尾输出章节切换脚本（注意不要用代码块包裹，且单独占一行）：
-          <update>
-          _.set('chapter', 新的章节数);
-          </update>
-          例如，要进入第 2 章：
-          <update>
-          _.set('chapter', 2);
-          </update>
         """;
     }
 
@@ -269,7 +237,7 @@ public sealed class PromptComposer
 
         【输出指令要求】
         1. 只输出 {profile.CharacterName} 的对话，以及必要时由全角括号（）包围的动作。
-        2. 总字数不得超过100个中文字符。
+        2. 总字数不得少于50个中文字符，不得超过150个中文字符。
         3. 不要输出旁白、内心独白、GM裁定、骰子命令、Markdown、章节脚本或其他角色的台词/动作。
         4. 格式示例：“爱蜜莉雅正是个好人啊！”（微笑着点头）
         """;
@@ -333,7 +301,6 @@ public sealed class PromptComposer
         GM开场：{{round.GmOpening}}
         角色回合记录：
         {{turns}}
-        GM总结：{{round.GmSummary}}
         """;
     }
 

@@ -133,7 +133,7 @@ public sealed class Phase3RagAndDiceTests
 
         Assert.Contains("world_settings", prompt);
         Assert.Contains("全角括号（）", prompt);
-        Assert.Contains("总字数不得超过100个中文字符", prompt);
+        Assert.Contains("不得超过150个中文字符", prompt);
         Assert.Contains("“爱蜜莉雅正是个好人啊！”（微笑着点头）", prompt);
     }
 

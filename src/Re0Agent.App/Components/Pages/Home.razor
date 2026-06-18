@@ -263,14 +263,6 @@ else
                     </div>
                 }
 
-                @if (!string.IsNullOrWhiteSpace(round.GmSummary))
-                {
-                    <div class="grimoire-entry gm-narrative">
-                        <div class="entry-header"><span>GM 回合总结</span></div>
-                        <div class="entry-body">@((MarkupString)CleanEjsText(round.GmSummary))</div>
-                    </div>
-                }
-
                 @foreach (var systemMsg in round.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
                 {
                     <div class="system-event-log">🔮 @systemMsg</div>
@@ -337,6 +329,10 @@ else
                         <label class="inline-toggle">
                             <input type="checkbox" @bind="skipPlayerTurn" />
                             <span>旁观模式（跳过主角本回合行动）</span>
+                        </label>
+                        <label class="inline-toggle">
+                            <input type="checkbox" @bind="directPlayerOutput" />
+                            <span>直接输出（不经过角色agent）</span>
                         </label>
                         <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
                             @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
@@ -700,6 +696,7 @@ else
 
     private string playerInput = string.Empty;
     private bool skipPlayerTurn;
+    private bool directPlayerOutput = true;
     private string? errorMessage;
 
 
@@ -862,7 +859,7 @@ else
     {
         var input = playerInput;
         playerInput = string.Empty;
-        await Progress.SubmitPlayerTurnAsync(input, skipPlayerTurn);
+        await Progress.SubmitPlayerTurnAsync(input, skipPlayerTurn, directPlayerOutput);
     }
 
 
