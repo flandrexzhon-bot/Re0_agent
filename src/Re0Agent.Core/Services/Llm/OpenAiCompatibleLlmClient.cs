@@ -78,17 +78,26 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             payload["response_format"] = new { type = "json_object" };
         }
 
-        // 思考模式（OpenAI 格式）：开启时附带 reasoning_effort 控制思考强度。
-        if (options.EnableThinking)
+        // DeepSeek 思考模式（OpenAI 格式）：thinking.type 是真正的开关，
+        // 且 DeepSeek 默认 enabled，故关闭时也必须显式发送 disabled。
+        if (IsDeepSeek(options))
         {
-            payload["reasoning_effort"] = string.IsNullOrWhiteSpace(options.ReasoningEffort)
-                ? "medium"
-                : options.ReasoningEffort;
+            payload["thinking"] = new { type = options.EnableThinking ? "enabled" : "disabled" };
+            if (options.EnableThinking)
+            {
+                payload["reasoning_effort"] = string.IsNullOrWhiteSpace(options.ReasoningEffort)
+                    ? "medium"
+                    : options.ReasoningEffort;
+            }
         }
 
         httpRequest.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
         return httpRequest;
     }
+
+    private static bool IsDeepSeek(LlmOptions options) =>
+        (options.ApiEndpoint?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false)
+        || (options.ModelName?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static string NormalizeChatCompletionsEndpoint(string endpoint)
     {
