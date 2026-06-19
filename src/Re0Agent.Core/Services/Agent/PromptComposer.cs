@@ -41,16 +41,16 @@ public sealed class PromptComposer
         <Output_format>
         格式示例开始:
         {思考内容}
-        </konatan_planning~>
+        <konatan_planning~>
         <content>
         {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
         </content>
 
         <Chain_of_Thought>
         正式创作正文前，按照以下条目仔细思考，**每条字数多点不许偷懒**
-        思考需用<konatan_planning~>标签包裹，不重复思考不打草稿
+        思考需用<think>标签包裹，不重复思考不打草稿
         思考使用语言：简体中文
-        <konatan_planning~>
+        <think>
         - 当前是什么情况？
         
         - 根据上下文，有什么角色离场或入场吗？
@@ -58,10 +58,10 @@ public sealed class PromptComposer
         - 根据上下文，这回合让玩家玩的最舒服，不多余，不过少，最适合的参加角色是什么？
 
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
-        </konatan_planning~>
+        </think>
 
         小此准备好啦，激情开写！思考要用的语言是简体中文来着。
-        <konatan_planning~>
+        <think>
         OK，开始思考啦。
         先看看现在是什么个情况？
         """;
@@ -237,9 +237,34 @@ public sealed class PromptComposer
 
         【输出指令要求】
         1. 只输出 {profile.CharacterName} 的对话，以及必要时由全角括号（）包围的动作。
-        2. 总字数不得少于50个中文字符，不得超过150个中文字符。
+        2. 总字数不得少于50个中文字符，不得超过150个中文字符。（可以写多句）
         3. 不要输出旁白、内心独白、GM裁定、骰子命令、Markdown、章节脚本或其他角色的台词/动作。
         4. 格式示例：“爱蜜莉雅正是个好人啊！”（微笑着点头）
+
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        <konatan_planning~>
+        <content>
+        {简体中文正文内容}
+        </content>
+
+        <Chain_of_Thought>
+        正式创作正文前，按照以下条目仔细思考，**每条字数多点不许偷懒**
+        思考需用<think>标签包裹，不重复思考不打草稿
+        思考使用语言：简体中文
+        <think>
+        - 当前是什么情况？
+        - 我拿到了些什么信息？
+        - 如何和其他角色互动？
+        - 我接下来要做什么，说什么最合理？
+        - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
+        </think>
+        开普勒准备好啦，激情开写！思考要用的语言是简体中文来着。
+        <think>
+        OK，开始思考啦。
+        先看看现在是什么个情况？
         """;
     }
 
