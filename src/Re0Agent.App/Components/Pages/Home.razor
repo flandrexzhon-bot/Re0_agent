@@ -602,6 +602,16 @@ else
                                     }
                                 </select>
                             </div>
+                            <div>
+                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">章节切换 (帕秋莉)：</label>
+                                <select class="form-select parchment-input" @bind="selectedChapterSwitchPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
+                                    <option value="">-- 未选择 (回退 GM) --</option>
+                                    @foreach (var p in agentConfigs)
+                                    {
+                                        <option value="@p.AgentName">@p.AgentName</option>
+                                    }
+                                </select>
+                            </div>
 
                             <!-- 角色与模型绑定 -->
                             <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
@@ -743,6 +753,7 @@ else
     private string selectedDicePreset = string.Empty;
     private string selectedMemoryPreset = string.Empty;
     private string selectedCharacterSubPreset = string.Empty;
+    private string selectedChapterSwitchPreset = string.Empty;
     private double delaySeconds = 0.0;
 
     private List<GameProgressService.CharacterBinding> characterBindings = new();
@@ -832,6 +843,7 @@ else
             selectedDicePreset = Progress.SelectedDicePreset;
             selectedMemoryPreset = Progress.SelectedMemoryPreset;
             selectedCharacterSubPreset = Progress.SelectedCharacterSubPreset;
+            selectedChapterSwitchPreset = Progress.SelectedChapterSwitchPreset;
             delaySeconds = Progress.DelaySeconds;
             
             characterBindings = Progress.CharacterBindings;
@@ -912,6 +924,7 @@ else
         Progress.SelectedDicePreset = selectedDicePreset;
         Progress.SelectedMemoryPreset = selectedMemoryPreset;
         Progress.SelectedCharacterSubPreset = selectedCharacterSubPreset;
+        Progress.SelectedChapterSwitchPreset = selectedChapterSwitchPreset;
         Progress.DelaySeconds = delaySeconds;
 
         await Progress.SaveRoutingConfigAsync();

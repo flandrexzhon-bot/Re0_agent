@@ -66,6 +66,7 @@ public sealed class GameProgressService
     public string SelectedDicePreset { get; set; } = string.Empty;
     public string SelectedMemoryPreset { get; set; } = string.Empty;
     public string SelectedCharacterSubPreset { get; set; } = string.Empty;
+    public string SelectedChapterSwitchPreset { get; set; } = string.Empty;
     public double DelaySeconds { get; set; } = 0.0;
 
     public List<CharacterBinding> CharacterBindings { get; private set; } = new();
@@ -270,6 +271,7 @@ public sealed class GameProgressService
             SelectedDicePreset = routings.FirstOrDefault(r => r.RoutingKey == "Dice")?.PresetName ?? string.Empty;
             SelectedMemoryPreset = routings.FirstOrDefault(r => r.RoutingKey == "Memory")?.PresetName ?? string.Empty;
             SelectedCharacterSubPreset = routings.FirstOrDefault(r => r.RoutingKey == "CharacterSub")?.PresetName ?? string.Empty;
+            SelectedChapterSwitchPreset = routings.FirstOrDefault(r => r.RoutingKey == "ChapterSwitch")?.PresetName ?? string.Empty;
 
             var delayStr = routings.FirstOrDefault(r => r.RoutingKey == "Delay")?.PresetName;
             if (double.TryParse(delayStr, out var dVal))
@@ -697,6 +699,9 @@ public sealed class GameProgressService
 
             if (!string.IsNullOrWhiteSpace(SelectedCharacterSubPreset))
                 newRoutings.Add(new ApiRouting { RoutingKey = "CharacterSub", PresetName = SelectedCharacterSubPreset });
+
+            if (!string.IsNullOrWhiteSpace(SelectedChapterSwitchPreset))
+                newRoutings.Add(new ApiRouting { RoutingKey = "ChapterSwitch", PresetName = SelectedChapterSwitchPreset });
 
             foreach (var b in CharacterBindings)
             {
