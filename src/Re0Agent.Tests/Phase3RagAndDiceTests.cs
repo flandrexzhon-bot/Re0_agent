@@ -89,7 +89,8 @@ public sealed class Phase3RagAndDiceTests
         }
 
         // 双冒号与单冒号都支持，前后文保留。
-        Assert.StartsWith("致", PromptMacros.Expand("{{random:致,献}}你"));
+        var singleColonResult = PromptMacros.Expand("{{random:致,献}}你");
+        Assert.True(singleColonResult.StartsWith("致") || singleColonResult.StartsWith("献"), $"应为'致你'或'献你'，实际'{singleColonResult}'");
         // 嵌套：内层先展开。
         Assert.Contains(PromptMacros.Expand("{{random::{{random::x,y}},z}}"), new[] { "x", "y", "z" });
         // 无宏内容原样返回。

@@ -1604,7 +1604,7 @@ public static class BlackTeaWorldBook
         },
         new WorldBookEntry
         {
-            Keys = ["爱蜜莉雅", "艾米莉亚", "半魔", "半妖精", "帕克", "EMT"],
+            Keys = ["爱蜜莉雅", "艾米莉亚", "半魔", "半妖精", "EMT"],
             SecondaryKeys = [],
             Comment = "🕊️爱蜜莉雅阵营·人物: 爱蜜莉雅",
             Content = """""
