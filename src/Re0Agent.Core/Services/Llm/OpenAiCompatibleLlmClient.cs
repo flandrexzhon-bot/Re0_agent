@@ -67,7 +67,7 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         var payload = new Dictionary<string, object?>
         {
             ["model"] = options.ModelName,
-            ["messages"] = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
+            ["messages"] = request.Messages.Select(message => new { role = message.Role, content = PromptMacros.Expand(message.Content) }),
             ["temperature"] = options.Temperature,
             ["max_tokens"] = options.MaxTokens,
             ["stream"] = stream

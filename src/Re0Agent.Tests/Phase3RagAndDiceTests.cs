@@ -78,6 +78,25 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Fact]
+    public void PromptMacrosExpandRandomToOneOption()
+    {
+        const string template = "{{random::A,B,C}}";
+        var options = new HashSet<string> { "A", "B", "C" };
+
+        for (var i = 0; i < 50; i++)
+        {
+            Assert.Contains(PromptMacros.Expand(template), options);
+        }
+
+        // 双冒号与单冒号都支持，前后文保留。
+        Assert.StartsWith("致", PromptMacros.Expand("{{random:致,献}}你"));
+        // 嵌套：内层先展开。
+        Assert.Contains(PromptMacros.Expand("{{random::{{random::x,y}},z}}"), new[] { "x", "y", "z" });
+        // 无宏内容原样返回。
+        Assert.Equal("普通文本", PromptMacros.Expand("普通文本"));
+    }
+
+    [Fact]
     public void ChapterVariantRendererChoosesDifferentBranches()
     {
         var entries = BlackTeaWorldBook.Entries;
