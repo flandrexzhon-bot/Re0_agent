@@ -133,6 +133,8 @@ public sealed class AgentConfigResolver(Re0AgentDbContext dbContext)
             config.Temperature,
             config.MaxTokens,
             config.MaxInputTokens,
-            config.ResponseFormat);
+            config.ResponseFormat,
+            config.EnableThinking,
+            config.ReasoningEffort);
     }
 }

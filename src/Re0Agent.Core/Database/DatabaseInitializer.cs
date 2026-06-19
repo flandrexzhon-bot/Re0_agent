@@ -80,7 +80,9 @@ public static class DatabaseInitializer
         var newColumns = new[]
         {
             (Name: "max_input_tokens", Definition: "INTEGER DEFAULT 4096"),
-            (Name: "response_format", Definition: "TEXT DEFAULT 'JSON'")
+            (Name: "response_format", Definition: "TEXT DEFAULT 'JSON'"),
+            (Name: "enable_thinking", Definition: "INTEGER DEFAULT 0"),
+            (Name: "reasoning_effort", Definition: "TEXT DEFAULT 'medium'")
         };
 
         foreach (var column in newColumns)

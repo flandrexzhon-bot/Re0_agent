@@ -135,6 +135,14 @@ public sealed class AgentConfig
 
     [Column("response_format")]
     public string ResponseFormat { get; set; } = "JSON";
+
+    /// <summary>是否启用思考模式（DeepSeek 等推理模型，OpenAI 格式 reasoning）。</summary>
+    [Column("enable_thinking")]
+    public bool EnableThinking { get; set; } = false;
+
+    /// <summary>思考强度（OpenAI 格式 reasoning_effort）：low / medium / high。</summary>
+    [Column("reasoning_effort")]
+    public string ReasoningEffort { get; set; } = "medium";
 }
 
 [Table("api_routing")]

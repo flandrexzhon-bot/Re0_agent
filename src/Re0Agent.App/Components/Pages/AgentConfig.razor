@@ -168,6 +168,27 @@
                         </div>
                     </div>
 
+                    @if (IsDeepSeekConfig)
+                    {
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">思考模式 (DeepSeek)</label>
+                                <label class="inline-toggle" style="margin-top: 0.35rem;">
+                                    <input type="checkbox" @bind="selectedConfig.EnableThinking" />
+                                    <span>启用思考（reasoning）</span>
+                                </label>
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">思考强度 (reasoning_effort)</label>
+                                <select @bind="selectedConfig.ReasoningEffort" disabled="@(!selectedConfig.EnableThinking)">
+                                    <option value="low">低 (low)</option>
+                                    <option value="medium">中 (medium)</option>
+                                    <option value="high">高 (high)</option>
+                                </select>
+                            </div>
+                        </div>
+                    }
+
                     <div style="margin-top: 1rem;">
                         <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约咒文 (System Prompt - 选填)</label>
                         <textarea rows="4" @bind="selectedConfig.SystemPrompt" placeholder="可选的系统级 System Prompt..."></textarea>
@@ -244,6 +265,11 @@
             SelectConfig(agentConfigs[0]);
         }
     }
+
+    private bool IsDeepSeekConfig =>
+        selectedConfig is not null
+        && ((selectedConfig.ApiEndpoint?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false)
+            || (selectedConfig.ModelName?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false));
 
     private async Task LoadConfigsAsync()
     {

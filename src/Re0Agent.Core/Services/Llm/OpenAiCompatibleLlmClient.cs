@@ -64,29 +64,26 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
 
-        object payload;
+        var payload = new Dictionary<string, object?>
+        {
+            ["model"] = options.ModelName,
+            ["messages"] = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
+            ["temperature"] = options.Temperature,
+            ["max_tokens"] = options.MaxTokens,
+            ["stream"] = stream
+        };
+
         if (options.ResponseFormat == "JSON")
         {
-            payload = new
-            {
-                model = options.ModelName,
-                messages = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
-                temperature = options.Temperature,
-                max_tokens = options.MaxTokens,
-                stream,
-                response_format = new { type = "json_object" }
-            };
+            payload["response_format"] = new { type = "json_object" };
         }
-        else
+
+        // 思考模式（OpenAI 格式）：开启时附带 reasoning_effort 控制思考强度。
+        if (options.EnableThinking)
         {
-            payload = new
-            {
-                model = options.ModelName,
-                messages = request.Messages.Select(message => new { role = message.Role, content = message.Content }),
-                temperature = options.Temperature,
-                max_tokens = options.MaxTokens,
-                stream
-            };
+            payload["reasoning_effort"] = string.IsNullOrWhiteSpace(options.ReasoningEffort)
+                ? "medium"
+                : options.ReasoningEffort;
         }
 
         httpRequest.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
