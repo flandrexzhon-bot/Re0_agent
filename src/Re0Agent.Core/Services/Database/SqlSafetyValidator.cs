@@ -19,6 +19,12 @@ public sealed partial class SqlSafetyValidator
         "character_memory"
     };
 
+    /// <summary>编年史为追加式历史，禁止 DELETE。</summary>
+    private static readonly HashSet<string> DeleteProtectedTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "chronicle"
+    };
+
     public SqlValidationResult ValidateBatch(IEnumerable<string> statements)
     {
         foreach (var statement in statements)
@@ -59,7 +65,7 @@ public sealed partial class SqlSafetyValidator
         var table = TryGetTargetTable(normalized, out var command);
         if (table is null)
         {
-            return SqlValidationResult.Invalid("Only INSERT and UPDATE statements are allowed.");
+            return SqlValidationResult.Invalid("Only INSERT, UPDATE and DELETE statements are allowed.");
         }
 
         if (!AllowedTables.Contains(table))
@@ -68,13 +74,31 @@ public sealed partial class SqlSafetyValidator
         }
 
         if (!string.Equals(command, "INSERT", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(command, "UPDATE", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(command, "UPDATE", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(command, "DELETE", StringComparison.OrdinalIgnoreCase))
         {
             return SqlValidationResult.Invalid($"Command '{command}' is not allowed.");
         }
 
+        // DELETE：编年史等历史表禁止删除；其余表必须带 WHERE，禁止无条件删除。
+        if (string.Equals(command, "DELETE", StringComparison.OrdinalIgnoreCase))
+        {
+            if (DeleteProtectedTables.Contains(table))
+            {
+                return SqlValidationResult.Invalid($"DELETE on table '{table}' is not allowed.");
+            }
+
+            if (!HasWhereClause(outsideStrings))
+            {
+                return SqlValidationResult.Invalid("DELETE statements must include a WHERE clause.");
+            }
+        }
+
         return SqlValidationResult.Valid;
     }
+
+    private static bool HasWhereClause(string outsideStrings) =>
+        WhereClauseRegex().IsMatch(outsideStrings);
 
     private static bool HasMultipleStatements(string statement)
     {
@@ -138,6 +162,13 @@ public sealed partial class SqlSafetyValidator
             return update.Groups["table"].Value;
         }
 
+        var delete = DeleteTargetRegex().Match(statement);
+        if (delete.Success)
+        {
+            command = "DELETE";
+            return delete.Groups["table"].Value;
+        }
+
         command = string.Empty;
         return null;
     }
@@ -147,4 +178,10 @@ public sealed partial class SqlSafetyValidator
 
     [GeneratedRegex(@"^\s*UPDATE\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex UpdateTargetRegex();
+
+    [GeneratedRegex(@"^\s*DELETE\s+FROM\s+(?<table>[A-Za-z_][A-Za-z0-9_]*)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DeleteTargetRegex();
+
+    [GeneratedRegex(@"\bWHERE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex WhereClauseRegex();
 }

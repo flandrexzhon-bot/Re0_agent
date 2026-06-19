@@ -50,6 +50,12 @@ public sealed class Phase2AgentTests
         // 新引入角色允许 INSERT OR IGNORE / INSERT OR REPLACE。
         Assert.True(validator.ValidateStatement("INSERT OR IGNORE INTO important_npc (name, gender) VALUES ('菲鲁特', '女')").IsValid);
         Assert.True(validator.ValidateStatement("INSERT OR REPLACE INTO important_npc (name, gender) VALUES ('菲鲁特', '女')").IsValid);
+
+        // DELETE：允许带 WHERE 删除白名单表，但禁止删除编年史 chronicle，禁止无条件删除。
+        Assert.True(validator.ValidateStatement("DELETE FROM inventory WHERE quantity <= 0").IsValid);
+        Assert.True(validator.ValidateStatement("DELETE FROM important_npc WHERE name = '路人'").IsValid);
+        Assert.False(validator.ValidateStatement("DELETE FROM inventory").IsValid);
+        Assert.False(validator.ValidateStatement("DELETE FROM save_points WHERE save_id = 1").IsValid);
     }
 
     [Fact]

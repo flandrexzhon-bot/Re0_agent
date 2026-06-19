@@ -41,7 +41,7 @@ public sealed class PromptComposer
         <Output_format>
         格式示例开始:
         {思考内容}
-        <konatan_planning~>
+        </think>
         <content>
         {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
         </content>
@@ -210,33 +210,33 @@ public sealed class PromptComposer
             """
             : "你是NPC角色，请根据自身性格与当前场景，自主且合理地做出符合你角色人设的行动、发言或心理反应。";
 
-        return $"""
+        return $$"""
         【扮演角色】
-        你现在只扮演一个特定角色: {profile.CharacterName}。
+        你现在只扮演一个特定角色: {{profile.CharacterName}}。
         你必须完全代入该角色的视角，保持性格特征、语气与行为的绝对一致性。
 
         【角色个人属性与现状】
-        - 主角标识: {profile.IsPlayerControlled}
-        - 个人状态 (ImportantNpc / ProtagonistInfo): {profile.CurrentStateReference}
-        - 基础背景设定 (WorldBook): {profile.WorldBookEntryKey ?? "暂无特定设定"}
+        - 主角标识: {{profile.IsPlayerControlled}}
+        - 个人状态 (ImportantNpc / ProtagonistInfo): {{profile.CurrentStateReference}}
+        - 基础背景设定 (WorldBook): {{profile.WorldBookEntryKey ?? "暂无特定设定"}}
 
         【角色可见世界书】
         （仅注入以下类别：world_settings 基础世界设定、locations 当前所在地点、characters 你自身的角色设定）
-        {FormatRagContext(ragContext)}
+        {{FormatRagContext(ragContext)}}
 
         【个人记忆 (Character Memory)】
         这是你独有的私有记忆（其他角色可能对这些信息毫不知情）：
-        {memories}
+        {{memories}}
 
         【当前回合情境上下文 (大回合上文)】
-        - GM 开场白描述: {round.GmOpening}
+        - GM 开场白描述: {{round.GmOpening}}
         - 本大回合在你之前的角色行动记录:
-        {previousTurns}
+        {{previousTurns}}
 
-        {instructionPrompt}
+        {{instructionPrompt}}
 
         【输出指令要求】
-        1. 只输出 {profile.CharacterName} 的对话，以及必要时由全角括号（）包围的动作。
+        1. 只输出 {{profile.CharacterName}} 的对话，以及必要时由全角括号（）包围的动作。
         2. 总字数不得少于50个中文字符，不得超过150个中文字符。（可以写多句）
         3. 不要输出旁白、内心独白、GM裁定、骰子命令、Markdown、章节脚本或其他角色的台词/动作。
         4. 格式示例：“爱蜜莉雅正是个好人啊！”（微笑着点头）
@@ -245,7 +245,7 @@ public sealed class PromptComposer
         <Output_format>
         格式示例开始:
         {思考内容}
-        <konatan_planning~>
+        </think>
         <content>
         {简体中文正文内容}
         </content>
@@ -276,56 +276,102 @@ public sealed class PromptComposer
             $"{turn.OrderNumber}. {turn.CharacterName}: skipped={turn.Skipped}; action={turn.ActionText}; judgement={turn.GmJudgement}; dice={FormatDiceResult(turn.DiceResult)}; response={turn.ResultResponse}"));
 
         return $$"""
-        【身份与角色】
-        你是填表Agent。职责是把完整的大回合文本记录转化为合法的 SQLite INSERT/UPDATE SQL 语句 JSON 数组。
+        你是【填表Agent】，负责根据用户提供的资料对表格数据执行增删改操作。
 
-        【输出格式规范】
-        只能且必须输出一个纯 JSON 对象，不要包含 ```json ``` 标记或任何 Markdown 包装，格式必须为：
-        {"sql":["INSERT INTO ...","UPDATE ..."]}
+        ## 核心任务
+        依据三类资料来源执行表格编辑：
+        - <背景设定>：故事及人物设定
+        - <正文数据>：上轮发生的故事
+        - <当前表格数据>：之前的数据作为填表基础（包含每张表的约束 Note 和当前数据）
 
-        注意：只允许执行 INSERT 或 UPDATE，坚决禁止使用 DELETE、DDL (CREATE/DROP)、PRAGMA 等操作。所有字符串值必须对单引号进行转义（例如 ' -> ''）。
+        ## 输出格式（严格执行）
 
-        【数据库结构约束（请严格遵守）】
-        本系统只支持且仅允许向以下表插入/更新数据，绝对不可修改其他无关表：
+        <thought>
+        [分析当前轮次的剧情变化]
+        [阅读所有填表相关规则]
+        [根据填表规则确定需要修改的表格和字段]
+        [逐步推理每个修改操作，说明理由]
+        针对纪要表(chronicle)的额外规则：本轮必须对其 INSERT 一条新的总结记录。
+        日志与纪要语气校准：必须区分"正常恋爱互动"与"暗黑主从文风"。可以使用正常交流词汇（提议、要求、同意、拒绝、引导、配合、安抚），但【绝对禁止】把情侣间普通调情过度解读为"权力掌控"、"剥夺反抗"、"精神支配"、"屈服"等单向压迫词汇！
+        </thought>
 
-        1. 表 `chronicle` （大回合编年史记录，本大回合必须且仅能 INSERT 一条记录）：
-           - `code_index` (TEXT, 唯一键): 格式必须是 'AM[0-9][0-9][0-9][0-9]'（例如：'AM0001', 'AM0002' 等，请根据大回合的轮数序号正确计算填充，严禁使用 round_id 作为列名）。
-           - `time_span` (TEXT): 对应的时间范围，格式必须是 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'（例如：'2026-06-06 09:00 ~ 2026-06-06 09:10'）。
-           - `summary` (TEXT): 概括本回合的主要事件，长度绝对不能超过 30 个字符（CHECK LIMIT <= 30）。
-           - `chronicle_text` (TEXT): 编年史详细剧情描述，长度必须在 100 到 1000 个字符之间。请确保生成大约 300 到 500 个字！
+        <content>
+        <tableEdit>
+        INSERT INTO table_name (row_id, col1, col2) VALUES (1, '值1', '值2');
+        UPDATE table_name SET col1 = '新值' WHERE row_id = 1;
+        DELETE FROM table_name WHERE row_id = 2;
+        </tableEdit>
+        </content>
 
-        2. 表 `character_memory` （角色记忆，本回合有互动或有内心活动的角色必须分别 INSERT 一条记录）：
-           - `character_name` (TEXT): 角色名字（如"菜月昴"、"爱蜜莉雅"、"雷姆"等）。
-           - `round_index` (TEXT): 大回合编号，即 "{{round.RoundIndex}}"。
-           - `memory_text` (TEXT): 该角色在此回合获得的私有记忆，长度绝对不能超过 400 个字符（CHECK LIMIT <= 400）。
-           - `emotional_state` (TEXT): 情感状态（如"悲伤"、"振奋"、"警惕"等）。
-           - `created_at` (TEXT): 记录创建时间，格式 'yyyy-MM-dd HH:mm'。
+        ## 关键规则
+        1. 必须逐表阅读每个表格的约束 Note，严格遵守其中的约束
+        2. Note 的约束优先级最高，高于通用填表经验
+        3. 若 Note 要求禁止修改/格式固定/编码规则，必须严格执行
 
-        3. 表 `global_state` （更新全局状态，当发生地点转移、章节变迁或时间流逝时 UPDATE）：
-           - 只能使用 `UPDATE global_state SET ... WHERE row_id = 1`。
-           - 可更新字段: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time` (格式 'yyyy-MM-dd HH:mm'), `current_chapter`, `is_lewd` ('是'/'否')。
+        ## SQL 编写原则
+        ### INSERT（添加新行）
+        - 单行：INSERT INTO t (row_id, col1) VALUES (N, '值');
+        - 多行：INSERT INTO t (row_id, col1) VALUES (N, '值1'), (N+1, '值2');
+        - INSERT 必须显式指定 row_id，值为当前表最大 row_id + 1；无法确定时用 (SELECT MAX(row_id)+1 FROM t)
+        ### UPDATE（更新已有行）
+        - 所有 UPDATE 必须带 WHERE，禁止无条件更新
+        - WHERE 优先用 UNIQUE 列（如 WHERE name = '角色A'）或业务键（如 WHERE code_index = 'AM0001'），否则用 WHERE row_id = N
+        - 支持表达式、多列、CASE：UPDATE t SET hp = hp - 5, status = CASE WHEN hp<=5 THEN '重伤' ELSE status END WHERE name='昴'
+        ### DELETE（删除行）
+        - 所有 DELETE 必须带 WHERE，禁止无条件删除
+        - 【禁止】DELETE 纪要表 chronicle（追加式历史，只增不删）
 
-        4. 表 `protagonist_info` （更新主角的状态、位置或物资属性）：
-           - 只能使用 `UPDATE protagonist_info SET ... WHERE row_id = 1`。
-           - 可更新字段: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`。
+        ## SQL 格式要点
+        - 字符串值用单引号包裹；内部单引号用两个单引号转义（'谁欺负我''就打谁'）
+        - 数值列直接写数字不加引号；每条语句以分号结尾；多条语句换行分隔
+        - 表名列名用英文；禁止 BEGIN/COMMIT/ROLLBACK 事务语句（系统自动处理）
+        - 禁止 DROP TABLE / ALTER TABLE / CREATE TABLE 等结构变更语句
 
-        5. 表 `important_npc` （重要 NPC 的引入与状态维护）：
-           - 先判断角色是否已在【当前数据库状态摘要】的「已在册NPC」列表里（按全名/规范名比对，注意别名）：
-             · 已在册 → 只能 `UPDATE important_npc SET ... WHERE name = '全名'` 更新状态/位置，禁止再 INSERT。
-             · 未在册的全新重要角色 → 用 `INSERT OR IGNORE INTO important_npc (...) VALUES (...)` 登记（务必带 OR IGNORE，以防同名冲突导致整批失败）。
-           - 重要：角色姓名 `name` 必须使用其【全名/规范名】（例如填"罗兹瓦尔·L·梅瑟斯"而非"罗兹瓦尔"，"碧翠丝"而非"贝蒂"），避免同一角色因别名不同被重复登记或触发唯一约束。
-           - 切勿对同一角色在同一批 SQL 里既 INSERT 又 UPDATE；不要为已在册角色重复 INSERT。
-           - INSERT 必填字段: `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(格式如'体质:50; 敏捷:50; 感知:50; 意志:50'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`。
-           - 可更新字段: `location_name`, `relations_text`, `interaction_options`, `self_status`, `brief_intro`, `appearance`, `identity_text`, `base_attributes`, `special_attributes` 等。
+        ## 本系统允许操作的表与各表 Note（约束优先级最高）
+        本系统只允许操作以下表，绝对不可修改其他无关表：
 
-        当前数据库状态摘要：
+        【表 chronicle】大回合编年史记录，本大回合必须且仅能 INSERT 一条记录，禁止 DELETE。
+        - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增，严禁用 round_id 作为列名）。
+        - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'（如 '2026-06-06 09:00 ~ 2026-06-06 09:10'）。
+        - `summary` (TEXT): 概括本回合主要事件，<= 30 字符。
+        - `chronicle_text` (TEXT): 详细剧情，100~1000 字符，建议 300~500 字。
+
+        【表 character_memory】角色记忆，本回合有互动或内心活动的角色分别 INSERT 一条。
+        - `character_name` (TEXT): 角色名（如"菜月昴"、"爱蜜莉雅"）。
+        - `round_index` (TEXT): 大回合编号，即 "{{round.RoundIndex}}"。
+        - `memory_text` (TEXT): 该角色本回合私有记忆，<= 400 字符。
+        - `emotional_state` (TEXT): 情感状态（如"振奋"、"警惕"）。
+        - `created_at` (TEXT): 创建时间，格式 'yyyy-MM-dd HH:mm'。
+
+        【表 global_state】全局状态，发生地点转移/章节变迁/时间流逝时 UPDATE。
+        - 只能 `UPDATE global_state SET ... WHERE row_id = 1`。
+        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `current_chapter`, `is_lewd`('是'/'否')。
+
+        【表 protagonist_info】主角状态/位置/物资。
+        - 只能 `UPDATE protagonist_info SET ... WHERE row_id = 1`。
+        - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`。
+
+        【表 important_npc】重要 NPC 的引入与状态维护。
+        - 先判断角色是否已在【当前表格数据】的「已在册NPC」列表（按全名/规范名比对，注意别名）：
+          · 已在册 → 只能 `UPDATE important_npc SET ... WHERE name = '全名'`，禁止再 INSERT。
+          · 全新角色 → 用 `INSERT OR IGNORE INTO important_npc (...) VALUES (...)`（务必带 OR IGNORE 防同名冲突）。
+        - `name` 必须用【全名/规范名】（如"罗兹瓦尔·L·梅瑟斯"而非"罗兹瓦尔"，"碧翠丝"而非"贝蒂"）。
+        - 切勿对同一角色在同批 SQL 里既 INSERT 又 UPDATE；不要为已在册角色重复 INSERT。
+        - INSERT 必填: `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(如'体质:50; 敏捷:50; 感知:50; 意志:50'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`。
+        - 可更新: `location_name`, `relations_text`, `interaction_options`, `self_status`, `brief_intro`, `appearance`, `identity_text`, `base_attributes`, `special_attributes`。
+
+        <当前表格数据>
         {{databaseSummary}}
+        </当前表格数据>
 
-        大回合文本上下文：
+        <正文数据>
         编号：{{round.RoundIndex}}
         GM开场：{{round.GmOpening}}
         角色回合记录：
         {{turns}}
+        </正文数据>
+
+        现在开始按此格式执行填表任务。
         """;
     }
 
