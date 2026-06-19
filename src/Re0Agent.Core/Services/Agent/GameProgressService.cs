@@ -53,6 +53,7 @@ public sealed class GameProgressService
     public ProtagonistInfo? Protagonist { get; private set; }
     public List<InventoryItem> Inventories { get; private set; } = new();
     public List<EquipmentItem> Equipments { get; private set; } = new();
+    public List<Quest> Quests { get; private set; } = new();
     public string? LocationDescription { get; private set; }
     public string? LocationRegion { get; private set; }
 
@@ -260,6 +261,7 @@ public sealed class GameProgressService
             // Load presets, npcs, routings
             AllNpcs = await db.ImportantNpcs.AsNoTracking().OrderBy(n => n.RowId).ToListAsync(cancellationToken);
             AllCharacterNames = await db.ImportantNpcs.AsNoTracking().Select(n => n.Name).ToListAsync(cancellationToken);
+            Quests = await db.Quests.AsNoTracking().OrderBy(q => q.QuestName).ToListAsync(cancellationToken);
             AgentConfigs = await db.AgentConfig.AsNoTracking().Where(c => c.Enabled == 1).ToListAsync(cancellationToken);
 
             var routings = await db.ApiRoutings.ToListAsync(cancellationToken);
