@@ -12,7 +12,8 @@ public sealed class CharacterSubAgent(
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
     ILlmClient llmClient,
-    IRagService ragService)
+    IRagService ragService,
+    ChapterVariantRenderer chapterVariantRenderer)
 {
     public async Task<string> RunAsync(
         int chapter,
@@ -68,7 +69,7 @@ public sealed class CharacterSubAgent(
             cancellationToken);
 
         var currentLocation = state?.CurrentLocation ?? "";
-        var chapterInfo = ChapterData.GetCurrentChapterText(chapter);
+        var chapterInfo = ChapterData.GetCurrentChapterText(allEntries, chapterVariantRenderer, chapter);
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest

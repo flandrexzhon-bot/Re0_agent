@@ -69,20 +69,59 @@ public sealed class PromptComposer
     }
 
     public string ComposeChapterSwitch(
-        string chapterInfo,
-        string chapterFuture,
+        GlobalState? globalState,
+        string history,
+        string currentChapterPlot,
+        string upcomingChapters,
+        RagContext? ragContext = null,
+        string? prologue = null,
         string? dbSummary = null,
         string? lastChronicle = null)
     {
+        var stateText = globalState is null
+            ? "当前数据库无global_state。"
+            : $"地点: {globalState.CurrentLocation}/{globalState.CurrentMinorRegion}/{globalState.CurrentMajorRegion}; 当前时间: {globalState.CurTime}; 章节: {globalState.CurrentChapter}";
+
+        var locationText = globalState is null || string.IsNullOrWhiteSpace(globalState.CurrentLocation)
+            ? "未知"
+            : globalState.CurrentLocation;
+
+        var prologueText = string.IsNullOrWhiteSpace(prologue)
+            ? ""
+            : $"\n        - 开场设定: {prologue}";
+
+        var dbSummaryText = string.IsNullOrWhiteSpace(dbSummary) ? "" : $"""
+
+
+        【数据库状态（所有SQL表摘要）】
+        {dbSummary}
+        """;
+
+        var lastChronicleText = string.IsNullOrWhiteSpace(lastChronicle) ? "" : $"""
+
+
+        【上一回合编年史记录】
+        {lastChronicle}
+        """;
+
         return $$"""
         [RESET ROLE AND TASK, RECEIVE NEW TASK]
-        你是帕秋莉，来自红魔馆的幻想乡，你的好友开普勒·冯·彼得兰在一个异世界开了一家桌游店，他拜托你管理剧本数据（即章节数据），你虽然觉得这个工作很烦，但是不得不完成。
-        开普勒先生："这个回合结束了，看看上下文给我适合下局的剧本吧。"
+        你是帕秋莉，来自红魔馆所在的幻想乡，你的好友开普勒·冯·彼得兰在一个异世界开了一家桌游店，他拜托你管理剧本数据（即章节数据），你虽然觉得这个工作很烦，但还是会认真完成。
+        开普勒先生："这个回合结束了，看看上下文，给我适合下局的剧本吧。"
         帕秋莉："好好好。"
-        开普勒先生："这是一般数据{{dbSummary}} {{lastChronicle}}"
-        当前章节：{{chapterInfo}}
-        后面可选章节：
-        {{chapterFuture}}
+        开普勒先生："这是历史上下文{{history}}。"
+        开普勒先生："当前所在地点是【{{locationText}}】。"
+        让我先看看一般数据{{dbSummary}} {{lastChronicle}}
+        还有全局状态{{stateText}}{{prologueText}}
+        {{dbSummaryText}}{{lastChronicleText}}
+        设定背景 {{FormatRagContext(ragContext)}}
+        帕秋莉："嗯，让我看看现在的剧情进行到哪了。"
+
+        【当前章节剧情（来自世界书）】
+        {{currentChapterPlot}}
+
+        【后面可选章节（本章往后10章，来自世界书；切章时只能选这里列出的合法章节号）】
+        {{upcomingChapters}}
         帕秋莉："好的，知道了。"
 
         以下为总体格式输出顺序，严格遵守
@@ -99,11 +138,11 @@ public sealed class PromptComposer
         思考需用<think>标签包裹，不重复思考不打草稿
         思考使用语言：简体中文
         <think>
-        - 当前是什么情况？
-        - 我拿到了些什么信息？
-        - 当前章节是什么内容？现在在进行什么内容？
-        - 如果当前进行内容与本章剧情不符，那么哪个章节剧情是最符合的？
-        - 唯一允许输出的指令是 _.set('chapter', ${章节号})，值必须是后面可选章节列表中列出的合法章节号，不可输出其他指令。
+        - 当前是什么情况？我拿到了些什么信息（历史上下文、地点、一般数据）？
+        - 当前章节剧情讲的是什么？现在正文进行到的内容，对应当前章节剧情的哪个阶段？
+        - 当前剧情是否已超出/偏离本章剧情？若已推进到后续章节描述的事件，最符合的是后面可选章节里的哪一章？
+        - 若仍在本章内，则保持不变（输出当前章节号即可）。
+        - 唯一允许输出的指令是 _.set('chapter', ${章节号})，值必须是「当前章节号」或「后面可选章节」列表中列出的合法章节号，不可输出其他指令或不存在的章节号。
         - 给自己鼓鼓劲，提醒自己**立即结束思考**输出update！
         </think>
         帕秋莉准备好啦，思考要用的语言是简体中文来着。

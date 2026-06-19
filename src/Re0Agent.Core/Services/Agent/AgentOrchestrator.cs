@@ -311,11 +311,7 @@ public sealed class AgentOrchestrator(
         await ApplyDelayAsync(cancellationToken);
 
         // 章节切换：启动但不等待 —— 填表 SQL 不依赖章节切换结果。
-        var chapterSwitchTask = chapterSwitchAgent.RunAsync(
-            round,
-            dbSummary: null,
-            lastChronicle: null,
-            cancellationToken: cancellationToken);
+        var chapterSwitchTask = chapterSwitchAgent.RunAsync(round, cancellationToken);
 
         int maxFormRetries = 3;
         int formAttempt = 0;
