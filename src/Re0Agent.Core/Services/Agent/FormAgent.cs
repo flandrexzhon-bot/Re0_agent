@@ -39,15 +39,31 @@ public sealed partial class FormAgent(
     {
         var global = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var npcNames = await dbContext.ImportantNpcs.AsNoTracking()
-            .OrderBy(n => n.RowId)
-            .Select(n => n.Name)
-            .ToListAsync(cancellationToken);
+
+        // 查询每张业务表的行数，让模型能判断哪些表为空需要初始化。
+        var npcCount = await dbContext.ImportantNpcs.CountAsync(cancellationToken);
+        var mapPointCount = await dbContext.WorldMapPoints.CountAsync(cancellationToken);
+        var mapElementCount = await dbContext.MapElements.CountAsync(cancellationToken);
+        var factionCount = await dbContext.Factions.CountAsync(cancellationToken);
+        var inventoryCount = await dbContext.Inventory.CountAsync(cancellationToken);
+        var equipmentCount = await dbContext.Equipment.CountAsync(cancellationToken);
+        var questCount = await dbContext.Quests.CountAsync(cancellationToken);
+        var chronicleCount = await dbContext.Chronicle.CountAsync(cancellationToken);
         var memoryCount = await dbContext.CharacterMemory.CountAsync(cancellationToken);
 
-        var npcList = npcNames.Count == 0 ? "（无）" : string.Join("、", npcNames);
+        var npcNames = npcCount == 0
+            ? "（无）"
+            : string.Join("、", await dbContext.ImportantNpcs.AsNoTracking()
+                .OrderBy(n => n.RowId)
+                .Select(n => n.Name)
+                .ToListAsync(cancellationToken));
 
-        return $"global={(global is null ? "none" : $"{global.CurrentLocation}/{global.CurTime}/chapter={global.CurrentChapter}")}; protagonist={protagonist?.Name ?? "none"}; 已在册NPC({npcNames.Count}个)=[{npcList}]; memory_count={memoryCount}";
+        return $"global={(global is null ? "【空表-需要初始化】" : $"{global.CurrentLocation}/{global.CurTime}/chapter={global.CurrentChapter}")}; "
+            + $"protagonist={(protagonist is null ? "【空表-需要初始化】" : $"{protagonist.Name}/{protagonist.LocationName}")}; "
+            + $"world_map_points={mapPointCount}行; map_elements={mapElementCount}行; factions={factionCount}行; "
+            + $"important_npc={npcCount}行=[{npcNames}]; "
+            + $"inventory={inventoryCount}行; equipment={equipmentCount}行; quests={questCount}行; "
+            + $"chronicle={chronicleCount}行; character_memory={memoryCount}行";
     }
 
     private static IReadOnlyList<string> ParseSqlPayload(string content)

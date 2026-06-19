@@ -331,34 +331,71 @@ public sealed class PromptComposer
         本系统只允许操作以下表，绝对不可修改其他无关表：
 
         【表 chronicle】大回合编年史记录，本大回合必须且仅能 INSERT 一条记录，禁止 DELETE。
-        - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增，严禁用 round_id 作为列名）。
-        - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'（如 '2026-06-06 09:00 ~ 2026-06-06 09:10'）。
+        - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增）。
+        - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'。
         - `summary` (TEXT): 概括本回合主要事件，<= 30 字符。
         - `chronicle_text` (TEXT): 详细剧情，100~1000 字符，建议 300~500 字。
 
         【表 character_memory】角色记忆，本回合有互动或内心活动的角色分别 INSERT 一条。
-        - `character_name` (TEXT): 角色名（如"菜月昴"、"爱蜜莉雅"）。
-        - `round_index` (TEXT): 大回合编号，即 "{{round.RoundIndex}}"。
-        - `memory_text` (TEXT): 该角色本回合私有记忆，<= 400 字符。
-        - `emotional_state` (TEXT): 情感状态（如"振奋"、"警惕"）。
-        - `created_at` (TEXT): 创建时间，格式 'yyyy-MM-dd HH:mm'。
+        - `character_name`, `round_index`, `memory_text`(<=400字), `emotional_state`, `created_at`('yyyy-MM-dd HH:mm')。
 
-        【表 global_state】全局状态，发生地点转移/章节变迁/时间流逝时 UPDATE。
-        - 只能 `UPDATE global_state SET ... WHERE row_id = 1`。
+        【表 global_state】全局状态，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
         - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `current_chapter`, `is_lewd`('是'/'否')。
 
-        【表 protagonist_info】主角状态/位置/物资。
-        - 只能 `UPDATE protagonist_info SET ... WHERE row_id = 1`。
+        【表 protagonist_info】主角状态/位置/物资，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
         - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`。
 
         【表 important_npc】重要 NPC 的引入与状态维护。
-        - 先判断角色是否已在【当前表格数据】的「已在册NPC」列表（按全名/规范名比对，注意别名）：
-          · 已在册 → 只能 `UPDATE important_npc SET ... WHERE name = '全名'`，禁止再 INSERT。
-          · 全新角色 → 用 `INSERT OR IGNORE INTO important_npc (...) VALUES (...)`（务必带 OR IGNORE 防同名冲突）。
-        - `name` 必须用【全名/规范名】（如"罗兹瓦尔·L·梅瑟斯"而非"罗兹瓦尔"，"碧翠丝"而非"贝蒂"）。
-        - 切勿对同一角色在同批 SQL 里既 INSERT 又 UPDATE；不要为已在册角色重复 INSERT。
+        - 先判断角色是否已在【当前表格数据】的 NPC 列表（按全名/规范名比对）：
+          · 已在册 → UPDATE WHERE name = '全名'，禁止 INSERT。
+          · 全新 → INSERT OR IGNORE INTO important_npc (...) VALUES (...)。
+        - `name` 必须用全名/规范名。禁止同角色同一批既 INSERT 又 UPDATE。
         - INSERT 必填: `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(如'体质:50; 敏捷:50; 感知:50; 意志:50'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`。
-        - 可更新: `location_name`, `relations_text`, `interaction_options`, `self_status`, `brief_intro`, `appearance`, `identity_text`, `base_attributes`, `special_attributes`。
+        - 属性规则同主角：基础属性 "{名称}:{数值}" 数值[5,95]；特有属性数值[0,100]。标尺: 5-14缺失 | 15-41弱项 | 42-59平均 | 60-77精英 | 78-86极限 | 87-95破格。
+
+        【表 world_map_points】世界地图点（地点目录），其他表引用地点时必须在此表存在。
+        - 按 `location_name`（详细地点 UNIQUE）判 INSERT/UPDATE。
+        - 必填: `location_name`, `minor_region`, `major_region`, `location_type`([住宅,学校,遗迹,地牢,交通,特殊,商业,医疗,行政,野外]), `environment_desc`(<=60字), `importance`([核心,重要,普通]), `exploration_status`([未探索,部分探索,已探索])。
+        - 每个地点只填该层级名称，如御苑（详细）/ 新宿区（次要）/ 东京都（主要）。
+        - 禁止 DELETE 任何地点；条数建议 <=20。
+
+        【表 map_elements】地图元素（非重要 NPC 的可交互事物），禁止 DELETE chronicle 之外的注意。
+        - 只录四类: 剧情物品、威胁、龙套、地标。按 `element_name`(UNIQUE) 判 INSERT/UPDATE。
+        - 必填: `element_name`, `element_type`([剧情物品,威胁,龙套,地标]), `location_name`, `element_desc`(<=40字), `status_text`, `interaction_options`(英文逗号分隔，不为空)。
+        - 每个地点 <=5 条，全表 <=30 条。允许 DELETE 失效元素。
+
+        【表 factions】势力/组织/阵营。
+        - 按 `faction_name`(UNIQUE) 判 INSERT/UPDATE。
+        - 必填: `faction_name`, `description`(<=60字)；可选: `leader`, `relations_text`(格式 "对象:关系词; 对象:关系词"，关系词从[同盟,敌对,中立,竞争,合作]选), `headquarters`。
+        - 准入：与主线相关、与主角互动、有多名成员或控制区域、会多次出现。一次性背景组织不录。禁止 DELETE。
+
+        【表 inventory】物品（非装备类）。
+        - 按 `item_name`(UNIQUE, <=10字) 判 INSERT/UPDATE。
+        - 必填: `item_name`, `item_type`, `quantity`(>=0), `quality`([普通,优秀,稀有,史诗,传说,神话]), `description`(<=60字)。
+        - 可堆叠物品只改 quantity，不新建行。禁止 DELETE（耗尽后 quantity=0）。
+
+        【表 equipment】装备。
+        - 按 `equipment_name`(UNIQUE) 判 INSERT/UPDATE。每件装备单独一行不合并。
+        - 必填: `equipment_name`, `equipment_type`, `quality`([普通,优秀,稀有,史诗,传说,神话]), `status_text`([已装备,闲置]), `description`(<=40字)。
+        - 卸下→status='闲置'保留；丢弃→DELETE。建议 <=15 条。
+
+        【表 quests】任务。
+        - 按 `quest_name`(UNIQUE) 判 INSERT/UPDATE。不收单轮小动作。
+        - 必填: `quest_name`, `quest_type`([主线,支线,日常]), `priority_level`([紧急,重要,普通]), `target_desc`(<=100字), `progress_text`('0%'~'100%' 必须带百分号), `status_tag`([进行中,已完成,已失败,已放弃])；可选: `source_text`, `reward_text`。
+        - 禁止 DELETE。进度与状态是两列，百分号只在 progress_text。
+
+        ## 表初始化检测（重要！）
+        拿到<当前表格数据>后，第一件事是检查各业务表的行数。
+        若某表行数为 0（空表），表示这是新游戏开局，你必须根据<正文数据>和<背景设定>为这张表生成合适的初始数据。
+        需要初始化的空表包括（global_state 和 protagonist_info 除外，它们由系统维护）：
+        - world_map_points 为空 → 为当前主要地区至少 INSERT 3 条详细地点，并包含主角所在地点。
+        - map_elements 为空 → 按四类定义为当前地点生成 1-8 条元素。
+        - factions 为空 → 插入 0-4 个与初始剧情相关的势力。
+        - important_npc 为空 → 根据故事背景插入首个场景里出场的核心角色。
+        - inventory 为空 → 添加主角应携带的初始物品 1-6 件。
+        - equipment 为空 → 添加主角初始装备 1-4 件。
+        - quests 为空 → 插入 1-3 个初始任务（含主线）。
+        初始化时，每条 INSERT 的 row_id 用 `(SELECT COALESCE(MAX(row_id), 0) + 1 FROM 表名)` 计算。
 
         <当前表格数据>
         {{databaseSummary}}
