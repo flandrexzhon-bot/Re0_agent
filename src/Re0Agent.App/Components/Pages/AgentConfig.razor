@@ -150,7 +150,7 @@
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
                         <div>
                             <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">输入 Token 限制</label>
                             <input type="number" step="1000" min="256" @bind="selectedConfig.MaxInputTokens" />
@@ -158,13 +158,6 @@
                         <div>
                             <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">输出 Token 限制 (Max)</label>
                             <input type="number" step="256" min="256" @bind="selectedConfig.MaxTokens" />
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">响应格式</label>
-                            <select @bind="selectedConfig.ResponseFormat">
-                                <option value="JSON">JSON 格式</option>
-                                <option value="Text">纯文本格式</option>
-                            </select>
                         </div>
                     </div>
 
@@ -309,7 +302,6 @@
             Temperature = 0.7,
             MaxTokens = 4096,
             MaxInputTokens = 4096,
-            ResponseFormat = "JSON",
             SystemPrompt = "",
             Enabled = 1
         };
@@ -428,28 +420,24 @@
                 selectedConfig.ModelName = "gemini-1.5-flash";
                 selectedConfig.MaxTokens = 8192;
                 selectedConfig.MaxInputTokens = 1048576;
-                selectedConfig.ResponseFormat = "JSON";
                 break;
             case "deepseek":
                 selectedConfig.ApiEndpoint = "https://api.deepseek.com/v1";
                 selectedConfig.ModelName = "deepseek-chat";
                 selectedConfig.MaxTokens = 4096;
                 selectedConfig.MaxInputTokens = 64000;
-                selectedConfig.ResponseFormat = "Text";
                 break;
             case "openai":
                 selectedConfig.ApiEndpoint = "https://api.openai.com/v1";
                 selectedConfig.ModelName = "gpt-4o-mini";
                 selectedConfig.MaxTokens = 4096;
                 selectedConfig.MaxInputTokens = 128000;
-                selectedConfig.ResponseFormat = "JSON";
                 break;
             case "ollama":
                 selectedConfig.ApiEndpoint = "http://localhost:11434/v1";
                 selectedConfig.ModelName = "llama3";
                 selectedConfig.MaxTokens = 2048;
                 selectedConfig.MaxInputTokens = 8192;
-                selectedConfig.ResponseFormat = "Text";
                 break;
         }
         statusMessage = $"已加载 {provider} 模板预设，请记得填写通灵密钥 (API Key)。";

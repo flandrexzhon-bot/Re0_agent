@@ -133,9 +133,6 @@ public sealed class AgentConfig
     [Column("max_input_tokens")]
     public int MaxInputTokens { get; set; } = 4096;
 
-    [Column("response_format")]
-    public string ResponseFormat { get; set; } = "JSON";
-
     /// <summary>是否启用思考模式（DeepSeek 等推理模型，OpenAI 格式 reasoning）。</summary>
     [Column("enable_thinking")]
     public bool EnableThinking { get; set; } = false;

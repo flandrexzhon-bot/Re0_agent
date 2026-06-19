@@ -7,7 +7,6 @@ public sealed record LlmOptions(
     double Temperature,
     int MaxTokens,
     int MaxInputTokens = 4096,
-    string ResponseFormat = "JSON",
     bool EnableThinking = false,
     string ReasoningEffort = "medium")
 {

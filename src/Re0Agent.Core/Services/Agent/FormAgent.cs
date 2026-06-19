@@ -18,20 +18,12 @@ public sealed partial class FormAgent(
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("Form", "填表Agent", cancellationToken);
-        var options = AgentConfigResolver.ToLlmOptions(config);
-
-        // 填表 Agent 输出 <tableEdit> 标签包裹的裸 SQL，必须走纯文本模式，
-        // 否则 JSON 响应格式会强制模型吐 json_object，无法输出标签。
-        if (options is not null)
-        {
-            options = options with { ResponseFormat = "Text" };
-        }
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
                 AgentName = "填表Agent",
-                Options = options,
+                Options = AgentConfigResolver.ToLlmOptions(config),
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是填表Agent，按 <tableEdit> 格式输出 SQL。"),

@@ -73,11 +73,6 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             ["stream"] = stream
         };
 
-        if (options.ResponseFormat == "JSON")
-        {
-            payload["response_format"] = new { type = "json_object" };
-        }
-
         // DeepSeek 思考模式（OpenAI 格式）：thinking.type 是真正的开关，
         // 且 DeepSeek 默认 enabled，故关闭时也必须显式发送 disabled。
         if (IsDeepSeek(options))
