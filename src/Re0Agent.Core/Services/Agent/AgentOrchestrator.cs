@@ -115,26 +115,11 @@ public sealed class AgentOrchestrator(
         // 避免被当成新角色重复引入。
         var aliasGroups = await nameResolver.LoadGroupsAsync(cancellationToken);
 
-        // 2. Determine current location from protagonist for NPC insertion
-        var currentLocation = "王都";
-        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        if (protagonist is not null)
-        {
-            currentLocation = protagonist.LocationName;
-        }
-
-        // 3. Ensure all parsed NPCs exist in the database and are marked "在场"
-        foreach (var parsed in parsedSlots)
-        {
-            if (parsed.IsPlayer) continue;
-            await EnsureNpcExistsAsync(parsed.Name, currentLocation, aliasGroups, cancellationToken);
-        }
-
-        // 4. Load active profiles from database (now including any newly created ones)
+        // 3. Load active profiles from database
         var dbProfiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         var dbNpcProfiles = dbProfiles.Where(p => !p.IsPlayerControlled).ToList();
 
-        // 5. Build NPC profiles list to run
+        // 4. Build NPC profiles list to run
         var npcProfilesToRun = new List<(CharacterAgentProfile Profile, int Slot)>();
         var usedDbNpcs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -490,45 +475,4 @@ public sealed class AgentOrchestrator(
         return $"{result.Command} => {outcomeText}{rollText}{detail}";
     }
 
-    private async Task EnsureNpcExistsAsync(string npcName, string currentLocation, IReadOnlyList<CharacterNameResolver.AliasGroup> aliasGroups, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(npcName)) return;
-
-        // 别名感知去重：先按名字精确查，再按规范名归一比对所有在册 NPC。
-        var existing = await dbContext.ImportantNpcs
-            .FirstOrDefaultAsync(n => n.Name.ToLower() == npcName.ToLower(), cancellationToken);
-
-        if (existing is null)
-        {
-            var allNpcs = await dbContext.ImportantNpcs.ToListAsync(cancellationToken);
-            existing = allNpcs.FirstOrDefault(n =>
-                CharacterNameResolver.IsSameCharacter(aliasGroups, n.Name, npcName));
-        }
-
-        if (existing is null)
-        {
-            var newNpc = new ImportantNpc
-            {
-                Name = npcName,
-                Gender = "未知",
-                Age = 18,
-                BriefIntro = "由GM剧情引入的角色",
-                Appearance = "由GM剧情引入的角色",
-                IdentityText = "由GM剧情引入的角色",
-                BaseAttributes = "体质:50; 敏捷:50; 感知:50; 意志:50",
-                LocationName = currentLocation,
-                RelationsText = "暂无详细记录",
-                InteractionOptions = "交谈; 观察; 离开",
-                PastExperience = "暂无详细记录",
-                SelfStatus = "正常"
-            };
-            dbContext.ImportantNpcs.Add(newNpc);
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        else if (string.IsNullOrWhiteSpace(existing.InteractionOptions) || existing.InteractionOptions == "无")
-        {
-            existing.InteractionOptions = "交谈; 观察; 离开";
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-    }
 }
