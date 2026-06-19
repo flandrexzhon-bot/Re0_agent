@@ -13,6 +13,7 @@ public sealed class PromptComposer
         RagContext? ragContext = null,
         string? chapterInfo = null)
     {
+        var worldSettings = ragContext?.Content ?? "暂无设定。";
         var locationText = string.IsNullOrWhiteSpace(currentLocation) ? "未知" : currentLocation;
         var protagonistName = allProfiles.FirstOrDefault(p => p.IsPlayerControlled)?.CharacterName ?? "菜月昴";
         var npcNames = allProfiles.Where(p => !p.IsPlayerControlled).Select(p => p.CharacterName).ToList();
@@ -40,6 +41,10 @@ public sealed class PromptComposer
         <content>
         {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
         </content>
+        开普勒先生递给你一本书，上面写着设定与角色手册。
+        里面写着：
+        World_settings:{{worldSettings}}
+        泉此方："哦哦！都是我认识的角色！好幸福！"
         本章剧情：{{chapterInfo ?? "无"}}
 
         <Chain_of_Thought>

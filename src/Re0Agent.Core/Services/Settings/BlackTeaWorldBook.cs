@@ -11,29 +11,6 @@ public static class BlackTeaWorldBook
         {
             Keys = [],
             SecondaryKeys = [],
-            Comment = "变量提示词",
-            Content = """
-            ---
-            <current_date>
-            chapter: <%= getvar('stat_data.chapter') %>
-            </current_date>
-            
-            rule: 在回复末尾输出<update>
-              <update>
-              _.set('chapter', ${新值});
-              </update>
-            """,
-            Constant = true,
-            Selective = true,
-            InsertionOrder = 5,
-            Enabled = true,
-            Position = "after_char",
-            UseRegex = true
-        },
-        new WorldBookEntry
-        {
-            Keys = [],
-            SecondaryKeys = [],
             Comment = "⚙️基础&世界设定",
             Content = """
             <世界基础设定>
