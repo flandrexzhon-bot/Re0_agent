@@ -71,11 +71,11 @@ public sealed class AgentLlmClient(
 
     private static string GetSystemPrompt(LlmRequest request)
     {
-        return string.Join("\n---\n", request.Messages.Where(m => m.Role == "system").Select(m => m.Content));
+        return string.Join("\n---\n", request.Messages.Where(m => m.Role == "system").Select(m => PromptMacros.Expand(m.Content)));
     }
 
     private static string GetUserPrompt(LlmRequest request)
     {
-        return string.Join("\n---\n", request.Messages.Where(m => m.Role != "system").Select(m => m.Content));
+        return string.Join("\n---\n", request.Messages.Where(m => m.Role != "system").Select(m => PromptMacros.Expand(m.Content)));
     }
 }

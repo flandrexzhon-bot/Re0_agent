@@ -91,6 +91,16 @@ public sealed class Phase3RagAndDiceTests
         // 双冒号与单冒号都支持，前后文保留。
         var singleColonResult = PromptMacros.Expand("{{random:致,献}}你");
         Assert.True(singleColonResult.StartsWith("致") || singleColonResult.StartsWith("献"), $"应为'致你'或'献你'，实际'{singleColonResult}'");
+        // C# 安全格式 {#random::...#}。
+        var hashResult = PromptMacros.Expand("{#random::甲,乙,丙#}后文");
+        Assert.True(hashResult.StartsWith("甲") || hashResult.StartsWith("乙") || hashResult.StartsWith("丙"), $"应为'甲/乙/丙后文'，实际'{hashResult}'");
+        Assert.EndsWith("后文", hashResult);
+        // {#random:...#} 单冒号。
+        Assert.Contains(PromptMacros.Expand("{#random:左,右#}"), new[] { "左", "右" });
+        // 多行内容中包含 {#random::...#}。
+        var multiLine = "前文\n{#random::春,夏,秋,冬#}\n后文";
+        var multiResult = PromptMacros.Expand(multiLine);
+        Assert.Contains(multiResult, new[] { "前文\n春\n后文", "前文\n夏\n后文", "前文\n秋\n后文", "前文\n冬\n后文" });
         // 嵌套：内层先展开。
         Assert.Contains(PromptMacros.Expand("{{random::{{random::x,y}},z}}"), new[] { "x", "y", "z" });
         // 无宏内容原样返回。
