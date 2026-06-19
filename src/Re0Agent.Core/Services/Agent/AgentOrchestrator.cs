@@ -11,6 +11,7 @@ public sealed class AgentOrchestrator(
     Re0AgentDbContext dbContext,
     GmAgent gmAgent,
     CharacterSubAgent characterSubAgent,
+    ChapterSwitchAgent chapterSwitchAgent,
     CharacterAgentService characterAgentService,
     FormAgent formAgent,
     FormAgentSqlExecutor sqlExecutor,
@@ -302,15 +303,19 @@ public sealed class AgentOrchestrator(
         Func<GameRound, Task>? onStepCompleted,
         CancellationToken cancellationToken)
     {
-        // 已移除"回合总结GM"步骤；死亡回归在各角色回合的骰子判定中检测，
-        // 章节切换从 GM 开场与角色回合文本中检测。
-        await DetectAndApplyChapterChangesAsync(round, cancellationToken);
-
+        // 并发运行章节切换 Agent 与填表 Agent。
         if (onStepCompleted is not null)
         {
             await onStepCompleted(round);
         }
         await ApplyDelayAsync(cancellationToken);
+
+        // 章节切换：启动但不等待 —— 填表 SQL 不依赖章节切换结果。
+        var chapterSwitchTask = chapterSwitchAgent.RunAsync(
+            round,
+            dbSummary: null,
+            lastChronicle: null,
+            cancellationToken: cancellationToken);
 
         int maxFormRetries = 3;
         int formAttempt = 0;
@@ -339,6 +344,35 @@ public sealed class AgentOrchestrator(
         if (formSuccess && formExecution is not null)
         {
             round.Events.Add($"填表Agent执行SQL：{formExecution.StatementsExecuted}条。");
+        }
+
+        // 等待章节切换完成并应用结果。
+        try
+        {
+            var newChapter = await chapterSwitchTask;
+            if (newChapter is not null)
+            {
+                var globalState = await dbContext.GlobalStates.FirstOrDefaultAsync(cancellationToken);
+                if (globalState is not null && globalState.CurrentChapter != newChapter.Value)
+                {
+                    globalState.CurrentChapter = newChapter.Value;
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                    round.Chapter = newChapter.Value;
+                    round.Events.Add($"帕秋莉判断需要切换章节：第 {newChapter.Value} 章。");
+                }
+                else
+                {
+                    round.Events.Add($"帕秋莉判断无需切换章节（当前第{round.Chapter}章）。");
+                }
+            }
+            else
+            {
+                round.Events.Add($"帕秋莉判断无需切换章节（当前第{round.Chapter}章）。");
+            }
+        }
+        catch (Exception ex)
+        {
+            round.Events.Add($"章节切换Agent异常：{ex.Message}");
         }
 
         if (onStepCompleted is not null)
@@ -458,38 +492,6 @@ public sealed class AgentOrchestrator(
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
         return $"{result.Command} => {outcomeText}{rollText}{detail}";
-    }
-
-    private async Task DetectAndApplyChapterChangesAsync(
-        GameRound round,
-        CancellationToken cancellationToken)
-    {
-        var texts = new List<string?> { round.GmOpening, round.GmSummary };
-        foreach (var turn in round.CharacterTurns)
-        {
-            texts.Add(turn.ActionText);
-            texts.Add(turn.ResultResponse);
-            texts.Add(turn.GmJudgement);
-        }
-
-        foreach (var text in texts)
-        {
-            if (string.IsNullOrWhiteSpace(text)) continue;
-
-            var match = System.Text.RegularExpressions.Regex.Match(text, @"_\.set\(\s*['""]chapter['""]\s*,\s*(\d+)\s*\)");
-            if (match.Success && int.TryParse(match.Groups[1].Value, out var newChapter))
-            {
-                var globalState = await dbContext.GlobalStates.FirstOrDefaultAsync(cancellationToken);
-                if (globalState is not null && globalState.CurrentChapter != newChapter)
-                {
-                    globalState.CurrentChapter = newChapter;
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                    round.Chapter = newChapter;
-                    round.Events.Add($"[EJS / GM 章节切换] 检测到章节变更指令，当前章节已切换为：第 {newChapter} 章");
-                    break;
-                }
-            }
-        }
     }
 
     private async Task EnsureNpcExistsAsync(string npcName, string currentLocation, IReadOnlyList<CharacterNameResolver.AliasGroup> aliasGroups, CancellationToken cancellationToken)

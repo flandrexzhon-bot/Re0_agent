@@ -68,6 +68,7 @@ public sealed class CharacterSubAgent(
             cancellationToken);
 
         var currentLocation = state?.CurrentLocation ?? "";
+        var chapterInfo = ChapterData.GetCurrentChapterText(chapter);
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest
@@ -76,7 +77,7 @@ public sealed class CharacterSubAgent(
                 Options = AgentConfigResolver.ToLlmOptions(config),
                 Messages =
                 [
-                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, history, currentLocation, ragContext))
+                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, history, currentLocation, ragContext, chapterInfo))
                 ]
             },
             cancellationToken);

@@ -41,6 +41,7 @@ public static class MauiProgram
         builder.Services.AddScoped<CharacterNameResolver>();
         builder.Services.AddScoped<GmAgent>();
         builder.Services.AddScoped<CharacterSubAgent>();
+        builder.Services.AddScoped<ChapterSwitchAgent>();
         builder.Services.AddScoped<CharacterAgentService>();
         builder.Services.AddScoped<FormAgent>();
         builder.Services.AddScoped<SqlSafetyValidator>();

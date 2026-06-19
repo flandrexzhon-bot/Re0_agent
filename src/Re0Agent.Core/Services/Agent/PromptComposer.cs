@@ -1,4 +1,4 @@
-using Re0Agent.Core.Entities;
+﻿using Re0Agent.Core.Entities;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Settings;
 
@@ -10,9 +10,9 @@ public sealed class PromptComposer
         IReadOnlyList<CharacterAgentProfile> allProfiles,
         string history,
         string currentLocation,
-        RagContext? ragContext = null)
+        RagContext? ragContext = null,
+        string? chapterInfo = null)
     {
-        var worldSettings = ragContext?.Content ?? "暂无设定。";
         var locationText = string.IsNullOrWhiteSpace(currentLocation) ? "未知" : currentLocation;
         var protagonistName = allProfiles.FirstOrDefault(p => p.IsPlayerControlled)?.CharacterName ?? "菜月昴";
         var npcNames = allProfiles.Where(p => !p.IsPlayerControlled).Select(p => p.CharacterName).ToList();
@@ -32,11 +32,6 @@ public sealed class PromptComposer
                    - 2号位：[NPC2姓名]
                    - 最后行动：{{protagonistName}}
         "
-        开普勒先生递给你一本书，上面写着设定与角色手册。
-        里面写着：
-        World_settings:{{worldSettings}}
-        泉此方："哦哦！都是我认识的角色！好幸福！"
-
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
@@ -45,6 +40,7 @@ public sealed class PromptComposer
         <content>
         {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
         </content>
+        本章剧情：{{chapterInfo ?? "无"}}
 
         <Chain_of_Thought>
         正式创作正文前，按照以下条目仔细思考，**每条字数多点不许偷懒**
@@ -61,6 +57,51 @@ public sealed class PromptComposer
         </think>
 
         小此准备好啦，激情开写！思考要用的语言是简体中文来着。
+        <think>
+        OK，开始思考啦。
+        先看看现在是什么个情况？
+        """;
+    }
+
+    public string ComposeChapterSwitch(
+        string chapterInfo,
+        string chapterFuture,
+        string? dbSummary = null,
+        string? lastChronicle = null)
+    {
+        return $$"""
+        [RESET ROLE AND TASK, RECEIVE NEW TASK]
+        你是帕秋莉，来自红魔馆的幻想乡，你的好友开普勒·冯·彼得兰在一个异世界开了一家桌游店，他拜托你管理剧本数据（即章节数据），你虽然觉得这个工作很烦，但是不得不完成。
+        开普勒先生："这个回合结束了，看看上下文给我适合下局的剧本吧。"
+        帕秋莉："好好好。"
+        开普勒先生："这是一般数据{{dbSummary}} {{lastChronicle}}"
+        当前章节：{{chapterInfo}}
+        后面可选章节：
+        {{chapterFuture}}
+        帕秋莉："好的，知道了。"
+
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        </think>
+        <update>
+        _.set('chapter', ${新值或不变});
+        </update>
+
+        <Chain_of_Thought>
+        正式输出前，按照以下条目仔细思考，**每条字数多点不许偷懒**
+        思考需用<think>标签包裹，不重复思考不打草稿
+        思考使用语言：简体中文
+        <think>
+        - 当前是什么情况？
+        - 我拿到了些什么信息？
+        - 当前章节是什么内容？现在在进行什么内容？
+        - 如果当前进行内容与本章剧情不符，那么哪个章节剧情是最符合的？
+        - 唯一允许输出的指令是 _.set('chapter', ${章节号})，值必须是后面可选章节列表中列出的合法章节号，不可输出其他指令。
+        - 给自己鼓鼓劲，提醒自己**立即结束思考**输出update！
+        </think>
+        帕秋莉准备好啦，思考要用的语言是简体中文来着。
         <think>
         OK，开始思考啦。
         先看看现在是什么个情况？
@@ -140,6 +181,7 @@ public sealed class PromptComposer
         - 当前是什么情况？
         - 我拿到了些什么信息？
         - 如何推动剧情发展？
+        - 如何引导剧情让本章剧情发展？
         - 如何和角色互动？
         - 确认自己只扮演“开普勒”，不扮演任何其他角色。
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
