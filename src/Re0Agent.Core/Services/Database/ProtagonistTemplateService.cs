@@ -39,10 +39,18 @@ public sealed class ProtagonistTemplateService(
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
 
-        var exists = await dbContext.ProtagonistTemplates
-            .AnyAsync(template => template.TemplateName == SubaruName, cancellationToken);
-        if (exists)
+        var baseData = JsonSerializer.Serialize(CreateDefaultSubaruProtagonist(), JsonOptions);
+
+        var existing = await dbContext.ProtagonistTemplates
+            .FirstOrDefaultAsync(template => template.TemplateName == SubaruName, cancellationToken);
+        if (existing is not null)
         {
+            // 内置默认模板由代码定义，始终刷新为最新预设（六维属性/HP/技能等）。
+            if (existing.IsDefault == 1 && !string.Equals(existing.BaseData, baseData, StringComparison.Ordinal))
+            {
+                existing.BaseData = baseData;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
             return;
         }
 
@@ -50,7 +58,7 @@ public sealed class ProtagonistTemplateService(
         {
             TemplateName = SubaruName,
             IncludesSubaru = 0,
-            BaseData = JsonSerializer.Serialize(CreateDefaultSubaruProtagonist(), JsonOptions),
+            BaseData = baseData,
             IsDefault = 1
         });
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -88,16 +96,8 @@ public sealed class ProtagonistTemplateService(
         var protagonist = ReadTemplateProtagonist(template.BaseData);
         protagonist.RowId = 1;
 
-        var startingLocation = startingChapter switch
-        {
-            1 => "王都",
-            7 => "罗兹瓦尔宅邸",
-            18 => "王都",
-            53 => "圣域",
-            82 => "水门都市",
-            _ => "王都"
-        };
-        protagonist.LocationName = startingLocation;
+        // 不再硬编码初始地点：留空，由填表 Agent 在首回合按世界书生成。
+        protagonist.LocationName = string.Empty;
 
         var addedSubaruNpc = false;
         var transaction = dbContext.Database.CurrentTransaction is null
@@ -230,33 +230,20 @@ public sealed class ProtagonistTemplateService(
         await dbContext.SavePoints.ExecuteDeleteAsync(cancellationToken);
         await dbContext.ImportantNpcs.ExecuteDeleteAsync(cancellationToken);
 
-        var (majorRegion, minorRegion) = GetRegionForLocation(protagonist.LocationName);
-
         dbContext.GlobalStates.Add(new GlobalState
         {
             RowId = 1,
-            CurrentLocation = protagonist.LocationName,
-            CurrentMinorRegion = minorRegion,
-            CurrentMajorRegion = majorRegion,
+            CurrentLocation = string.Empty,
+            CurrentMinorRegion = string.Empty,
+            CurrentMajorRegion = string.Empty,
             ElapsedTime = "0分钟",
             CurTime = "2024-04-01 09:00",
             CurrentChapter = startingChapter,
             IsLewd = "否"
         });
 
-        // 不再为初始章节硬编码 world_map_points 起始地点：
-        // world_map_points 留空，由填表 Agent 在首回合按世界书生成（含主角所在地点）。
-    }
-
-    private static (string Major, string Minor) GetRegionForLocation(string location)
-    {
-        return location switch
-        {
-            "罗兹瓦尔宅邸" => ("梅札斯领", "宅邸"),
-            "圣域" => ("克莱恩乡", "圣域墓地"),
-            "水门都市" => ("利契亚", "水门都市"),
-            _ => ("露格尼卡", "王都中心")
-        };
+        // 不再硬编码任何初始地点：world_map_points 与 global_state 地点字段均留空，
+        // 由填表 Agent 在首回合按世界书生成（含主角所在地点）。
     }
 
     private async Task UpsertSubaruNpcAsync(
@@ -317,10 +304,10 @@ public sealed class ProtagonistTemplateService(
             Appearance = "黑发黑眼，穿运动服的少年",
             IdentityText = "异世界来客",
             SelfStatus = "正常",
-            LocationName = "王都",
+            LocationName = string.Empty,
             BaseAttributes = "力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9",
             SpecialAttributes = "死亡回归:特殊",
-            ResourcesText = "手机; 零基础异世界知识",
+            ResourcesText = string.Empty,
             Hp = 100,
             MaxHp = 100,
             Mp = 5,

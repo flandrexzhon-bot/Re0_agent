@@ -131,7 +131,7 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
-    public async Task TemplateOverridesLocationBasedOnChapter()
+    public async Task TemplateLeavesLocationEmptyForFormAgent()
     {
         var databasePath = CreateTempDatabasePath();
 
@@ -143,18 +143,19 @@ public sealed class Phase4SaveAndTemplateTests
             await templateService.EnsureDefaultTemplateAsync();
             var template = await context.ProtagonistTemplates.SingleAsync(item => item.TemplateName == "菜月昴");
 
-            // Apply with Chapter 53 (should override starting location to "圣域")
+            // 不再硬编码任何初始地点：地点字段留空，由填表 Agent 生成；章节仍按入参设置。
             var result = await templateService.ApplyTemplateAsync(template.TemplateId, 53);
             context.ChangeTracker.Clear();
 
             var protagonist = await context.ProtagonistInfo.SingleAsync();
-            Assert.Equal("圣域", protagonist.LocationName);
+            Assert.Equal(string.Empty, protagonist.LocationName);
 
             var globalState = await context.GlobalStates.SingleAsync();
-            Assert.Equal("圣域", globalState.CurrentLocation);
-            Assert.Equal("克莱恩乡", globalState.CurrentMajorRegion);
-            Assert.Equal("圣域墓地", globalState.CurrentMinorRegion);
+            Assert.Equal(string.Empty, globalState.CurrentLocation);
             Assert.Equal(53, globalState.CurrentChapter);
+
+            // 初始地点表应为空（无硬编码地点）。
+            Assert.Empty(await context.WorldMapPoints.ToListAsync());
         }
         finally
         {
