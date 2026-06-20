@@ -67,4 +67,57 @@ public sealed class Phase2AgentTests
 
         Assert.NotEmpty(entries);
     }
+
+    [Fact]
+    public void RoundContextIncludesCurrentRoundEvenWithEmptyChronicle()
+    {
+        var round = new Re0Agent.Core.Models.GameRound
+        {
+            RoundIndex = "R1",
+            Chapter = 1,
+            GmOpening = "王都广场，菜月昴刚刚抵达。",
+            CharacterTurns =
+            {
+                new Re0Agent.Core.Models.CharacterTurn
+                {
+                    RoundIndex = "R1", OrderNumber = 1, CharacterName = "菜月昴",
+                    ActionText = "他四处张望，试图弄清状况。"
+                }
+            }
+        };
+
+        // 编年史为空（开局/并发未写入）时，历史仍应包含本回合原版上下文，而非"无历史"。
+        var history = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(
+            round, []);
+
+        Assert.DoesNotContain("无历史记录", history);
+        Assert.Contains("王都广场", history);
+        Assert.Contains("菜月昴", history);
+        Assert.Contains("他四处张望", history);
+    }
+
+    [Fact]
+    public void RoundContextMergesChronicleSummariesAndCurrentRound()
+    {
+        var round = new Re0Agent.Core.Models.GameRound
+        {
+            RoundIndex = "R2",
+            Chapter = 1,
+            GmOpening = "次日清晨。"
+        };
+        var chronicle = new[]
+        {
+            new Re0Agent.Core.Entities.ChronicleEntry
+            {
+                CodeIndex = "AM0001", TimeSpan = "x ~ y",
+                Summary = "抵达王都", ChronicleText = "菜月昴抵达王都并卷入事件。"
+            }
+        };
+
+        var history = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(round, chronicle);
+
+        Assert.Contains("AM0001", history);
+        Assert.Contains("抵达王都", history);
+        Assert.Contains("次日清晨", history);
+    }
 }
