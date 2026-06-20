@@ -27,7 +27,11 @@ public static class MauiProgram
         builder.Services.AddSingleton(new DatabaseLocation(databasePath));
         builder.Services.AddDbContext<Re0AgentDbContext>(options =>
             options.UseSqlite($"Data Source={databasePath}"));
-        builder.Services.AddSingleton<HttpClient>();
+        builder.Services.AddSingleton<HttpClient>(_ => new HttpClient
+        {
+            // 提高 LLM 请求超时上限：填表/大上下文请求常超过默认 100 秒。
+            Timeout = TimeSpan.FromMinutes(10)
+        });
         builder.Services.AddScoped<OpenAiCompatibleLlmClient>();
         builder.Services.AddScoped<ILlmClient, AgentLlmClient>();
         builder.Services.AddSingleton<ChapterVariantRenderer>();

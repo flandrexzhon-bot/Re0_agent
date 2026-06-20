@@ -69,7 +69,7 @@ public sealed class Phase2AgentTests
     }
 
     [Fact]
-    public void RoundContextIncludesCurrentRoundEvenWithEmptyChronicle()
+    public void RoundContextMergesChronicleSummariesAndCurrentRoundRawText()
     {
         var round = new Re0Agent.Core.Models.GameRound
         {
@@ -85,26 +85,6 @@ public sealed class Phase2AgentTests
                 }
             }
         };
-
-        // 编年史为空（开局/并发未写入）时，历史仍应包含本回合原版上下文，而非"无历史"。
-        var history = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(
-            round, []);
-
-        Assert.DoesNotContain("无历史记录", history);
-        Assert.Contains("王都广场", history);
-        Assert.Contains("菜月昴", history);
-        Assert.Contains("他四处张望", history);
-    }
-
-    [Fact]
-    public void RoundContextMergesChronicleSummariesAndCurrentRound()
-    {
-        var round = new Re0Agent.Core.Models.GameRound
-        {
-            RoundIndex = "R2",
-            Chapter = 1,
-            GmOpening = "次日清晨。"
-        };
         var chronicle = new[]
         {
             new Re0Agent.Core.Entities.ChronicleEntry
@@ -114,11 +94,16 @@ public sealed class Phase2AgentTests
             }
         };
 
-        var history = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(round, chronicle);
+        // 既含编年史(AM)总结，又含本回合 GM 开场与角色行动原版上下文。
+        var withChronicle = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(round, chronicle);
+        Assert.Contains("AM0001", withChronicle);
+        Assert.Contains("王都广场", withChronicle);
+        Assert.Contains("他四处张望", withChronicle);
 
-        Assert.Contains("AM0001", history);
-        Assert.Contains("抵达王都", history);
-        Assert.Contains("次日清晨", history);
+        // 编年史为空（开局/并发未写入）时，历史仍含本回合原版上下文，而非"无历史"。
+        var emptyChronicle = Re0Agent.Core.Services.Agent.RoundContextBuilder.BuildHistory(round, []);
+        Assert.DoesNotContain("无历史记录", emptyChronicle);
+        Assert.Contains("王都广场", emptyChronicle);
     }
 
     [Fact]

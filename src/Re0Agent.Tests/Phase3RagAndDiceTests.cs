@@ -360,26 +360,25 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Fact]
-    public async Task CombatResolverDeductsHpByCharId()
+    public async Task CombatResolverDeductsHpAndResourcesByCharId()
     {
         await using var context = await CreateSeededContextAsync();
         var resolver = new CombatResolver(context);
+
+        // 菜月昴(CharId=4, mp5/stam104) 攻击 爱蜜莉雅(CharId=2, hp400)，命中30伤害，技能耗魔3体10。
         var attackResult = new DiceResult
         {
-            Command = "攻击",
-            Outcome = "命中",
-            IsCombat = true,
-            IsSuccess = true,
-            AttackerId = 0,
-            DefenderId = 99, // no matching char → no-op
-            Damage = 30,
-            ManaCost = 0,
-            StaminaCost = 0
+            Command = "攻击", Outcome = "命中", IsCombat = true, IsSuccess = true,
+            AttackerId = 4, DefenderId = 2, Damage = 30, ManaCost = 3, StaminaCost = 10
         };
 
         var combat = await resolver.ApplyAsync(attackResult);
 
-        Assert.False(combat.ProtagonistDied); // no match → no change
+        Assert.False(combat.ProtagonistDied);
+        Assert.Equal(370, combat.RemainingHp); // 爱蜜莉雅 400-30
+        var attacker = await context.ProtagonistInfo.AsNoTracking().FirstAsync(p => p.CharId == 4);
+        Assert.Equal(2, attacker.Mp);        // 5-3
+        Assert.Equal(94, attacker.Stamina);  // 104-10
     }
 
     private static DiceEngine CreateEngine(Re0AgentDbContext context, IEnumerable<int> d6Rolls)
