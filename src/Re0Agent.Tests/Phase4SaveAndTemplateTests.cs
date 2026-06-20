@@ -40,6 +40,42 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
+    public async Task FormExecutorStripsNonIntegerChapterWriteFromGlobalState()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+            context.GlobalStates.Add(new GlobalState
+            {
+                RowId = 1, CurrentLocation = "王都", CurrentMinorRegion = "王都中心",
+                CurrentMajorRegion = "露格尼卡", ElapsedTime = "0分钟",
+                CurTime = "2024-04-01 09:00", CurrentChapter = 1, IsLewd = "否"
+            });
+            await context.SaveChangesAsync();
+
+            var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
+
+            // 填表 Agent 误把 current_chapter 写成文字（INTEGER 列会解析失败）。
+            // 既有合法字段(current_location)需保留，违规的 current_chapter 赋值被剔除。
+            var sql = "UPDATE global_state SET current_location = '罗兹瓦尔宅邸客房', current_chapter = '第七章：宅邸清晨', is_lewd = '否' WHERE row_id = 1;";
+
+            var result = await executor.ExecuteAsync([sql]);
+
+            context.ChangeTracker.Clear();
+            var state = await context.GlobalStates.SingleAsync();
+            Assert.Equal("罗兹瓦尔宅邸客房", state.CurrentLocation); // 合法更新保留
+            Assert.Equal(1, state.CurrentChapter);                  // 章节未被文字污染
+            Assert.Equal(1, result.StatementsExecuted);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task DeathReturnRestoresGameStateAndKeepsOnlyProtagonistMemory()
     {
         var databasePath = CreateTempDatabasePath();

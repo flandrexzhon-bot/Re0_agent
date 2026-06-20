@@ -20,8 +20,12 @@ public sealed partial class FormAgentSqlExecutor(
 
         // 防御：把对 important_npc 的裸 INSERT 改写为 INSERT OR IGNORE，
         // 避免角色因唯一约束(name)冲突导致整批回滚（应只更新而误插入的兜底）。
+        // 同时剥离填表 Agent 对 global_state.current_chapter 的写入：章节号由章节切换
+        // Agent 专属维护且必须为整数，模型若误写"第七章：xxx"会导致 INTEGER 列解析失败。
         var safeStatements = statements
             .Select(HardenImportantNpcInsert)
+            .Select(StripCurrentChapterAssignment)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -42,6 +46,39 @@ public sealed partial class FormAgentSqlExecutor(
             "INSERT OR IGNORE INTO important_npc");
     }
 
+    /// <summary>
+    /// 从 global_state 的 UPDATE 中剔除 current_chapter 赋值（章节切换 Agent 专属）。
+    /// 若移除后整条 UPDATE 不再有任何 SET 项，则整条丢弃。
+    /// </summary>
+    private static string StripCurrentChapterAssignment(string statement)
+    {
+        if (!CurrentChapterAssignmentRegex().IsMatch(statement))
+        {
+            return statement;
+        }
+
+        // 去掉 "current_chapter = <值>" 片段（含其后或其前的逗号）。
+        var cleaned = CurrentChapterAssignmentRegex().Replace(statement, string.Empty);
+        // 规整可能残留的 "SET ," 或 ", WHERE" 等。
+        cleaned = Regex.Replace(cleaned, @"\bSET\s*,", "SET ", RegexOptions.IgnoreCase);
+        cleaned = Regex.Replace(cleaned, @",\s*WHERE", " WHERE", RegexOptions.IgnoreCase);
+        cleaned = Regex.Replace(cleaned, @"\s{2,}", " ");
+
+        // 若 SET 子句已空（SET 紧跟 WHERE），整条 UPDATE 无意义，丢弃。
+        if (EmptySetUpdateRegex().IsMatch(cleaned))
+        {
+            return string.Empty;
+        }
+
+        return cleaned.Trim();
+    }
+
     [GeneratedRegex(@"^\s*INSERT\s+INTO\s+important_npc\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BareImportantNpcInsertRegex();
+
+    [GeneratedRegex(@",?\s*current_chapter\s*=\s*('[^']*'|""[^""]*""|[^,\s]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CurrentChapterAssignmentRegex();
+
+    [GeneratedRegex(@"\bSET\s+WHERE\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex EmptySetUpdateRegex();
 }

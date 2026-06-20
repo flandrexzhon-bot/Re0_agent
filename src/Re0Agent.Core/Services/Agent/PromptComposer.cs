@@ -734,7 +734,8 @@ public sealed class PromptComposer
         - `character_name`, `round_index`, `memory_text`(<=400字), `emotional_state`, `created_at`('yyyy-MM-dd HH:mm')。
 
         【表 global_state】全局状态，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
-        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `current_chapter`, `is_lewd`('是'/'否')。
+        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `is_lewd`('是'/'否')。
+        - 【禁止】改 `current_chapter`：章节号由章节切换 Agent 专属维护，且必须是纯整数（如 7），绝不能写成"第七章：xxx"这类文字，否则会写库失败。
 
         【表 protagonist_info】主角状态/位置/物资，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
         - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `armor`。
