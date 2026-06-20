@@ -105,7 +105,8 @@ public sealed class CharacterSubAgent(
                 Options = AgentConfigResolver.ToLlmOptions(config),
                 Messages =
                 [
-                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, history, currentLocation, compactRag, chapterInfo))
+                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, history, currentLocation, compactRag, chapterInfo)),
+                    LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },
             cancellationToken);

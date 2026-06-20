@@ -156,7 +156,21 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         if (matches.Count == 0)
         {
-            // 兜底：思维链开标签存在但未闭合（如输出被截断），剥离从该标签起的剩余内容。
+            // 场景一：assistant 前缀填充 —— <thought> 开标签在 prefill 里（不回显），
+            // 响应仅含「思维链续写 + </thought>」。剥离首个闭标签及其之前的全部内容。
+            var loneClose = System.Text.RegularExpressions.Regex.Match(
+                content,
+                @"</(think|thought)>",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (loneClose.Success
+                && !content[..loneClose.Index].Contains('<'))
+            {
+                var thoughtHead = content[..loneClose.Index].Trim();
+                var bodyTail = content[(loneClose.Index + loneClose.Length)..].Trim();
+                return (bodyTail, thoughtHead);
+            }
+
+            // 场景二：开标签存在但未闭合（如输出被截断），剥离从该标签起的剩余内容。
             var openMatch = System.Text.RegularExpressions.Regex.Match(
                 content,
                 @"<(think|thought)>",

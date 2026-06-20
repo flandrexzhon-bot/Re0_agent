@@ -6,6 +6,14 @@ namespace Re0Agent.Core.Services.Agent;
 
 public sealed class PromptComposer
 {
+    /// <summary>
+    /// AI 助手前缀填充（SillyTavern 风格 assistant prefill）。
+    /// 作为独立的 assistant 角色消息追加在用户提示词之后，让模型从这段思维链开头续写，
+    /// 引导其先用 &lt;thought&gt; 思考再产出 &lt;content&gt; 正文。
+    /// 模型续写后会补上 &lt;/thought&gt;，思维链随后由 LLM 客户端剥离，不污染下游上下文。
+    /// </summary>
+    public const string ThoughtPrefill = "<thought>\nOK，开始思考啦。\n先看看现在是什么个情况？";
+
     public string ComposeCharacterSub(
         IReadOnlyList<CharacterAgentProfile> allProfiles,
         string history,
@@ -134,9 +142,6 @@ public sealed class PromptComposer
         </thought>
 
         小此准备好啦，激情开写！思考要用的语言是简体中文来着。
-        <thought>
-        OK，开始思考啦。
-        先看看现在是什么个情况？
         """;
     }
 
@@ -290,9 +295,6 @@ public sealed class PromptComposer
         - 给自己鼓鼓劲，提醒自己**立即结束思考**输出update！
         </thought>
         帕秋莉准备好啦，思考要用的语言是简体中文来着。
-        <thought>
-        OK，开始思考啦。
-        先看看现在是什么个情况？
         """;
     }
 
@@ -447,9 +449,6 @@ public sealed class PromptComposer
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
         </thought>
         开普勒准备好啦，激情开写！思考要用的语言是简体中文来着。
-        <thought>
-        OK，开始思考啦。
-        先看看现在是什么个情况？
         """;
     }
 
@@ -642,9 +641,6 @@ public sealed class PromptComposer
         - 给自己鼓鼓劲，提醒自己**立即结束思考**开写正文！
         </thought>
         开普勒准备好啦，激情开写！思考要用的语言是简体中文来着。
-        <thought>
-        OK，开始思考啦。
-        先看看现在是什么个情况？
         """;
     }
 
