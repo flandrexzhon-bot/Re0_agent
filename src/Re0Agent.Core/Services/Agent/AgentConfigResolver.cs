@@ -149,6 +149,7 @@ public sealed class AgentConfigResolver(Re0AgentDbContext dbContext)
             config.MaxTokens,
             config.MaxInputTokens,
             config.EnableThinking,
-            config.ReasoningEffort);
+            config.ReasoningEffort,
+            config.AutoRetry);
     }
 }

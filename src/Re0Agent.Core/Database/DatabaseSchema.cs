@@ -199,7 +199,8 @@ public static class DatabaseSchema
           max_input_tokens INTEGER DEFAULT 4096,
           response_format TEXT DEFAULT 'JSON',
           enable_thinking INTEGER DEFAULT 0,
-          reasoning_effort TEXT DEFAULT 'medium'
+          reasoning_effort TEXT DEFAULT 'medium',
+          auto_retry INTEGER DEFAULT 1
         );
         """,
         """

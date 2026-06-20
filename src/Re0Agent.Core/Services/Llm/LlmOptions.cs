@@ -8,7 +8,8 @@ public sealed record LlmOptions(
     int MaxTokens,
     int MaxInputTokens = 4096,
     bool EnableThinking = false,
-    string ReasoningEffort = "medium")
+    string ReasoningEffort = "medium",
+    bool AutoRetry = true)
 {
     public bool HasUsableEndpoint =>
         !string.IsNullOrWhiteSpace(ApiEndpoint)

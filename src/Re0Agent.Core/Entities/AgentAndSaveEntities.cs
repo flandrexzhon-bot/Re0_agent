@@ -140,6 +140,10 @@ public sealed class AgentConfig
     /// <summary>思考强度（OpenAI 格式 reasoning_effort）：low / medium / high。</summary>
     [Column("reasoning_effort")]
     public string ReasoningEffort { get; set; } = "medium";
+
+    /// <summary>当输出为空或报错时自动重复请求（默认启用）。</summary>
+    [Column("auto_retry")]
+    public bool AutoRetry { get; set; } = true;
 }
 
 [Table("api_routing")]

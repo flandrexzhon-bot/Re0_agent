@@ -185,6 +185,13 @@
                     }
 
                     <div style="margin-top: 1rem;">
+                        <label class="inline-toggle">
+                            <input type="checkbox" @bind="selectedConfig.AutoRetry" />
+                            <span>输出为空或报错时自动重复请求（最多 3 次）</span>
+                        </label>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
                         <label style="display: block; font-size: 0.85rem; color: var(--color-text-secondary); margin-bottom: 0.35rem;">契约咒文 (System Prompt - 选填)</label>
                         <textarea rows="4" @bind="selectedConfig.SystemPrompt" placeholder="可选的系统级 System Prompt..."></textarea>
                     </div>

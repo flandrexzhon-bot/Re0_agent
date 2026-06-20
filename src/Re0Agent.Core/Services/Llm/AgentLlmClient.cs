@@ -10,6 +10,9 @@ public sealed class AgentLlmClient(
     OpenAiCompatibleLlmClient realClient,
     LlmLogService logService) : ILlmClient
 {
+    private const int MaxRetries = 3;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+
     public async Task<LlmResponse> SendChatAsync(
         LlmRequest request,
         CancellationToken cancellationToken = default)
@@ -27,35 +30,88 @@ public sealed class AgentLlmClient(
             throw new InvalidOperationException(err);
         }
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        try
+        var autoRetry = request.Options.AutoRetry;
+        var lastResponse = default(LlmResponse);
+        var lastException = default(Exception);
+
+        for (var attempt = 1; attempt <= (autoRetry ? MaxRetries : 1); attempt++)
         {
-            var res = await realClient.SendChatAsync(request, cancellationToken);
-            sw.Stop();
-            logService.Log(new LlmLogEntry
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (attempt > 1)
             {
-                AgentName = request.AgentName,
-                SystemPrompt = GetSystemPrompt(request),
-                UserPrompt = GetUserPrompt(request),
-                ResponseContent = res.Content,
-                ReasoningContent = res.ReasoningContent ?? string.Empty,
-                LatencyMs = sw.ElapsedMilliseconds
-            });
-            return res;
+                await Task.Delay(RetryDelay, cancellationToken);
+                logService.Log(new LlmLogEntry
+                {
+                    AgentName = request.AgentName,
+                    SystemPrompt = GetSystemPrompt(request),
+                    UserPrompt = GetUserPrompt(request),
+                    ErrorMessage = $"⏳ 自动重试第 {attempt}/{MaxRetries} 次…"
+                });
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var res = await realClient.SendChatAsync(request, cancellationToken);
+                sw.Stop();
+
+                // 判断输出是否有效（非空且非纯空白）
+                if (!string.IsNullOrWhiteSpace(res.Content))
+                {
+                    logService.Log(new LlmLogEntry
+                    {
+                        AgentName = request.AgentName,
+                        SystemPrompt = GetSystemPrompt(request),
+                        UserPrompt = GetUserPrompt(request),
+                        ResponseContent = res.Content,
+                        ReasoningContent = res.ReasoningContent ?? string.Empty,
+                        LatencyMs = sw.ElapsedMilliseconds
+                    });
+                    return res;
+                }
+
+                // 输出为空 → 触发重试
+                lastResponse = res;
+                sw.Stop();
+                logService.Log(new LlmLogEntry
+                {
+                    AgentName = request.AgentName,
+                    SystemPrompt = GetSystemPrompt(request),
+                    UserPrompt = GetUserPrompt(request),
+                    ResponseContent = res.Content,
+                    ReasoningContent = res.ReasoningContent ?? string.Empty,
+                    ErrorMessage = $"⚠️ 输出为空，触发自动重试 ({attempt}/{MaxRetries})",
+                    LatencyMs = sw.ElapsedMilliseconds
+                });
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                sw.Stop();
+                lastException = ex;
+                logService.Log(new LlmLogEntry
+                {
+                    AgentName = request.AgentName,
+                    SystemPrompt = GetSystemPrompt(request),
+                    UserPrompt = GetUserPrompt(request),
+                    ErrorMessage = $"❌ 请求异常，触发自动重试 ({attempt}/{MaxRetries}): {ex.Message}",
+                    LatencyMs = sw.ElapsedMilliseconds
+                });
+
+                if (attempt >= (autoRetry ? MaxRetries : 1))
+                {
+                    throw;
+                }
+            }
         }
-        catch (Exception ex)
+
+        // 所有重试用完：返回最后一次空响应（如有），否则抛异常
+        if (lastResponse is not null)
         {
-            sw.Stop();
-            logService.Log(new LlmLogEntry
-            {
-                AgentName = request.AgentName,
-                SystemPrompt = GetSystemPrompt(request),
-                UserPrompt = GetUserPrompt(request),
-                ErrorMessage = ex.Message,
-                LatencyMs = sw.ElapsedMilliseconds
-            });
-            throw;
+            return lastResponse;
         }
+
+        throw lastException ?? new InvalidOperationException("LLM 请求失败：所有重试均已耗尽。");
     }
 
     public IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
