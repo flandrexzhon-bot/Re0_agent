@@ -497,11 +497,11 @@ else
                                             <span class="skill-cost">
                                                 @if (skill.ManaCost > 0)
                                                 {
-                                                    <span class="skill-mp">魔@skill.ManaCost</span>
+                                                    <span class="skill-mp">魔@(skill.ManaCost)</span>
                                                 }
                                                 @if (skill.StaminaCost > 0)
                                                 {
-                                                    <span class="skill-sp">体@skill.StaminaCost</span>
+                                                    <span class="skill-sp">体@(skill.StaminaCost)</span>
                                                 }
                                                 @if (!skill.Available)
                                                 {
@@ -518,7 +518,42 @@ else
                         </div>
                     </div>
 
-                    <!-- 2. 任务委派 -->
+                    <!-- 2. 装备栏 -->
+                    <div class="sidebar-section">
+                        <div class="sidebar-section-title">
+                            ⚔️ 装备栏
+                        </div>
+                        <div class="sidebar-section-body">
+                            <div class="equip-slots">
+                                @foreach (var slot in EquipmentSlots)
+                                {
+                                    var eq = FindEquippedBySlot(slot.Key);
+                                    <div class="equip-slot @(eq is null ? "equip-empty" : "")">
+                                        <div class="equip-slot-icon">@slot.Icon</div>
+                                        <div class="equip-slot-body">
+                                            <div class="equip-slot-head">
+                                                <span class="equip-slot-label">@slot.Label</span>
+                                                @if (eq is not null)
+                                                {
+                                                    <span class="equip-slot-name quality-@eq.Quality.ToLower()">@eq.EquipmentName</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="equip-slot-name equip-empty-text">未装备</span>
+                                                }
+                                            </div>
+                                            @if (eq is not null && !string.IsNullOrWhiteSpace(eq.Description))
+                                            {
+                                                <div class="equip-slot-desc" title="@eq.Description">@eq.Description</div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. 任务委派 -->
                     <div class="sidebar-section">
                         <div class="sidebar-section-title">
                             📜 任务委派 (@quests.Count)
@@ -559,13 +594,13 @@ else
                         </div>
                     </div>
 
-                    <!-- 3. 随身包裹与装备 -->
+                    <!-- 4. 随身包裹 -->
                     <div class="sidebar-section">
                         <div class="sidebar-section-title">
                             🎒 随身包裹 (@inventories.Count)
                         </div>
                         <div class="sidebar-section-body">
-                            @if (inventories.Count == 0 && equipments.Count == 0)
+                            @if (inventories.Count == 0)
                             {
                                 <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
                                     包裹空空如也
@@ -573,32 +608,15 @@ else
                             }
                             else
                             {
-                                @if (equipments.Count > 0)
-                                {
-                                    <div class="text-gold mb-1" style="font-size: 0.85rem; font-weight: bold;">⚔️ 当前装备：</div>
-                                    <div class="eq-list mb-2">
-                                        @foreach (var eq in equipments)
-                                        {
-                                            <div class="item-badge quality-@eq.Quality.ToLower()" title="@eq.Description">
-                                                <span class="item-badge-name">@eq.EquipmentName</span>
-                                                <span class="item-badge-qty" style="color: #6da5ff;">@eq.EquipmentType (@eq.StatusText)</span>
-                                            </div>
-                                        }
-                                    </div>
-                                }
-                                @if (inventories.Count > 0)
-                                {
-                                    <div class="text-gold mb-1" style="font-size: 0.85rem; font-weight: bold;">📦 拥有物品：</div>
-                                    <div class="item-list">
-                                        @foreach (var item in inventories)
-                                        {
-                                            <div class="item-badge quality-@item.Quality.ToLower()" title="@item.Description">
-                                                <span class="item-badge-name">@item.ItemName</span>
-                                                <span class="item-badge-qty">数量: @item.Quantity</span>
-                                            </div>
-                                        }
-                                    </div>
-                                }
+                                <div class="item-list">
+                                    @foreach (var item in inventories)
+                                    {
+                                        <div class="item-badge quality-@item.Quality.ToLower()" title="@item.Description">
+                                            <span class="item-badge-name">@item.ItemName</span>
+                                            <span class="item-badge-qty">数量: @item.Quantity</span>
+                                        </div>
+                                    }
+                                </div>
                             }
                         </div>
                     </div>
@@ -1040,6 +1058,42 @@ else
     {
         if (max <= 0) return 0;
         return Math.Clamp((int)Math.Round(current * 100.0 / max), 0, 100);
+    }
+
+    private record EquipSlot(string Key, string Label, string Icon, string[] Keywords);
+
+    private static readonly EquipSlot[] EquipmentSlots =
+    [
+        new("weapon", "武器", "🗡️", ["武器", "weapon", "剑", "刀", "杖", "弓", "枪", "锤", "锁链"]),
+        new("body", "上身", "🛡️", ["上身", "身体", "护甲", "甲", "袍", "衣", "armor", "body", "胸"]),
+        new("legs", "下身", "👢", ["下身", "腿", "鞋", "靴", "裤", "legs", "boots", "足"]),
+        new("accessory", "饰品", "💍", ["饰品", "饰", "戒指", "项链", "护符", "吊坠", "accessory", "ring"]),
+    ];
+
+    private EquipmentItem? FindEquippedBySlot(string slotKey)
+    {
+        var slot = EquipmentSlots.First(s => s.Key == slotKey);
+        // 只看"已装备"的装备；按 equipment_type 关键字匹配槽位。
+        var equipped = equipments.Where(e => e.StatusText == "已装备").ToList();
+
+        var matched = equipped.FirstOrDefault(e =>
+            slot.Keywords.Any(k =>
+                e.EquipmentType.Contains(k, StringComparison.OrdinalIgnoreCase)
+                || e.EquipmentName.Contains(k, StringComparison.OrdinalIgnoreCase)));
+
+        if (matched is not null) return matched;
+
+        // 饰品槽兜底：未归入前三类的已装备物品落到饰品槽。
+        if (slotKey == "accessory")
+        {
+            return equipped.FirstOrDefault(e => !EquipmentSlots
+                .Where(s => s.Key != "accessory")
+                .Any(s => s.Keywords.Any(k =>
+                    e.EquipmentType.Contains(k, StringComparison.OrdinalIgnoreCase)
+                    || e.EquipmentName.Contains(k, StringComparison.OrdinalIgnoreCase))));
+        }
+
+        return null;
     }
 
     private bool isInitializingGame = false;
