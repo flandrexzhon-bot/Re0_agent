@@ -115,7 +115,6 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
-        <thought>
         {思考内容}
         </thought>
         <content>
@@ -275,7 +274,6 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
-        <thought>
         {思考内容}
         </thought>
         <update>
@@ -418,7 +416,6 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
-        <thought>
         {思考内容}
         </thought>
         <content>
@@ -622,7 +619,6 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
-        <thought>
         {思考内容}
         </thought>
         <content>
