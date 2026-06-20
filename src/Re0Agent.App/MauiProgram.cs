@@ -36,9 +36,11 @@ public static class MauiProgram
         builder.Services.AddScoped<DiceCommandParser>();
         builder.Services.AddScoped<CharacterAttributeProvider>();
         builder.Services.AddScoped<DiceEngine>();
+        builder.Services.AddScoped<CombatResolver>();
         builder.Services.AddScoped<AgentConfigResolver>();
         builder.Services.AddScoped<PromptComposer>();
         builder.Services.AddScoped<CharacterNameResolver>();
+        builder.Services.AddSingleton<CharacterIdRegistry>();
         builder.Services.AddScoped<GmAgent>();
         builder.Services.AddScoped<CharacterSubAgent>();
         builder.Services.AddScoped<ChapterSwitchAgent>();

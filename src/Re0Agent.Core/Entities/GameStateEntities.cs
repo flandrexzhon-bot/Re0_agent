@@ -120,6 +120,9 @@ public sealed class ProtagonistInfo
     [Column("row_id")]
     public int RowId { get; set; }
 
+    [Column("char_id")]
+    public int CharId { get; set; }
+
     [Column("name")]
     public required string Name { get; set; }
 
@@ -149,6 +152,30 @@ public sealed class ProtagonistInfo
 
     [Column("resources_text")]
     public string? ResourcesText { get; set; }
+
+    [Column("hp")]
+    public int Hp { get; set; } = 100;
+
+    [Column("max_hp")]
+    public int MaxHp { get; set; } = 100;
+
+    [Column("mp")]
+    public int Mp { get; set; }
+
+    [Column("max_mp")]
+    public int MaxMp { get; set; }
+
+    [Column("stamina")]
+    public int Stamina { get; set; } = 100;
+
+    [Column("max_stamina")]
+    public int MaxStamina { get; set; } = 100;
+
+    [Column("armor")]
+    public int Armor { get; set; }
+
+    [Column("skills_json")]
+    public string? SkillsJson { get; set; }
 }
 
 [Table("important_npc")]
@@ -157,6 +184,9 @@ public sealed class ImportantNpc
     [Key]
     [Column("row_id")]
     public int RowId { get; set; }
+
+    [Column("char_id")]
+    public int CharId { get; set; }
 
     [Column("name")]
     public required string Name { get; set; }
@@ -196,6 +226,30 @@ public sealed class ImportantNpc
 
     [Column("self_status")]
     public string SelfStatus { get; set; } = "正常";
+
+    [Column("hp")]
+    public int Hp { get; set; } = 100;
+
+    [Column("max_hp")]
+    public int MaxHp { get; set; } = 100;
+
+    [Column("mp")]
+    public int Mp { get; set; }
+
+    [Column("max_mp")]
+    public int MaxMp { get; set; }
+
+    [Column("stamina")]
+    public int Stamina { get; set; } = 100;
+
+    [Column("max_stamina")]
+    public int MaxStamina { get; set; } = 100;
+
+    [Column("armor")]
+    public int Armor { get; set; }
+
+    [Column("skills_json")]
+    public string? SkillsJson { get; set; }
 }
 
 [Table("inventory")]

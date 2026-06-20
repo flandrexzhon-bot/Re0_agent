@@ -2,6 +2,12 @@ using Re0Agent.Core.Models;
 
 namespace Re0Agent.Core.Services.Dice;
 
+/// <summary>
+/// 2d6 自动化判定系统 (V2)。
+/// 最终达成值 = 2d6之和 + 属性修正((属性-10)/2 向下取整) + 状态/道具加成。
+/// 原始 2d6=12→大成功；=2→大失败；否则与目标值(DC)对比分级。
+/// 战斗：命中后 伤害 = 武器/技能基础伤害 + 力量修正 - 防御方护甲；带出攻防 ID 供直写库。
+/// </summary>
 public sealed class DiceEngine(
     DiceCommandParser parser,
     CharacterAttributeProvider attributeProvider,
@@ -24,85 +30,20 @@ public sealed class DiceEngine(
             DiceCommandKind.None => Fixed(command.RawText, "无需检定", true, "无"),
             DiceCommandKind.AutoSuccess => Fixed(command.RawText, "成功", true, "必成"),
             DiceCommandKind.AutoFailure => Fixed(command.RawText, "失败", false, "必败"),
-            DiceCommandKind.Check => await ExecuteCheckAsync(command, modifier: 0, cancellationToken),
-            DiceCommandKind.Opposed => await ExecuteOpposedAsync(command, attackerModifier: 0, cancellationToken),
-            DiceCommandKind.Magic => await ExecuteMagicAsync(command, cancellationToken),
-            DiceCommandKind.SpiritArt => await ExecuteSpiritArtAsync(command, cancellationToken),
+            DiceCommandKind.Check => await ExecuteCheckAsync(command, cancellationToken),
+            DiceCommandKind.Opposed => await ExecuteOpposedAsync(command, cancellationToken),
+            DiceCommandKind.Attack => await ExecuteAttackAsync(command, cancellationToken),
+            DiceCommandKind.Saving => await ExecuteCheckAsync(command, cancellationToken),
             DiceCommandKind.Authority => await ExecuteAuthorityAsync(command, cancellationToken),
             DiceCommandKind.Miasma => ExecuteMiasma(command),
-            DiceCommandKind.Blessing => await ExecuteBlessingAsync(command, cancellationToken),
-            DiceCommandKind.MagicOpposed => await ExecuteOpposedAsync(command, command.ElementAdvantage ? 10 : 0, cancellationToken),
             _ => Invalid(command.RawText, command.Error ?? "无效骰子命令")
         };
     }
 
-    private async Task<DiceResult> ExecuteMagicAsync(
-        DiceCommand command,
-        CancellationToken cancellationToken)
+    /// <summary>属性修正 = (属性值 - 10) / 2 向下取整。普通人(10)修正为0。</summary>
+    public static int AttributeModifier(int attributeValue)
     {
-        var modifier = command.MagicLevel switch
-        {
-            "El" => -10,
-            "Ul" => -20,
-            "Al" => -30,
-            _ => 0
-        };
-
-        var result = await ExecuteCheckAsync(command, modifier, cancellationToken);
-        var tags = result.Tags.ToDictionary(StringComparer.Ordinal);
-        tags["魔法等级"] = command.MagicLevel;
-
-        if (result.IsSuccess == true && !string.IsNullOrWhiteSpace(command.GateAttributeName))
-        {
-            var gateAttribute = await attributeProvider.FindAttributeAsync(
-                command.RollerName,
-                command.GateAttributeName,
-                cancellationToken);
-
-            if (gateAttribute is null)
-            {
-                tags["门消耗"] = "门属性未找到";
-            }
-            else
-            {
-                var gateRoll = Roll(command.BonusPenalty);
-                var gateEvaluation = EvaluateRoll(gateRoll.SelectedRoll, gateAttribute.Value, "普通");
-                tags["门消耗"] = gateEvaluation.IsSuccess ? "无新增损伤" : "损伤等级+1";
-
-                return Clone(
-                    result,
-                    detail: $"{result.Detail}；门消耗检定 {gateRoll.SelectedRoll}/{gateAttribute.Value}：{tags["门消耗"]}",
-                    rolls: result.Rolls.Concat(gateRoll.Rolls).ToArray(),
-                    tags: tags);
-            }
-        }
-
-        return Clone(result, tags: tags);
-    }
-
-    private async Task<DiceResult> ExecuteSpiritArtAsync(
-        DiceCommand command,
-        CancellationToken cancellationToken)
-    {
-        if (command.IsActive == false)
-        {
-            return new DiceResult
-            {
-                Command = command.RawText,
-                RollerName = command.RollerName,
-                AttributeName = command.AttributeName,
-                Outcome = "失败",
-                Detail = "精灵不在活跃时间，精灵术自动失败。",
-                IsSuccess = false,
-                SuccessLevel = "失败",
-                Tags = new Dictionary<string, string> { ["精灵活跃"] = "否" }
-            };
-        }
-
-        var result = await ExecuteCheckAsync(command, modifier: 0, cancellationToken);
-        var tags = result.Tags.ToDictionary(StringComparer.Ordinal);
-        tags["精灵活跃"] = command.IsActive is null ? "未指定" : "是";
-        return Clone(result, tags: tags);
+        return (int)Math.Floor((attributeValue - 10) / 2.0);
     }
 
     private async Task<DiceResult> ExecuteAuthorityAsync(
@@ -139,14 +80,9 @@ public sealed class DiceEngine(
             };
         }
 
-        var result = await ExecuteCheckAsync(command, modifier: 0, cancellationToken);
+        var result = await ExecuteCheckAsync(command, cancellationToken);
         var tags = result.Tags.ToDictionary(StringComparer.Ordinal);
         tags["权能类型"] = command.AuthorityType ?? "未指定";
-        if (command.AuthorityType == "Invisible Providence" && result.IsSuccess == true)
-        {
-            tags["反噬"] = "成功也会承受1d20生命损失；Phase3不写DB。";
-        }
-
         return Clone(result, tags: tags);
     }
 
@@ -155,7 +91,7 @@ public sealed class DiceEngine(
         var currentLevel = command.CurrentMiasmaLevel ?? 0;
         var target = Math.Clamp(100 - currentLevel, 0, 100);
         var roll = diceRoller.RollD100();
-        var isBigFailure = IsBigFailure(roll, target);
+        var isBigFailure = roll == 100 || (target < 50 && roll >= 96);
         var isSuccess = roll <= target && !isBigFailure;
         var increment = isSuccess ? 5 : isBigFailure ? 30 : 15;
         var newLevel = Math.Clamp(currentLevel + increment, 0, 100);
@@ -180,211 +116,234 @@ public sealed class DiceEngine(
         };
     }
 
-    private async Task<DiceResult> ExecuteBlessingAsync(
-        DiceCommand command,
-        CancellationToken cancellationToken)
-    {
-        if (command.CountersAuthority)
-        {
-            return new DiceResult
-            {
-                Command = command.RawText,
-                RollerName = command.RollerName,
-                AttributeName = command.AttributeName,
-                Outcome = "失败",
-                Detail = "加护对抗权能时自动失败。",
-                IsSuccess = false,
-                SuccessLevel = "失败",
-                Tags = new Dictionary<string, string> { ["对抗权能"] = "是" }
-            };
-        }
-
-        var result = await ExecuteCheckAsync(command, modifier: 0, cancellationToken);
-        var tags = result.Tags.ToDictionary(StringComparer.Ordinal);
-        tags["对抗权能"] = "否";
-        return Clone(result, tags: tags);
-    }
-
     private async Task<DiceResult> ExecuteCheckAsync(
         DiceCommand command,
-        int modifier,
         CancellationToken cancellationToken)
     {
-        var attribute = await attributeProvider.FindAttributeAsync(
-            command.RollerName,
-            command.AttributeName,
-            cancellationToken);
+        var attribute = await ResolveActorAsync(
+            command.RollerId, command.RollerName, command.AttributeName, cancellationToken);
 
         if (attribute is null)
         {
-            return Invalid(command.RawText, $"找不到可投骰属性：{command.RollerName}/{command.AttributeName}");
+            return Invalid(command.RawText, $"找不到可投骰属性：{Describe(command.RollerId, command.RollerName)}/{command.AttributeName}");
         }
 
-        var target = Math.Clamp(attribute.Value + modifier, 0, 100);
-        var roll = Roll(command.BonusPenalty);
-        var evaluation = EvaluateRoll(roll.SelectedRoll, target, command.Difficulty);
+        var (sum, rolls) = Roll2d6();
+        var modifier = AttributeModifier(attribute.Value);
+        var total = sum + modifier + command.SituationBonus;
+        var evaluation = Evaluate(sum, total, command.TargetValue);
+
+        var label = command.Kind == DiceCommandKind.Saving
+            ? $"{command.SaveType}豁免"
+            : $"{attribute.AttributeName}检定";
 
         return new DiceResult
         {
             Command = command.RawText,
             RollerName = attribute.CharacterName,
             AttributeName = attribute.AttributeName,
-            Roll = roll.SelectedRoll,
-            Rolls = roll.Rolls,
-            Target = attribute.Value,
-            TargetAfterModifiers = target,
-            Outcome = evaluation.IsSuccess ? "成功" : evaluation.SuccessLevel,
-            Detail = $"{attribute.CharacterName}以{attribute.AttributeName}进行检定：{roll.SelectedRoll}/{target}，{evaluation.SuccessLevel}。",
+            Roll = sum,
+            RawRollSum = sum,
+            AttributeModifier = modifier,
+            Rolls = rolls,
+            Target = command.TargetValue,
+            TargetAfterModifiers = total,
+            Outcome = evaluation.IsSuccess ? "成功" : evaluation.Name,
+            Detail = $"{attribute.CharacterName}进行{label}：2d6({rolls[0]}+{rolls[1]})={sum}，属性修正{Sign(modifier)}{(command.SituationBonus != 0 ? $"，加成{Sign(command.SituationBonus)}" : "")}，最终达成值{total}/DC{command.TargetValue}，{evaluation.Name}。",
             IsSuccess = evaluation.IsSuccess,
-            SuccessLevel = evaluation.SuccessLevel,
-            RequiredLevel = command.Difficulty,
-            Tags = CreateBaseTags(command, modifier)
+            SuccessLevel = evaluation.Name,
+            Tags = CreateBaseTags(command)
         };
     }
 
     private async Task<DiceResult> ExecuteOpposedAsync(
         DiceCommand command,
-        int attackerModifier,
         CancellationToken cancellationToken)
     {
-        var attacker = await attributeProvider.FindAttributeAsync(
-            command.RollerName,
-            command.AttributeName,
-            cancellationToken);
-        var defender = await attributeProvider.FindAttributeAsync(
-            command.OpponentName,
-            command.OpponentAttributeName,
-            cancellationToken);
+        var attacker = await ResolveActorAsync(
+            command.RollerId, command.RollerName, command.AttributeName, cancellationToken);
+        var defender = await ResolveActorAsync(
+            command.OpponentId, command.OpponentName, command.OpponentAttributeName, cancellationToken);
 
         if (attacker is null || defender is null)
         {
-            return Invalid(command.RawText, $"找不到对抗检定属性：{command.RollerName}/{command.AttributeName} vs {command.OpponentName}/{command.OpponentAttributeName}");
+            return Invalid(command.RawText, $"找不到对抗检定属性：{Describe(command.RollerId, command.RollerName)} vs {Describe(command.OpponentId, command.OpponentName)}");
         }
 
-        var attackerTarget = Math.Clamp(attacker.Value + attackerModifier, 0, 100);
-        var attackerRoll = Roll(command.BonusPenalty);
-        var defenderRoll = Roll(null);
-        var attackerEvaluation = EvaluateRoll(attackerRoll.SelectedRoll, attackerTarget, command.Difficulty);
-        var defenderEvaluation = EvaluateRoll(defenderRoll.SelectedRoll, defender.Value, "普通");
+        var (attackerSum, attackerRolls) = Roll2d6();
+        var (defenderSum, defenderRolls) = Roll2d6();
+        var attackerMod = AttributeModifier(attacker.Value);
+        var defenderMod = AttributeModifier(defender.Value);
+        var attackerTotal = attackerSum + attackerMod + command.SituationBonus;
+        var defenderTotal = defenderSum + defenderMod;
 
-        var attackerRank = attackerEvaluation.IsSuccess ? attackerEvaluation.Rank : 0;
-        var defenderRank = defenderEvaluation.IsSuccess ? defenderEvaluation.Rank : 0;
-        var attackerWins = attackerRank > defenderRank
-            || (attackerRank == defenderRank
-                && attackerRank > 0
-                && attackerRoll.SelectedRoll < defenderRoll.SelectedRoll);
+        var attackerWins = attackerSum == 12
+            || (defenderSum != 12 && attackerTotal >= defenderTotal && attackerSum != 2);
 
-        var tags = CreateBaseTags(command, attackerModifier);
+        var tags = CreateBaseTags(command);
         tags["防守方"] = defender.CharacterName;
         tags["防守属性"] = defender.AttributeName;
-        tags["防守骰值"] = defenderRoll.SelectedRoll.ToString();
-        tags["防守成功等级"] = defenderEvaluation.SuccessLevel;
+        tags["防守达成值"] = defenderTotal.ToString();
 
         return new DiceResult
         {
             Command = command.RawText,
             RollerName = attacker.CharacterName,
             AttributeName = attacker.AttributeName,
-            Roll = attackerRoll.SelectedRoll,
-            Rolls = attackerRoll.Rolls.Concat(defenderRoll.Rolls).ToArray(),
-            Target = attacker.Value,
-            TargetAfterModifiers = attackerTarget,
+            Roll = attackerSum,
+            RawRollSum = attackerSum,
+            AttributeModifier = attackerMod,
+            Rolls = attackerRolls.Concat(defenderRolls).ToArray(),
+            Target = defenderTotal,
+            TargetAfterModifiers = attackerTotal,
             Outcome = attackerWins ? "成功" : "失败",
-            Detail = $"{attacker.CharacterName}({attackerRoll.SelectedRoll}/{attackerTarget},{attackerEvaluation.SuccessLevel}) vs {defender.CharacterName}({defenderRoll.SelectedRoll}/{defender.Value},{defenderEvaluation.SuccessLevel})。",
+            Detail = $"{attacker.CharacterName}(2d6={attackerSum}{Sign(attackerMod)}={attackerTotal}) vs {defender.CharacterName}(2d6={defenderSum}{Sign(defenderMod)}={defenderTotal})：{(attackerWins ? "发起方胜" : "防守方胜")}。",
             IsSuccess = attackerWins,
-            SuccessLevel = attackerEvaluation.SuccessLevel,
-            RequiredLevel = command.Difficulty,
+            SuccessLevel = attackerSum == 12 ? "大成功" : attackerSum == 2 ? "大失败" : attackerWins ? "成功" : "失败",
             Tags = tags
         };
     }
 
-    private RollResult Roll(string? bonusPenalty)
+    private async Task<DiceResult> ExecuteAttackAsync(
+        DiceCommand command,
+        CancellationToken cancellationToken)
     {
-        if (bonusPenalty is "奖励1")
+        var attacker = await ResolveActorAsync(
+            command.RollerId, command.RollerName, command.AttributeName, cancellationToken);
+        var defender = await ResolveActorAsync(
+            command.OpponentId, command.OpponentName, command.OpponentAttributeName, cancellationToken);
+
+        if (attacker is null || defender is null)
         {
-            var rolls = new[] { diceRoller.RollD100(), diceRoller.RollD100() };
-            return new RollResult(rolls.Min(), rolls);
+            return Invalid(command.RawText, $"找不到战斗双方属性：{Describe(command.RollerId, command.RollerName)} vs {Describe(command.OpponentId, command.OpponentName)}");
         }
 
-        if (bonusPenalty is "惩罚1")
+        var (attackerSum, attackerRolls) = Roll2d6();
+        var (defenderSum, defenderRolls) = Roll2d6();
+        var attackerMod = AttributeModifier(attacker.Value);
+        var defenderMod = AttributeModifier(defender.Value);
+        var attackerTotal = attackerSum + attackerMod + command.SituationBonus;
+        var defenderTotal = defenderSum + defenderMod;
+
+        // 命中：原始12必中；原始2必失；否则达成值≥防御达成值。
+        var hit = attackerSum == 12 || (defenderSum != 12 && attackerSum != 2 && attackerTotal >= defenderTotal);
+
+        // 力量修正参与伤害（攻击属性即便是敏捷，伤害仍按力量修正，对齐世界书公式）。
+        var strength = await ResolveActorAsync(attacker.CharId, attacker.CharacterName, "力量", cancellationToken);
+        var strengthMod = strength is null ? attackerMod : AttributeModifier(strength.Value);
+        var rawDamage = command.WeaponDamage + strengthMod - defender.Armor;
+        var damage = hit ? Math.Max(0, rawDamage) : 0;
+        var blocked = hit && damage <= 0;
+
+        var tags = CreateBaseTags(command);
+        tags["防守方"] = defender.CharacterName;
+        tags["防守达成值"] = defenderTotal.ToString();
+        tags["攻击者ID"] = attacker.CharId.ToString();
+        tags["防御者ID"] = defender.CharId.ToString();
+        if (hit)
         {
-            var rolls = new[] { diceRoller.RollD100(), diceRoller.RollD100() };
-            return new RollResult(rolls.Max(), rolls);
+            tags["伤害"] = damage.ToString();
+            tags["护甲"] = defender.Armor.ToString();
+        }
+        if (!string.IsNullOrWhiteSpace(command.SkillName))
+        {
+            tags["技能"] = command.SkillName!;
         }
 
-        var roll = diceRoller.RollD100();
-        return new RollResult(roll, [roll]);
-    }
+        var successLevel = attackerSum == 12 ? "大成功" : attackerSum == 2 ? "大失败" : hit ? "命中" : "未命中";
+        var detail = hit
+            ? (blocked
+                ? $"{attacker.CharacterName}命中{defender.CharacterName}，但伤害({command.WeaponDamage}{Sign(strengthMod)})未击穿护甲({defender.Armor})，无效。"
+                : $"{attacker.CharacterName}命中{defender.CharacterName}，造成{damage}点伤害(基础{command.WeaponDamage}+力量修正{Sign(strengthMod)}-护甲{defender.Armor})。")
+            : $"{attacker.CharacterName}的攻击被{defender.CharacterName}闪避(2d6={attackerSum}{Sign(attackerMod)}={attackerTotal} < {defenderTotal})。";
 
-    private static CheckEvaluation EvaluateRoll(int roll, int target, string difficulty)
-    {
-        var level = ReadSuccessLevel(roll, target);
-        var requiredRank = DifficultyRank(difficulty);
-        var isSuccess = level.Rank >= requiredRank;
-        return new CheckEvaluation(level.Name, level.Rank, isSuccess);
-    }
-
-    private static (string Name, int Rank) ReadSuccessLevel(int roll, int target)
-    {
-        if (roll == 1)
+        return new DiceResult
         {
-            return ("大成功", 4);
-        }
-
-        if (IsBigFailure(roll, target))
-        {
-            return ("大失败", -1);
-        }
-
-        if (roll > target)
-        {
-            return ("失败", 0);
-        }
-
-        if (roll <= target / 5)
-        {
-            return ("极难成功", 3);
-        }
-
-        if (roll <= target / 2)
-        {
-            return ("困难成功", 2);
-        }
-
-        return ("普通成功", 1);
-    }
-
-    private static bool IsBigFailure(int roll, int target)
-    {
-        return roll == 100 || (target < 50 && roll >= 96);
-    }
-
-    private static int DifficultyRank(string difficulty)
-    {
-        return difficulty switch
-        {
-            "极难" => 3,
-            "困难" => 2,
-            _ => 1
+            Command = command.RawText,
+            RollerName = attacker.CharacterName,
+            AttributeName = attacker.AttributeName,
+            Roll = attackerSum,
+            RawRollSum = attackerSum,
+            AttributeModifier = attackerMod,
+            Rolls = attackerRolls.Concat(defenderRolls).ToArray(),
+            Target = defenderTotal,
+            TargetAfterModifiers = attackerTotal,
+            Outcome = hit ? (blocked ? "格挡" : "命中") : "未命中",
+            Detail = detail,
+            IsSuccess = hit && !blocked,
+            SuccessLevel = successLevel,
+            IsCombat = true,
+            AttackerId = attacker.CharId,
+            DefenderId = defender.CharId,
+            Damage = damage,
+            ManaCost = command.ManaCost,
+            StaminaCost = command.StaminaCost,
+            Tags = tags
         };
     }
 
-    private static Dictionary<string, string> CreateBaseTags(DiceCommand command, int modifier)
+    private async Task<CharacterAttribute?> ResolveActorAsync(
+        int? charId,
+        string? name,
+        string? attributeName,
+        CancellationToken cancellationToken)
+    {
+        if (charId is > 0)
+        {
+            return await attributeProvider.FindAttributeByIdAsync(charId.Value, attributeName, cancellationToken);
+        }
+
+        return await attributeProvider.FindAttributeAsync(name, attributeName, cancellationToken);
+    }
+
+    private (int Sum, IReadOnlyList<int> Rolls) Roll2d6()
+    {
+        var a = diceRoller.RollD6();
+        var b = diceRoller.RollD6();
+        return (a + b, [a, b]);
+    }
+
+    private static CheckEvaluation Evaluate(int rawSum, int total, int dc)
+    {
+        if (rawSum == 12)
+        {
+            return new CheckEvaluation("大成功", true);
+        }
+
+        if (rawSum == 2)
+        {
+            return new CheckEvaluation("大失败", false);
+        }
+
+        if (total >= dc + 5)
+        {
+            return new CheckEvaluation("完全成功", true);
+        }
+
+        if (total >= dc)
+        {
+            return new CheckEvaluation("成功", true);
+        }
+
+        return new CheckEvaluation("失败", false);
+    }
+
+    private static string Sign(int value)
+    {
+        return value >= 0 ? $"+{value}" : value.ToString();
+    }
+
+    private static string Describe(int? id, string? name)
+    {
+        return id is > 0 ? $"#{id}" : name ?? "?";
+    }
+
+    private static Dictionary<string, string> CreateBaseTags(DiceCommand command)
     {
         var tags = new Dictionary<string, string>();
-        if (!string.IsNullOrWhiteSpace(command.BonusPenalty))
+        if (command.SituationBonus != 0)
         {
-            tags["奖惩"] = command.BonusPenalty;
-        }
-
-        if (modifier != 0)
-        {
-            tags["修正"] = modifier.ToString();
-        }
-
-        if (command.ElementAdvantage)
-        {
-            tags["相克"] = "是";
+            tags["加成"] = command.SituationBonus.ToString();
         }
 
         return tags;
@@ -427,6 +386,8 @@ public sealed class DiceEngine(
             RollerName = result.RollerName,
             AttributeName = result.AttributeName,
             Roll = result.Roll,
+            RawRollSum = result.RawRollSum,
+            AttributeModifier = result.AttributeModifier,
             Rolls = rolls ?? result.Rolls,
             Target = result.Target,
             TargetAfterModifiers = result.TargetAfterModifiers,
@@ -436,11 +397,15 @@ public sealed class DiceEngine(
             SuccessLevel = result.SuccessLevel,
             RequiredLevel = result.RequiredLevel,
             Error = result.Error,
+            IsCombat = result.IsCombat,
+            AttackerId = result.AttackerId,
+            DefenderId = result.DefenderId,
+            Damage = result.Damage,
+            ManaCost = result.ManaCost,
+            StaminaCost = result.StaminaCost,
             Tags = tags ?? result.Tags
         };
     }
 
-    private sealed record RollResult(int SelectedRoll, IReadOnlyList<int> Rolls);
-
-    private sealed record CheckEvaluation(string SuccessLevel, int Rank, bool IsSuccess);
+    private sealed record CheckEvaluation(string Name, bool IsSuccess);
 }

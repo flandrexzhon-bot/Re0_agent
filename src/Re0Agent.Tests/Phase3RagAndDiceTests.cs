@@ -243,7 +243,7 @@ public sealed class Phase3RagAndDiceTests
     public async Task DiceEngineHandlesFixedCommands(string command, string outcome)
     {
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [50]);
+        var engine = CreateEngine(context, d6Rolls: [3, 4]);
 
         var result = await engine.ExecuteAsync(command);
 
@@ -252,87 +252,129 @@ public sealed class Phase3RagAndDiceTests
     }
 
     [Theory]
-    [InlineData(1, "大成功", true)]
-    [InlineData(12, "极难成功", true)]
-    [InlineData(30, "困难成功", true)]
-    [InlineData(55, "普通成功", true)]
-    [InlineData(70, "失败", false)]
-    [InlineData(100, "大失败", false)]
-    public async Task DiceEngineEvaluatesCoc7SuccessLevels(int roll, string level, bool isSuccess)
+    [InlineData(6, 6, "大成功", true)]   // raw=12 → 大成功
+    [InlineData(1, 1, "大失败", false)]  // raw=2  → 大失败
+    [InlineData(5, 6, "成功", true)]     // sum=11, 精神8→mod=-1, total=10 >= DC10
+    [InlineData(3, 3, "失败", false)]    // sum=6,  mod=-1, total=5 < DC10
+    public async Task DiceEngineEvaluates2d6V2SuccessLevels(int d1, int d2, string level, bool isSuccess)
     {
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [roll]);
-
-        var result = await engine.ExecuteAsync("检定 菜月昴 感知");
+        var engine = CreateEngine(context, d6Rolls: [d1, d2]);
+        var result = await engine.ExecuteAsync("检定 菜月昴 精神 目标值=10");
 
         Assert.Equal(level, result.SuccessLevel);
         Assert.Equal(isSuccess, result.IsSuccess);
     }
 
     [Fact]
-    public async Task DiceEngineReturnsInvalidForUnknownOrNonNumericAttributes()
+    public async Task DiceEngineEvaluatesFullSuccess()
     {
+        // 完全成功：total >= DC+5。力量12→mod=1, DC=5 → need total>=10 → sum>=9 → use [5,5]=10
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [50]);
+        var engine = CreateEngine(context, d6Rolls: [5, 5]);
+        var result = await engine.ExecuteAsync("检定 菜月昴 力量 目标值=5");
 
-        var unknown = await engine.ExecuteAsync("检定 不存在 感知");
-        var nonNumeric = await engine.ExecuteAsync("检定 菜月昴 死亡回归");
-
-        Assert.Equal("无效", unknown.Outcome);
-        Assert.NotNull(unknown.Error);
-        Assert.Equal("无效", nonNumeric.Outcome);
-        Assert.NotNull(nonNumeric.Error);
+        Assert.Equal("完全成功", result.SuccessLevel);
+        Assert.True(result.IsSuccess);
     }
 
     [Theory]
-    [InlineData(25, 30, true)]
-    [InlineData(30, 25, false)]
-    [InlineData(25, 25, false)]
-    public async Task OpposedChecksCompareSuccessRankAndLowerRoll(int attackerRoll, int defenderRoll, bool attackerWins)
+    [InlineData(6, 6, 2, 2, true)]   // attacker sum=12 → 大成功 → always wins
+    [InlineData(1, 2, 5, 6, false)]  // attacker sum=3 < defender sum=11 → lose
+    [InlineData(1, 1, 5, 6, false)]  // raw=2 → 大失败 → 必输
+    public async Task OpposedChecksCompare2d6Totals(int a1, int a2, int d1, int d2, bool attackerWins)
     {
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [attackerRoll, defenderRoll]);
+        var engine = CreateEngine(context, d6Rolls: [a1, a2, d1, d2]);
 
-        var result = await engine.ExecuteAsync("对抗 菜月昴 感知 vs 爱蜜莉雅 魔法");
+        var result = await engine.ExecuteAsync("对抗 菜月昴 力量 vs 爱蜜莉雅 敏捷");
 
         Assert.Equal(attackerWins, result.IsSuccess);
     }
 
     [Fact]
-    public async Task ReZeroMagicAppliesLevelModifierAndGateConsumption()
+    public async Task DiceEngineReturnsInvalidForUnknownCharacter()
     {
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [60, 70]);
+        var engine = CreateEngine(context, d6Rolls: [3, 4]);
 
-        var result = await engine.ExecuteAsync("魔法 菜月昴 魔法 等级=Ul 门=门耐久");
+        var result = await engine.ExecuteAsync("检定 不存在 力量 目标值=10");
 
-        Assert.Equal(60, result.TargetAfterModifiers);
-        Assert.True(result.IsSuccess);
-        Assert.Equal([60, 70], result.Rolls);
-        Assert.Equal("损伤等级+1", result.Tags["门消耗"]);
+        Assert.Equal("无效", result.Outcome);
+        Assert.NotNull(result.Error);
     }
 
     [Fact]
-    public async Task ReZeroSpecialRulesHandleSpiritMiasmaAndBlessing()
+    public async Task MiasmaStillUsesD100()
     {
         await using var context = await CreateSeededContextAsync();
-        var engine = CreateEngine(context, [96]);
+        // miasma uses d100 (first queue); engine built with d100 roll
+        var engine = new DiceEngine(
+            new DiceCommandParser(),
+            new CharacterAttributeProvider(context),
+            new SequenceDiceRoller(d100Rolls: [96], d6Rolls: []));
 
-        var inactiveSpirit = await engine.ExecuteAsync("精灵术 爱蜜莉雅 精灵术 活跃=否");
         var miasma = await engine.ExecuteAsync("瘴气 60");
-        var blessing = await engine.ExecuteAsync("加护 爱蜜莉雅 精灵术 对抗权能=是");
 
-        Assert.False(inactiveSpirit.IsSuccess);
         Assert.Equal("30", miasma.Tags["新增瘴气"]);
-        Assert.False(blessing.IsSuccess);
     }
 
-    private static DiceEngine CreateEngine(Re0AgentDbContext context, IEnumerable<int> rolls)
+    [Fact]
+    public async Task AuthorityDeathReturnAutoTriggers()
+    {
+        await using var context = await CreateSeededContextAsync();
+        var engine = CreateEngine(context, d6Rolls: [3, 4]);
+
+        var result = await engine.ExecuteAsync("权能 菜月昴 类型=死亡回归");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("自动触发", result.Outcome);
+    }
+
+    [Fact]
+    public async Task AttackCommandCalculatesDamageAndSetsIds()
+    {
+        await using var context = await CreateSeededContextAsync();
+        var engine = CreateEngine(context, d6Rolls: [6, 6, 1, 1]); // attacker 大成功
+
+        // 攻击 菜月昴(CharId=4) vs 爱蜜莉雅(CharId=2) 武器伤害=20
+        // 力量修正=(12-10)/2=1  护甲=0  最终伤害=20+1-0=21
+        var result = await engine.ExecuteAsync("攻击 菜月昴 vs 爱蜜莉雅 武器伤害=20");
+
+        Assert.True(result.IsCombat);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(21, result.Damage);
+    }
+
+    [Fact]
+    public async Task CombatResolverDeductsHpByCharId()
+    {
+        await using var context = await CreateSeededContextAsync();
+        var resolver = new CombatResolver(context);
+        var attackResult = new DiceResult
+        {
+            Command = "攻击",
+            Outcome = "命中",
+            IsCombat = true,
+            IsSuccess = true,
+            AttackerId = 0,
+            DefenderId = 99, // no matching char → no-op
+            Damage = 30,
+            ManaCost = 0,
+            StaminaCost = 0
+        };
+
+        var combat = await resolver.ApplyAsync(attackResult);
+
+        Assert.False(combat.ProtagonistDied); // no match → no change
+    }
+
+    private static DiceEngine CreateEngine(Re0AgentDbContext context, IEnumerable<int> d6Rolls)
     {
         return new DiceEngine(
             new DiceCommandParser(),
             new CharacterAttributeProvider(context),
-            new SequenceDiceRoller(rolls));
+            SequenceDiceRoller.ForD6([..d6Rolls]));
     }
 
     private static async Task<Re0AgentDbContext> CreateSeededContextAsync()
@@ -343,6 +385,7 @@ public sealed class Phase3RagAndDiceTests
         context.ProtagonistInfo.Add(new ProtagonistInfo
         {
             RowId = 1,
+            CharId = 4,
             Name = "菜月昴",
             Gender = "男",
             Age = 17,
@@ -350,26 +393,29 @@ public sealed class Phase3RagAndDiceTests
             IdentityText = "异世界来客",
             SelfStatus = "正常",
             LocationName = "王都",
-            BaseAttributes = "感知:60; 魔法:80; 门耐久:60",
+            BaseAttributes = "力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9",
             SpecialAttributes = "死亡回归:特殊",
-            ResourcesText = "无"
+            ResourcesText = "无",
+            Hp = 100, MaxHp = 100, Mp = 5, MaxMp = 5, Stamina = 104, MaxStamina = 104
         });
 
         context.ImportantNpcs.Add(new ImportantNpc
         {
             RowId = 1,
+            CharId = 2,
             Name = "爱蜜莉雅",
             Gender = "女",
             Age = 114,
             BriefIntro = "银发半精灵少女",
             Appearance = "银发紫瞳，气质温和",
             IdentityText = "王选候选人",
-            BaseAttributes = "魔法:60; 体质:50",
-            SpecialAttributes = "精灵术:90; 冰魔法:85",
+            BaseAttributes = "力量:18; 敏捷:45; 耐力:40; 智力:88; 精神:95; 魅力:80",
+            SpecialAttributes = "冰魔法:85",
             LocationName = "王都",
             RelationsText = "菜月昴:同伴",
             InteractionOptions = "交谈,同行",
-            PastExperience = "在王都与主角同行。"
+            PastExperience = "在王都与主角同行。",
+            Hp = 400, MaxHp = 400, Mp = 915, MaxMp = 915, Stamina = 356, MaxStamina = 356
         });
 
         await context.SaveChangesAsync();

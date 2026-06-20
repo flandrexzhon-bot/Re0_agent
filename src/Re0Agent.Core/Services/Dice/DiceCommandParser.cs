@@ -29,7 +29,6 @@ public sealed partial class DiceCommandParser
 
         var tokens = commandText
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(token => !IsLegacyToken(token))
             .ToArray();
 
         if (tokens.Length == 0)
@@ -40,13 +39,11 @@ public sealed partial class DiceCommandParser
         return tokens[0] switch
         {
             "检定" => ParseCheck(commandText, tokens),
-            "对抗" => ParseOpposed(commandText, tokens, DiceCommandKind.Opposed),
-            "魔法" => ParseMagic(commandText, tokens),
-            "精灵术" => ParseSpiritArt(commandText, tokens),
+            "对抗" => ParseOpposed(commandText, tokens),
+            "攻击" => ParseAttack(commandText, tokens),
+            "豁免" => ParseSaving(commandText, tokens),
             "权能" => ParseAuthority(commandText, tokens),
             "瘴气" => ParseMiasma(commandText, tokens),
-            "加护" => ParseBlessing(commandText, tokens),
-            "魔法对抗" => ParseOpposed(commandText, tokens, DiceCommandKind.MagicOpposed),
             _ => Invalid(commandText, $"未知骰子命令：{tokens[0]}")
         };
     }
@@ -65,108 +62,119 @@ public sealed partial class DiceCommandParser
             value = judgementMatch.Groups["command"].Value;
         }
 
-        return value
-            .Replace(".r1d100", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("平局=发起方失败", string.Empty, StringComparison.Ordinal)
-            .Trim()
-            .TrimEnd('。', '；', ';', '，', ',', '.');
+        return value.Trim().TrimEnd('。', '；', ';', '，', ',', '.');
     }
 
     private static DiceCommand ParseCheck(string rawText, IReadOnlyList<string> tokens)
     {
         if (tokens.Count < 3)
         {
-            return Invalid(rawText, "普通检定格式应为：检定 <角色> <属性>");
+            return Invalid(rawText, "普通检定格式应为：检定 <角色|#ID> <属性> [目标值=N]");
         }
 
+        var (name, id) = ResolveActor(tokens[1]);
         return new DiceCommand
         {
             RawText = rawText,
             Kind = DiceCommandKind.Check,
-            RollerName = tokens[1],
+            RollerName = name,
+            RollerId = id,
             AttributeName = tokens[2],
-            Difficulty = ReadOption(tokens, "难度=") ?? "普通",
-            BonusPenalty = ReadOption(tokens, "奖惩=")
+            TargetValue = ReadIntOption(tokens, "目标值=") ?? 10,
+            SituationBonus = ReadIntOption(tokens, "加成=") ?? 0
         };
     }
 
-    private static DiceCommand ParseOpposed(
-        string rawText,
-        IReadOnlyList<string> tokens,
-        DiceCommandKind kind)
+    private static DiceCommand ParseOpposed(string rawText, IReadOnlyList<string> tokens)
     {
         var vsIndex = Array.FindIndex(tokens.ToArray(), token => token.Equals("vs", StringComparison.OrdinalIgnoreCase));
         if (tokens.Count < 6 || vsIndex != 3 || vsIndex + 2 >= tokens.Count)
         {
-            return Invalid(rawText, "对抗检定格式应为：对抗 <角色> <属性> vs <角色> <属性>");
+            return Invalid(rawText, "对抗检定格式应为：对抗 <角色|#ID> <属性> vs <角色|#ID> <属性>");
         }
 
+        var (name, id) = ResolveActor(tokens[1]);
+        var (oppName, oppId) = ResolveActor(tokens[vsIndex + 1]);
         return new DiceCommand
         {
             RawText = rawText,
-            Kind = kind,
-            RollerName = tokens[1],
+            Kind = DiceCommandKind.Opposed,
+            RollerName = name,
+            RollerId = id,
             AttributeName = tokens[2],
-            OpponentName = tokens[vsIndex + 1],
+            OpponentName = oppName,
+            OpponentId = oppId,
             OpponentAttributeName = tokens[vsIndex + 2],
-            Difficulty = ReadOption(tokens, "难度=") ?? "普通",
-            BonusPenalty = ReadOption(tokens, "奖惩="),
-            ElementAdvantage = ReadYesNoOption(tokens, "相克=") ?? false
+            SituationBonus = ReadIntOption(tokens, "加成=") ?? 0
         };
     }
 
-    private static DiceCommand ParseMagic(string rawText, IReadOnlyList<string> tokens)
+    private static DiceCommand ParseAttack(string rawText, IReadOnlyList<string> tokens)
     {
-        if (tokens.Count < 3)
+        var vsIndex = Array.FindIndex(tokens.ToArray(), token => token.Equals("vs", StringComparison.OrdinalIgnoreCase));
+        if (tokens.Count < 4 || vsIndex != 2 || vsIndex + 1 >= tokens.Count)
         {
-            return Invalid(rawText, "魔法检定格式应为：魔法 <角色> <属性>");
+            return Invalid(rawText, "战斗格式应为：攻击 <攻击者|#ID> vs <防御者|#ID> [武器伤害=N] [技能=名] [魔耗=N] [体耗=N] [攻击属性=力量|敏捷]");
         }
 
+        var (attackerName, attackerId) = ResolveActor(tokens[1]);
+        var (defenderName, defenderId) = ResolveActor(tokens[vsIndex + 1]);
         return new DiceCommand
         {
             RawText = rawText,
-            Kind = DiceCommandKind.Magic,
-            RollerName = tokens[1],
-            AttributeName = tokens[2],
-            MagicLevel = ReadOption(tokens, "等级=") ?? "基础",
-            GateAttributeName = ReadOption(tokens, "门="),
-            BonusPenalty = ReadOption(tokens, "奖惩=")
+            Kind = DiceCommandKind.Attack,
+            RollerName = attackerName,
+            RollerId = attackerId,
+            AttributeName = ReadOption(tokens, "攻击属性=") ?? "力量",
+            OpponentName = defenderName,
+            OpponentId = defenderId,
+            OpponentAttributeName = "敏捷",
+            WeaponDamage = ReadIntOption(tokens, "武器伤害=") ?? ReadIntOption(tokens, "伤害=") ?? 0,
+            SkillName = ReadOption(tokens, "技能="),
+            ManaCost = ReadIntOption(tokens, "魔耗=") ?? 0,
+            StaminaCost = ReadIntOption(tokens, "体耗=") ?? 0,
+            SituationBonus = ReadIntOption(tokens, "加成=") ?? 0
         };
     }
 
-    private static DiceCommand ParseSpiritArt(string rawText, IReadOnlyList<string> tokens)
+    private static DiceCommand ParseSaving(string rawText, IReadOnlyList<string> tokens)
     {
         if (tokens.Count < 3)
         {
-            return Invalid(rawText, "精灵术检定格式应为：精灵术 <角色> <契约属性>");
+            return Invalid(rawText, "豁免格式应为：豁免 <角色|#ID> <魔法|精神|权能> [目标值=N]");
         }
 
+        var (name, id) = ResolveActor(tokens[1]);
         return new DiceCommand
         {
             RawText = rawText,
-            Kind = DiceCommandKind.SpiritArt,
-            RollerName = tokens[1],
-            AttributeName = tokens[2],
-            IsActive = ReadYesNoOption(tokens, "活跃="),
-            BonusPenalty = ReadOption(tokens, "奖惩=")
+            Kind = DiceCommandKind.Saving,
+            RollerName = name,
+            RollerId = id,
+            AttributeName = "精神",
+            SaveType = tokens[2],
+            TargetValue = ReadIntOption(tokens, "目标值=") ?? DefaultSaveDc(tokens[2]),
+            SituationBonus = ReadIntOption(tokens, "加成=") ?? 0
         };
     }
 
     private static DiceCommand ParseAuthority(string rawText, IReadOnlyList<string> tokens)
     {
-        if (tokens.Count < 3)
+        if (tokens.Count < 2)
         {
-            return Invalid(rawText, "权能检定格式应为：权能 <角色> <属性>");
+            return Invalid(rawText, "权能格式应为：权能 <角色|#ID> [类型=死亡回归|狮子的心脏|...]");
         }
 
+        var (name, id) = ResolveActor(tokens[1]);
         return new DiceCommand
         {
             RawText = rawText,
             Kind = DiceCommandKind.Authority,
-            RollerName = tokens[1],
-            AttributeName = tokens[2],
+            RollerName = name,
+            RollerId = id,
+            AttributeName = tokens.Count >= 3 ? tokens[2] : "精神",
             AuthorityType = ReadAuthorityType(rawText) ?? ReadOption(tokens, "类型="),
-            BonusPenalty = ReadOption(tokens, "奖惩=")
+            TargetValue = ReadIntOption(tokens, "目标值=") ?? 20
         };
     }
 
@@ -185,21 +193,24 @@ public sealed partial class DiceCommandParser
         };
     }
 
-    private static DiceCommand ParseBlessing(string rawText, IReadOnlyList<string> tokens)
+    /// <summary>把 token 解析为 (名字, ID?)。# 前缀表示 CharId；否则按名字。</summary>
+    private static (string? Name, int? Id) ResolveActor(string token)
     {
-        if (tokens.Count < 3)
+        var t = token.Trim();
+        if (t.StartsWith('#') && int.TryParse(t[1..], out var id))
         {
-            return Invalid(rawText, "加护检定格式应为：加护 <角色> <属性>");
+            return (null, id);
         }
 
-        return new DiceCommand
+        return (t, null);
+    }
+
+    private static int DefaultSaveDc(string saveType)
+    {
+        return saveType switch
         {
-            RawText = rawText,
-            Kind = DiceCommandKind.Blessing,
-            RollerName = tokens[1],
-            AttributeName = tokens[2],
-            CountersAuthority = ReadYesNoOption(tokens, "对抗权能=") ?? false,
-            BonusPenalty = ReadOption(tokens, "奖惩=")
+            "权能" => 20,
+            _ => 10
         };
     }
 
@@ -209,26 +220,16 @@ public sealed partial class DiceCommandParser
         return token is null ? null : token[prefix.Length..];
     }
 
-    private static bool? ReadYesNoOption(IEnumerable<string> tokens, string prefix)
+    private static int? ReadIntOption(IEnumerable<string> tokens, string prefix)
     {
-        return ReadOption(tokens, prefix) switch
-        {
-            "是" => true,
-            "否" => false,
-            _ => null
-        };
+        var raw = ReadOption(tokens, prefix);
+        return raw is not null && int.TryParse(raw, out var value) ? value : null;
     }
 
     private static string? ReadAuthorityType(string rawText)
     {
         var match = AuthorityTypeRegex().Match(rawText);
         return match.Success ? match.Groups["type"].Value.Trim() : null;
-    }
-
-    private static bool IsLegacyToken(string token)
-    {
-        return token.Equals(".r1d100", StringComparison.OrdinalIgnoreCase)
-            || token.StartsWith("平局=", StringComparison.Ordinal);
     }
 
     private static DiceCommand Invalid(string rawText, string error)

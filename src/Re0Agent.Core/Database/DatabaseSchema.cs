@@ -74,6 +74,7 @@ public static class DatabaseSchema
         """
         CREATE TABLE IF NOT EXISTS protagonist_info (
           row_id INTEGER PRIMARY KEY CHECK(row_id = 1),
+          char_id INTEGER NOT NULL DEFAULT 0,
           name TEXT NOT NULL,
           gender TEXT NOT NULL,
           age INTEGER NOT NULL CHECK(age >= 0),
@@ -83,12 +84,21 @@ public static class DatabaseSchema
           location_name TEXT NOT NULL,
           base_attributes TEXT NOT NULL,
           special_attributes TEXT,
-          resources_text TEXT
+          resources_text TEXT,
+          hp INTEGER NOT NULL DEFAULT 100,
+          max_hp INTEGER NOT NULL DEFAULT 100,
+          mp INTEGER NOT NULL DEFAULT 0,
+          max_mp INTEGER NOT NULL DEFAULT 0,
+          stamina INTEGER NOT NULL DEFAULT 100,
+          max_stamina INTEGER NOT NULL DEFAULT 100,
+          armor INTEGER NOT NULL DEFAULT 0,
+          skills_json TEXT
         );
         """,
         """
         CREATE TABLE IF NOT EXISTS important_npc (
           row_id INTEGER PRIMARY KEY,
+          char_id INTEGER NOT NULL DEFAULT 0,
           name TEXT NOT NULL UNIQUE,
           gender TEXT NOT NULL,
           age INTEGER NOT NULL CHECK(age >= 0),
@@ -101,7 +111,15 @@ public static class DatabaseSchema
           relations_text TEXT,
           interaction_options TEXT,
           past_experience TEXT NOT NULL CHECK(LENGTH(past_experience) <= 600),
-          self_status TEXT NOT NULL DEFAULT '正常'
+          self_status TEXT NOT NULL DEFAULT '正常',
+          hp INTEGER NOT NULL DEFAULT 100,
+          max_hp INTEGER NOT NULL DEFAULT 100,
+          mp INTEGER NOT NULL DEFAULT 0,
+          max_mp INTEGER NOT NULL DEFAULT 0,
+          stamina INTEGER NOT NULL DEFAULT 100,
+          max_stamina INTEGER NOT NULL DEFAULT 100,
+          armor INTEGER NOT NULL DEFAULT 0,
+          skills_json TEXT
         );
         """,
         """

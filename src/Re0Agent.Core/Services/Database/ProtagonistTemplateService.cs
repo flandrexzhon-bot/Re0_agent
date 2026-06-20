@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
+using Re0Agent.Core.Models;
 
 namespace Re0Agent.Core.Services.Database;
 
@@ -18,6 +19,17 @@ public sealed class ProtagonistTemplateService(
     SaveSystem saveSystem)
 {
     private const string SubaruName = "菜月昴";
+
+    /// <summary>菜月昴的稳定身份 ID，与世界书条目内嵌的 CharId 一致。</summary>
+    private const int SubaruCharId = 4;
+
+    /// <summary>菜月昴初始技能（来自世界书 &lt;角色属性&gt; 卡）。</summary>
+    private static readonly string SubaruSkillsJson = SkillsSerializer.Serialize(
+    [
+        new CharacterSkill { Name = "全力冲刺", ManaCost = 0, StaminaCost = 40, Description = "不顾一切地向指定方向奔跑。无法用于攻击或闪避，单纯的逃跑动作", Available = true },
+        new CharacterSkill { Name = "虚张声势", ManaCost = 0, StaminaCost = 5, Description = "摆出夸张的姿势并大声说话，试图威吓敌人或吸引注意。通常没有实际效果，反而可能吸引更多危险", Available = true }
+    ]);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -151,6 +163,7 @@ public sealed class ProtagonistTemplateService(
         var cleanProtagonist = new ProtagonistInfo
         {
             RowId = 1,
+            CharId = protagonist.CharId,
             Name = protagonist.Name,
             Gender = protagonist.Gender,
             Age = protagonist.Age,
@@ -160,7 +173,15 @@ public sealed class ProtagonistTemplateService(
             LocationName = protagonist.LocationName ?? "王都",
             BaseAttributes = protagonist.BaseAttributes,
             SpecialAttributes = protagonist.SpecialAttributes,
-            ResourcesText = protagonist.ResourcesText
+            ResourcesText = protagonist.ResourcesText,
+            Hp = protagonist.Hp,
+            MaxHp = protagonist.MaxHp,
+            Mp = protagonist.Mp,
+            MaxMp = protagonist.MaxMp,
+            Stamina = protagonist.Stamina,
+            MaxStamina = protagonist.MaxStamina,
+            Armor = protagonist.Armor,
+            SkillsJson = protagonist.SkillsJson
         };
 
         var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
@@ -223,17 +244,8 @@ public sealed class ProtagonistTemplateService(
             IsLewd = "否"
         });
 
-        dbContext.WorldMapPoints.Add(new WorldMapPoint
-        {
-            RowId = 1,
-            LocationName = protagonist.LocationName,
-            MinorRegion = minorRegion,
-            MajorRegion = majorRegion,
-            LocationType = "特殊",
-            EnvironmentDesc = "主角模板初始化地点",
-            Importance = "核心",
-            ExplorationStatus = "部分探索"
-        });
+        // 不再为初始章节硬编码 world_map_points 起始地点：
+        // world_map_points 留空，由填表 Agent 在首回合按世界书生成（含主角所在地点）。
     }
 
     private static (string Major, string Minor) GetRegionForLocation(string location)
@@ -258,18 +270,27 @@ public sealed class ProtagonistTemplateService(
         dbContext.ImportantNpcs.Add(new ImportantNpc
         {
             RowId = await NextRowIdAsync(dbContext.ImportantNpcs, cancellationToken),
+            CharId = SubaruCharId,
             Name = SubaruName,
             Gender = "男",
             Age = 17,
             BriefIntro = "黑发黑眼的异世界少年",
             Appearance = "黑发黑眼，穿运动服的少年",
             IdentityText = "异世界来客",
-            BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
+            BaseAttributes = "力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9",
             SpecialAttributes = "死亡回归:特殊",
             LocationName = protagonist.LocationName,
             RelationsText = $"{protagonist.Name}:同行",
             InteractionOptions = "交谈,同行",
-            PastExperience = "作为异世界来客卷入当前事件。"
+            PastExperience = "作为异世界来客卷入当前事件。",
+            Hp = 100,
+            MaxHp = 100,
+            Mp = 5,
+            MaxMp = 5,
+            Stamina = 104,
+            MaxStamina = 104,
+            Armor = 0,
+            SkillsJson = SubaruSkillsJson
         });
     }
 
@@ -289,6 +310,7 @@ public sealed class ProtagonistTemplateService(
         return new ProtagonistInfo
         {
             RowId = 1,
+            CharId = SubaruCharId,
             Name = SubaruName,
             Gender = "男",
             Age = 17,
@@ -296,9 +318,17 @@ public sealed class ProtagonistTemplateService(
             IdentityText = "异世界来客",
             SelfStatus = "正常",
             LocationName = "王都",
-            BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
+            BaseAttributes = "力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9",
             SpecialAttributes = "死亡回归:特殊",
-            ResourcesText = "手机; 零基础异世界知识"
+            ResourcesText = "手机; 零基础异世界知识",
+            Hp = 100,
+            MaxHp = 100,
+            Mp = 5,
+            MaxMp = 5,
+            Stamina = 104,
+            MaxStamina = 104,
+            Armor = 0,
+            SkillsJson = SubaruSkillsJson
         };
     }
 

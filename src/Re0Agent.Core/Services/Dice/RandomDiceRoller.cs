@@ -8,4 +8,9 @@ public sealed class RandomDiceRoller : IDiceRoller
     {
         return random.Next(1, 101);
     }
+
+    public int RollD6()
+    {
+        return random.Next(1, 7);
+    }
 }

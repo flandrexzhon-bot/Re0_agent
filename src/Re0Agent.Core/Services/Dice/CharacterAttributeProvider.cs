@@ -1,11 +1,13 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
+using Re0Agent.Core.Entities;
 
 namespace Re0Agent.Core.Services.Dice;
 
 public sealed partial class CharacterAttributeProvider(Re0AgentDbContext dbContext)
 {
+    /// <summary>按名字（或 &lt;user&gt;/主角 等指代）查找属性；返回值带上角色稳定 ID 与护甲。</summary>
     public async Task<CharacterAttribute?> FindAttributeAsync(
         string? characterName,
         string? attributeName,
@@ -21,40 +23,68 @@ public sealed partial class CharacterAttributeProvider(Re0AgentDbContext dbConte
 
         if (protagonist is not null && string.Equals(resolvedName, protagonist.Name, StringComparison.Ordinal))
         {
-            var value = FindAttributeValue(
-                attributeName,
-                protagonist.BaseAttributes,
-                protagonist.SpecialAttributes);
-
-            return value is null
-                ? null
-                : new CharacterAttribute
-                {
-                    CharacterName = protagonist.Name,
-                    AttributeName = attributeName,
-                    Value = value.Value,
-                    IsPlayerControlled = true
-                };
+            return BuildProtagonistAttribute(protagonist, attributeName);
         }
 
         var npc = await dbContext.ImportantNpcs
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Name == resolvedName, cancellationToken);
 
-        if (npc is null)
+        return npc is null ? null : BuildNpcAttribute(npc, attributeName);
+    }
+
+    /// <summary>按稳定 ID 查找属性（战斗/接力的权威寻址方式）。</summary>
+    public async Task<CharacterAttribute?> FindAttributeByIdAsync(
+        int charId,
+        string? attributeName,
+        CancellationToken cancellationToken = default)
+    {
+        if (charId <= 0 || string.IsNullOrWhiteSpace(attributeName))
         {
             return null;
         }
 
-        var npcValue = FindAttributeValue(attributeName, npc.BaseAttributes, npc.SpecialAttributes);
-        return npcValue is null
+        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.CharId == charId, cancellationToken);
+        if (protagonist is not null)
+        {
+            return BuildProtagonistAttribute(protagonist, attributeName);
+        }
+
+        var npc = await dbContext.ImportantNpcs.AsNoTracking()
+            .FirstOrDefaultAsync(n => n.CharId == charId, cancellationToken);
+        return npc is null ? null : BuildNpcAttribute(npc, attributeName);
+    }
+
+    private static CharacterAttribute? BuildProtagonistAttribute(ProtagonistInfo protagonist, string attributeName)
+    {
+        var value = FindAttributeValue(attributeName, protagonist.BaseAttributes, protagonist.SpecialAttributes);
+        return value is null
+            ? null
+            : new CharacterAttribute
+            {
+                CharacterName = protagonist.Name,
+                AttributeName = attributeName,
+                Value = value.Value,
+                IsPlayerControlled = true,
+                CharId = protagonist.CharId,
+                Armor = protagonist.Armor
+            };
+    }
+
+    private static CharacterAttribute? BuildNpcAttribute(ImportantNpc npc, string attributeName)
+    {
+        var value = FindAttributeValue(attributeName, npc.BaseAttributes, npc.SpecialAttributes);
+        return value is null
             ? null
             : new CharacterAttribute
             {
                 CharacterName = npc.Name,
                 AttributeName = attributeName,
-                Value = npcValue.Value,
-                IsPlayerControlled = false
+                Value = value.Value,
+                IsPlayerControlled = false,
+                CharId = npc.CharId,
+                Armor = npc.Armor
             };
     }
 

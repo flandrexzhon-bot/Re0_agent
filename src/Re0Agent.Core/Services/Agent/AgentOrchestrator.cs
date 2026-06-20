@@ -16,6 +16,7 @@ public sealed class AgentOrchestrator(
     FormAgent formAgent,
     FormAgentSqlExecutor sqlExecutor,
     DiceEngine diceEngine,
+    CombatResolver combatResolver,
     CharacterNameResolver nameResolver,
     SaveSystem saveSystem)
 {
@@ -274,6 +275,23 @@ public sealed class AgentOrchestrator(
             turn.GmJudgement = await gmAgent.JudgeTurnAsync(round, turn, cancellationToken);
             turn.DiceResult = await diceEngine.ExecuteAsync(turn.GmJudgement, cancellationToken);
             turn.DiceCommand = turn.DiceResult.Command;
+
+            // 战斗结算：按角色 ID 直写 hp/mp/stamina，不经过填表 Agent。
+            if (turn.DiceResult.IsCombat)
+            {
+                var combat = await combatResolver.ApplyAsync(turn.DiceResult, cancellationToken);
+                if (combat.DefenderName is not null && combat.RemainingHp is not null)
+                {
+                    round.Events.Add($"战斗结算：{combat.DefenderName} 剩余生命值 {combat.RemainingHp}。");
+                }
+
+                // 主角生命归零 → 触发死亡回归。
+                if (combat.ProtagonistDied && round.DeathReturnCause is null)
+                {
+                    round.DeathReturnCause = $"{combat.DefenderName}在战斗中生命值归零。";
+                }
+            }
+
             turn.ResultResponse = $"{profile.CharacterName}接受判定：{FormatDiceResult(turn.DiceResult)}。";
         }
 

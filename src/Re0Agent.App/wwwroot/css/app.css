@@ -1030,6 +1030,110 @@ button:disabled {
     color: var(--color-text-primary);
 }
 
+/* 生命/魔法/体力 资源条 */
+.stat-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.stat-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.stat-bar-label {
+    font-size: 0.75rem;
+    color: var(--color-gold);
+    width: 3.2rem;
+    flex-shrink: 0;
+}
+
+.stat-bar-track {
+    flex: 1;
+    height: 12px;
+    background: rgba(0,0,0,0.45);
+    border: 1px solid rgba(207,168,107,0.2);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.stat-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    transition: width 0.4s ease;
+}
+
+.stat-bar-fill.stat-hp {
+    background: linear-gradient(90deg, #7a1717, var(--color-crimson-glow));
+}
+
+.stat-bar-fill.stat-mp {
+    background: linear-gradient(90deg, #1d4e7a, #6da5ff);
+}
+
+.stat-bar-fill.stat-stamina {
+    background: linear-gradient(90deg, #7a5d17, var(--color-gold-glow));
+}
+
+.stat-bar-value {
+    font-size: 0.72rem;
+    font-family: Consolas, monospace;
+    color: var(--color-text-secondary);
+    width: 3.6rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* 技能 */
+.skill-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.skill-pill {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.3);
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid rgba(207,168,107,0.18);
+}
+
+.skill-pill .skill-name {
+    color: var(--color-gold-glow);
+    font-weight: bold;
+    font-size: 0.82rem;
+}
+
+.skill-pill .skill-cost {
+    display: flex;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    font-family: Consolas, monospace;
+}
+
+.skill-pill .skill-mp {
+    color: #6da5ff;
+}
+
+.skill-pill .skill-sp {
+    color: var(--color-gold);
+}
+
+.skill-pill.skill-disabled {
+    opacity: 0.45;
+    filter: grayscale(0.7);
+}
+
+.skill-pill .skill-unavailable {
+    color: var(--color-crimson-glow);
+}
+
 .item-list, .eq-list {
     display: flex;
     flex-direction: column;

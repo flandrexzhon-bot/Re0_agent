@@ -23,7 +23,8 @@ public static class DatabaseInitializer
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
             await EnsureImportantNpcUpgradeColumnsAsync(context, cancellationToken);
             await EnsureImportantNpcDropPresenceStatusAsync(context, cancellationToken);
-        await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
+            await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
+            await EnsureCharacterStatColumnsAsync(context, cancellationToken);
         }
         finally
         {
@@ -99,6 +100,49 @@ public static class DatabaseInitializer
                 + column.Definition
                 + ";";
             await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+        }
+    }
+
+    private static async Task EnsureCharacterStatColumnsAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        var newColumns = new[]
+        {
+            (Name: "char_id", Definition: "INTEGER NOT NULL DEFAULT 0"),
+            (Name: "hp", Definition: "INTEGER NOT NULL DEFAULT 100"),
+            (Name: "max_hp", Definition: "INTEGER NOT NULL DEFAULT 100"),
+            (Name: "mp", Definition: "INTEGER NOT NULL DEFAULT 0"),
+            (Name: "max_mp", Definition: "INTEGER NOT NULL DEFAULT 0"),
+            (Name: "stamina", Definition: "INTEGER NOT NULL DEFAULT 100"),
+            (Name: "max_stamina", Definition: "INTEGER NOT NULL DEFAULT 100"),
+            (Name: "armor", Definition: "INTEGER NOT NULL DEFAULT 0"),
+            (Name: "skills_json", Definition: "TEXT")
+        };
+
+        foreach (var table in new[] { "protagonist_info", "important_npc" })
+        {
+            var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await using (var command = context.Database.GetDbConnection().CreateCommand())
+            {
+                command.CommandText = $"PRAGMA table_info({table});";
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    existingColumns.Add(reader.GetString(1));
+                }
+            }
+
+            foreach (var column in newColumns)
+            {
+                if (existingColumns.Contains(column.Name))
+                {
+                    continue;
+                }
+
+                var alterStatement = $"ALTER TABLE {table} ADD COLUMN {column.Name} {column.Definition};";
+                await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+            }
         }
     }
 

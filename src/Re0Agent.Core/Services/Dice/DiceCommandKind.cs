@@ -7,11 +7,9 @@ public enum DiceCommandKind
     AutoFailure,
     Check,
     Opposed,
-    Magic,
-    SpiritArt,
+    Attack,
+    Saving,
     Authority,
     Miasma,
-    Blessing,
-    MagicOpposed,
     Invalid
 }

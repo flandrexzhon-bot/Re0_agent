@@ -92,6 +92,7 @@ public sealed class GmAgent(
             cancellationToken);
 
         var charAttrs = await LoadCharacterAttrsAsync(turn.CharacterName, cancellationToken);
+        var roster = await BuildCombatRosterAsync(cancellationToken);
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest
@@ -101,12 +102,55 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn, ragContext, charAttrs))
+                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn, ragContext, charAttrs, roster))
                 ]
             },
             cancellationToken);
 
         return response.Content;
+    }
+
+    /// <summary>
+    /// 生成「ID｜名字｜HP/MP/体力｜护甲｜技能」战斗名册，注入 GM 判定提示词。
+    /// GM 叙事仍用名字，裁决战斗时用 #ID 指代攻防双方。
+    /// </summary>
+    private async Task<string> BuildCombatRosterAsync(CancellationToken cancellationToken)
+    {
+        var rows = new List<string>();
+
+        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        if (protagonist is not null)
+        {
+            rows.Add(FormatRosterRow(
+                protagonist.CharId, protagonist.Name, protagonist.Hp, protagonist.MaxHp,
+                protagonist.Mp, protagonist.MaxMp, protagonist.Stamina, protagonist.MaxStamina,
+                protagonist.Armor, protagonist.SkillsJson));
+        }
+
+        var npcs = await dbContext.ImportantNpcs.AsNoTracking()
+            .OrderBy(n => n.CharId)
+            .ToListAsync(cancellationToken);
+        foreach (var npc in npcs)
+        {
+            rows.Add(FormatRosterRow(
+                npc.CharId, npc.Name, npc.Hp, npc.MaxHp,
+                npc.Mp, npc.MaxMp, npc.Stamina, npc.MaxStamina,
+                npc.Armor, npc.SkillsJson));
+        }
+
+        return rows.Count == 0 ? "（本场无在册角色）" : string.Join('\n', rows);
+    }
+
+    private static string FormatRosterRow(
+        int charId, string name, int hp, int maxHp, int mp, int maxMp,
+        int stamina, int maxStamina, int armor, string? skillsJson)
+    {
+        var id = charId > 0 ? $"#{charId}" : "#?";
+        var skills = SkillsSerializer.Parse(skillsJson)
+            .Where(s => s.Available)
+            .Select(s => s.Name);
+        var skillText = skills.Any() ? $"｜技能:{string.Join('/', skills)}" : "";
+        return $"{id} = {name}｜HP {hp}/{maxHp}｜MP {mp}/{maxMp}｜体力 {stamina}/{maxStamina}｜护甲 {armor}{skillText}";
     }
 
     private async Task<string> BuildDbSummaryAsync(CancellationToken cancellationToken)

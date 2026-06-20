@@ -107,6 +107,7 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
+        <thought>
         {思考内容}
         </thought>
         <content>
@@ -269,6 +270,7 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
+        <thought>
         {思考内容}
         </thought>
         <update>
@@ -414,6 +416,7 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
+        <thought>
         {思考内容}
         </thought>
         <content>
@@ -450,9 +453,10 @@ public sealed class PromptComposer
         """;
     }
 
-    public string ComposeGmJudgement(CharacterTurn turn, RagContext? ragContext = null, string? charAttrs = null)
+    public string ComposeGmJudgement(CharacterTurn turn, RagContext? ragContext = null, string? charAttrs = null, string? roster = null)
     {
         var attrsText = string.IsNullOrWhiteSpace(charAttrs) ? "（无数据）" : charAttrs;
+        var rosterText = string.IsNullOrWhiteSpace(roster) ? "（无在册角色）" : roster;
         return $"""
         【身份与角色】
         你目前担任 Re:Zero 桌游式角色扮演系统 (TRPG) 的 GM Agent (投骰裁判)。你是世界的总控制者与裁判。
@@ -464,10 +468,13 @@ public sealed class PromptComposer
         【角色属性（来自数据库）】
         {attrsText}
 
+        【当场角色名册（ID｜名字｜HP/MP/体力｜护甲｜技能）】
+        {rosterText}
+
         【设定背景 (RAG 提取 — 角色世界书条目)】
         {FormatRagContext(ragContext)}
 
-        【规则与裁判指南 (CoC7 骰子与 Re:Zero 规则)】
+        【规则与裁判指南 (2d6 骰子与 Re:Zero 规则)】
         请针对该角色的行动，判断是否需要进行随机检定，并生成相应的骰子判定命令。
         {DiceRulesText()}
 
@@ -477,7 +484,9 @@ public sealed class PromptComposer
 
         注意：
         1. 只有关键、有悬念且影响命运的行动才应当触发检定。如果该动作绝对成功或不需要随机性，使用"判定：无"或"判定：必成"/"判定：必败"。
-        2. 若此判定将导致主角死亡，必须在输出中额外追加独立的一行（不得与判定指令合并）："死亡回归：<死因描述>"。例如：
+        2. 指代角色时【必须】用名册里的 #ID（如 #2、#4），不要用名字，避免同名/别名歧义；叙事正文仍可用名字。
+        3. 战斗（攻击/防御）必须用「攻击」指令，并带上攻击者 #ID、防御者 #ID、武器或技能伤害、以及技能消耗（魔耗/体耗）。系统会据此自动结算伤害并扣减 HP/MP/体力，你无需在正文里手动改数值。
+        4. 若此判定将导致主角死亡，必须在输出中额外追加独立的一行（不得与判定指令合并）："死亡回归：<死因描述>"。例如：
            死亡回归：在小巷中被混混刀刃刺穿腹部失血过多死亡。
         """;
     }
@@ -614,6 +623,7 @@ public sealed class PromptComposer
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
+        <thought>
         {思考内容}
         </thought>
         <content>
@@ -713,15 +723,20 @@ public sealed class PromptComposer
         - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `current_chapter`, `is_lewd`('是'/'否')。
 
         【表 protagonist_info】主角状态/位置/物资，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
-        - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`。
+        - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `armor`。
+        - 【重要·战斗禁区】`hp`/`mp`/`stamina` 三列由战斗系统自动结算并直写，填表 Agent【绝对禁止】UPDATE 这三列（避免与战斗双写冲突）。仅当剧情发生【非战斗】的长期变化（如长期休养使上限提升、训练增长属性）时才改 `max_hp`/`max_mp`/`max_stamina`。
+        - `base_attributes` 为六维属性，格式 '力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9'。
+        - `skills_json` 为技能列表 JSON 数组，元素形如 {"技能名":"疾风","manaCost":60,"staminaCost":5,"说明":"...","可用":true}。剧情解锁新技能时追加元素；技能因失去魔力/受伤而不可用时把对应元素的 `可用` 置 false（不要删除）。
 
         【表 important_npc】重要 NPC 的引入与状态维护。
         - 先判断角色是否已在【当前表格数据】的 NPC 列表（按全名/规范名比对）：
           · 已在册 → UPDATE WHERE name = '全名'，禁止 INSERT。
           · 全新 → INSERT OR IGNORE INTO important_npc (...) VALUES (...)。
         - `name` 必须用全名/规范名。禁止同角色同一批既 INSERT 又 UPDATE。
-        - INSERT 必填: `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(如'体质:50; 敏捷:50; 感知:50; 意志:50'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`。
-        - 属性规则同主角：基础属性 "{名称}:{数值}" 数值[5,95]；特有属性数值[0,100]。标尺: 5-14缺失 | 15-41弱项 | 42-59平均 | 60-77精英 | 78-86极限 | 87-95破格。
+        - INSERT 必填: `char_id`, `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(六维, 如'力量:15; 敏捷:40; 耐力:25; 智力:58; 精神:55; 魅力:48'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `hp`, `mp`, `stamina`, `armor`。
+        - 【严格按世界书初始化】INSERT 新角色时，`char_id`、六维属性、`hp/max_hp`、`mp/max_mp`、`stamina/max_stamina`、`skills_json` 必须严格取自<背景设定>世界书该角色的 <角色属性> JSON（ID 字段→char_id；生命值→hp 与 max_hp 相等；魔法值→mp/max_mp；体力值→stamina/max_stamina；技能列表→skills_json）。世界书没有该角色的，才按属性标尺合理拟定，并把 char_id 留 0。
+        - 【重要·战斗禁区】已在册 NPC 的 `hp`/`mp`/`stamina` 由战斗系统自动直写，填表 Agent【绝对禁止】UPDATE 这三列。可 UPDATE 的是 `location_name`/`self_status`/`relations_text`/`base_attributes`/`skills_json` 等非战斗剧情字段。
+        - 属性规则同主角：六维属性 "{名称}:{数值}" 数值[5,95]；特有属性数值[0,100]。标尺: 5-14缺失 | 15-41弱项 | 42-59平均 | 60-77精英 | 78-86极限 | 87-95破格。
 
         【表 world_map_points】世界地图点（地点目录），其他表引用地点时必须在此表存在。
         - 按 `location_name`（详细地点 UNIQUE）判 INSERT/UPDATE。
@@ -761,7 +776,7 @@ public sealed class PromptComposer
         - world_map_points 为空 → 为当前主要地区至少 INSERT 3 条详细地点，并包含主角所在地点。
         - map_elements 为空 → 按四类定义为当前地点生成 1-8 条元素。
         - factions 为空 → 插入 0-4 个与初始剧情相关的势力。
-        - important_npc 为空 → 根据故事背景插入首个场景里出场的核心角色。
+        - important_npc 为空 → 根据故事背景插入首个场景里出场的核心角色；其 char_id/六维/hp/mp/stamina/skills_json 必须严格取自世界书 <角色属性>（见 important_npc 表 Note）。
         - inventory 为空 → 添加主角应携带的初始物品 1-6 件。
         - equipment 为空 → 添加主角初始装备 1-4 件。
         - quests 为空 → 插入 1-3 个初始任务（含主线）。
@@ -798,17 +813,21 @@ public sealed class PromptComposer
     private static string DiceRulesText()
     {
         return """
-        骰子DSL规则：
+        2d6 判定系统 (V2)：
+        - 核心公式：最终达成值 = 2d6之和 + 属性修正 + 状态/道具加成。属性修正 = (属性值-10)/2 向下取整（普通人10→修正0）。
+        - 成功分级：原始 2d6=12 → 大成功；=2 → 大失败；否则 最终达成值≥目标值+5 完全成功 / ≥目标值 成功 / <目标值 失败。
+        - 战斗伤害：命中后 伤害 = 武器/技能基础伤害 + 力量修正 - 防御方护甲；≤0 视为被护甲格挡无效；HP 归零角色死亡（主角则触发死亡回归）。
+        - 豁免：魔法豁免目标值=10+(施法者智力/5)+魔法等级；精神豁免目标值=10+效应强度(1-10)；权能豁免目标值=20+。均以精神检定。
+
+        骰子DSL规则（角色一律用名册 #ID 指代）：
         - 无 / 必成 / 必败
-        - 检定 <角色> <属性> [难度=普通|困难|极难] [奖惩=奖励1|惩罚1]
-        - 对抗 <角色> <属性> vs <角色> <属性> [难度=普通|困难|极难] [奖惩=奖励1|惩罚1]
-        - 魔法 <角色> <属性> [等级=基础|El|Ul|Al] [门=<属性名>]
-        - 精灵术 <角色> <契约属性> [活跃=是|否]
-        - 权能 <角色> <属性> [类型=死亡回归|Invisible Providence|Cor Leonis|狮子的心脏]
+        - 检定 #ID <属性> [目标值=12] [加成=N]
+        - 对抗 #ID <属性> vs #ID <属性> [加成=N]
+        - 攻击 #ID vs #ID [武器伤害=N] [技能=技能名] [魔耗=N] [体耗=N] [攻击属性=力量|敏捷]
+        - 豁免 #ID <魔法|精神|权能> [目标值=N]
+        - 权能 #ID [类型=死亡回归|Invisible Providence|Cor Leonis|狮子的心脏]
         - 瘴气 <当前等级>
-        - 加护 <角色> <属性> [对抗权能=是|否]
-        - 魔法对抗 <角色> <属性> vs <角色> <属性> [相克=是|否]
-        说明：只有关键且有悬念的动作才使用检定；属性名必须来自于角色拥有的基础属性或特殊属性。
+        说明：只有关键且有悬念的动作才使用检定；属性名必须来自角色拥有的六维属性(力量/敏捷/耐力/智力/精神/魅力)；技能消耗(魔耗/体耗)与伤害由系统自动结算并写库。
         """;
     }
 

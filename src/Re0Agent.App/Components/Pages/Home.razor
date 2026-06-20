@@ -417,7 +417,7 @@ else
                     <!-- 1. 当前主角状态 -->
                     <div class="sidebar-section">
                         <div class="sidebar-section-title">
-                            👤 主角属性
+                            👤 冒险者状态
                         </div>
                         <div class="sidebar-section-body">
                             <div><span class="attr-label">主角名字:</span> @protagonistInfo.Name</div>
@@ -433,8 +433,34 @@ else
                             }
                             <div><span class="attr-label">身份:</span> @protagonistInfo.IdentityText</div>
                             <div><span class="attr-label">当前状态:</span> <span class="badge bg-dark-vintage text-gold border-vintage">@protagonistInfo.SelfStatus</span></div>
-                            
-                            <div class="mt-2"><span class="attr-label">基础属性：</span></div>
+
+                            <!-- 生命/魔法/体力 三条资源条 -->
+                            <div class="stat-bars">
+                                <div class="stat-bar-row">
+                                    <span class="stat-bar-label">❤️ 生命</span>
+                                    <div class="stat-bar-track">
+                                        <div class="stat-bar-fill stat-hp" style="width: @StatPercent(protagonistInfo.Hp, protagonistInfo.MaxHp)%;"></div>
+                                    </div>
+                                    <span class="stat-bar-value">@protagonistInfo.Hp/@protagonistInfo.MaxHp</span>
+                                </div>
+                                <div class="stat-bar-row">
+                                    <span class="stat-bar-label">🔷 魔法</span>
+                                    <div class="stat-bar-track">
+                                        <div class="stat-bar-fill stat-mp" style="width: @StatPercent(protagonistInfo.Mp, protagonistInfo.MaxMp)%;"></div>
+                                    </div>
+                                    <span class="stat-bar-value">@protagonistInfo.Mp/@protagonistInfo.MaxMp</span>
+                                </div>
+                                <div class="stat-bar-row">
+                                    <span class="stat-bar-label">⚡ 体力</span>
+                                    <div class="stat-bar-track">
+                                        <div class="stat-bar-fill stat-stamina" style="width: @StatPercent(protagonistInfo.Stamina, protagonistInfo.MaxStamina)%;"></div>
+                                    </div>
+                                    <span class="stat-bar-value">@protagonistInfo.Stamina/@protagonistInfo.MaxStamina</span>
+                                </div>
+                            </div>
+
+                            <!-- 六维属性 -->
+                            <div class="mt-2"><span class="attr-label">六维属性：</span><span style="font-size: 0.75rem; color: var(--color-text-secondary);">（护甲 @protagonistInfo.Armor）</span></div>
                             <div class="attr-grid">
                                 @if (!string.IsNullOrEmpty(protagonistInfo.BaseAttributes))
                                 {
@@ -451,6 +477,41 @@ else
                                     }
                                 }
                             </div>
+
+                            <!-- 技能列表 -->
+                            <div class="mt-2"><span class="attr-label">技能：</span></div>
+                            @{
+                                var skills = SkillsSerializer.Parse(protagonistInfo.SkillsJson);
+                            }
+                            @if (skills.Count == 0)
+                            {
+                                <div style="font-size: 0.8rem; font-style: italic; color: var(--color-text-secondary);">暂无技能</div>
+                            }
+                            else
+                            {
+                                <div class="skill-list">
+                                    @foreach (var skill in skills)
+                                    {
+                                        <div class="skill-pill @(skill.Available ? "" : "skill-disabled")" title="@skill.Description">
+                                            <span class="skill-name">@skill.Name</span>
+                                            <span class="skill-cost">
+                                                @if (skill.ManaCost > 0)
+                                                {
+                                                    <span class="skill-mp">魔@skill.ManaCost</span>
+                                                }
+                                                @if (skill.StaminaCost > 0)
+                                                {
+                                                    <span class="skill-sp">体@skill.StaminaCost</span>
+                                                }
+                                                @if (!skill.Available)
+                                                {
+                                                    <span class="skill-unavailable">不可用</span>
+                                                }
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
 
                             <div class="mt-2"><span class="attr-label">权能/加护:</span> @(string.IsNullOrEmpty(protagonistInfo.SpecialAttributes) ? "无" : protagonistInfo.SpecialAttributes)</div>
                             <div class="mt-1"><span class="attr-label">携带物资:</span> @(string.IsNullOrEmpty(protagonistInfo.ResourcesText) ? "无" : protagonistInfo.ResourcesText)</div>
@@ -973,6 +1034,12 @@ else
             : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
         var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
         return $"{result.Command} => {outcomeText}{rollText}{detail}";
+    }
+
+    private static int StatPercent(int current, int max)
+    {
+        if (max <= 0) return 0;
+        return Math.Clamp((int)Math.Round(current * 100.0 / max), 0, 100);
     }
 
     private bool isInitializingGame = false;

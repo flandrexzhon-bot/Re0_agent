@@ -1,0 +1,297 @@
+[0] keys=['开局', '生成开局'] | comment=开局剧情[mvu_plot] | contentLen=114
+[1] keys=[] | comment=剧情推进规则[mvu_update] | contentLen=209
+[2] keys=[] | comment=强化思考（剧情）[mvu_plot] | contentLen=504
+[3] keys=[] | comment=mvu关系敌人任务变量 | contentLen=231
+[4] keys=[] | comment=__结束__[mvu_update] | contentLen=64
+[5] keys=[] | comment=mvu更新规则[mvu_update] | contentLen=7070
+[6] keys=[] | comment=任务更新规则（剧情）[mvu_plot] | contentLen=59
+[7] keys=[] | comment=任务更新规则（变量）[mvu_update] | contentLen=337
+[8] keys=[] | comment=文风设定(第二人称)[mvu_plot] | contentLen=1628
+[9] keys=['终章:月光下，踩着随性的舞步'] | comment=第十五卷:终章:月光下，踩着随性的舞步 | contentLen=3634
+[10] keys=['第一章:开头总由来访者开始'] | comment=第十六卷:第一章:开头总由来访者开始 | contentLen=2176
+[11] keys=['第二章:水门都市朴利斯提拉'] | comment=第十六卷:第二章:水门都市朴利斯提拉 | contentLen=2220
+[12] keys=['第三章:意外的重逢、该来的重逢、意料外的重逢'] | comment=第十六卷:第三章:意外的重逢、该来的重逢、意料外的重逢 | contentLen=2185
+[13] keys=['第四章:聒噪的寂静'] | comment=第十六卷:第四章:聒噪的寂静 | contentLen=2204
+[14] keys=['第五章:剧场型恶意'] | comment=第十六卷:第五章:剧场型恶意 | contentLen=2358
+[15] keys=['第一章:简单的核对答案'] | comment=第十七卷:第一章:简单的核对答案 | contentLen=2028
+[16] keys=['第三章:魔女教灾害对策本部'] | comment=第十七卷:第三章:魔女教灾害对策本部 | contentLen=1963
+[17] keys=['第四章:华丽猛虎'] | comment=第十七卷:第四章:华丽猛虎 | contentLen=1904
+[18] keys=['第五章:都市市政厅夺还作战'] | comment=第十七卷:第五章:都市市政厅夺还作战 | contentLen=1810
+[19] keys=['序章:浊流'] | comment=第十八卷:序章:浊流 | contentLen=1539
+[20] keys=['第一章:败战处理'] | comment=第十八卷:第一章:败战处理 | contentLen=1965
+[21] keys=['第二章:骑士的条件'] | comment=第十八卷:第二章:骑士的条件 | contentLen=2024
+[22] keys=['第三章:最新的英雄与最古老的英雄'] | comment=第十八卷:第三章:最新的英雄与最古老的英雄 | contentLen=1967
+[23] keys=['第四章:名留青史的繁星'] | comment=第十八卷:第四章:名留青史的繁星 | contentLen=1934
+[24] keys=['第五章:迟早会喜欢上的人'] | comment=第十八卷:第五章:迟早会喜欢上的人 | contentLen=1884
+[25] keys=['序章:混战都市'] | comment=第十九卷:序章:混战都市 | contentLen=1780
+[26] keys=['第一章:强欲攻略战开幕'] | comment=第十九卷:第一章:强欲攻略战开幕 | contentLen=1907
+[27] keys=['第二章:燃烧都市赞歌'] | comment=第十九卷:第二章:燃烧都市赞歌 | contentLen=1898
+[28] keys=['第三章:在绝缘状上签名'] | comment=第十九卷:第三章:在绝缘状上签名 | contentLen=1993
+[29] keys=['第四章:莉莉安娜·玛斯柯瑞德'] | comment=第十九卷:第四章:莉莉安娜·玛斯柯瑞德 | contentLen=1878
+[30] keys=['第五章:──我相信你'] | comment=第十九卷:第五章:──我相信你 | contentLen=1944
+[31] keys=['第六章:雷古勒斯·柯尔尼亚斯'] | comment=第十九卷:第六章:雷古勒斯·柯尔尼亚斯 | contentLen=2041
+[32] keys=[] | comment=mvu主角与重要变量 | contentLen=272
+[33] keys=['序章:月下狂想曲'] | comment=第二十卷:序章:月下狂想曲 | contentLen=1780
+[34] keys=['第一章:丑恶的晚餐会'] | comment=第二十卷:第一章:丑恶的晚餐会 | contentLen=2009
+[35] keys=['第二章:领域的被害者'] | comment=第二十卷:第二章:领域的被害者 | contentLen=1950
+[36] keys=['第三章:战士的称赞'] | comment=第二十卷:第三章:战士的称赞 | contentLen=1869
+[37] keys=['第四章:剑鬼恋歌──断章'] | comment=第二十卷:第四章:剑鬼恋歌──断章 | contentLen=1950
+[38] keys=['第五章:特蕾希雅·范·阿斯特雷亚'] | comment=第二十卷:第五章:特蕾希雅·范·阿斯特雷亚 | contentLen=1995
+[39] keys=['第六章:朴利斯提拉攻防战结果'] | comment=第二十卷:第六章:朴利斯提拉攻防战结果 | contentLen=1880
+[40] keys=['第七章:水面留下波纹'] | comment=第二十卷:第七章:水面留下波纹 | contentLen=2000
+[41] keys=['序章:旅程途中'] | comment=第二十一卷:序章:旅程途中 | contentLen=3852
+[42] keys=['第一章:带你出来的原因'] | comment=第二十一卷:第一章:带你出来的原因 | contentLen=4693
+[43] keys=['第二章:穿越沙时间吧！'] | comment=第二十一卷:第二章:穿越沙时间吧！ | contentLen=3413
+[44] keys=['第三章:监视塔的洗礼'] | comment=第二十一卷:第三章:监视塔的洗礼 | contentLen=3958
+[45] keys=['第四章:沙上的信赖'] | comment=第二十一卷:第四章:沙上的信赖 | contentLen=3258
+[46] keys=['第五章:监视塔的守卫'] | comment=第二十一卷:第五章:监视塔的守卫 | contentLen=3163
+[47] keys=['幕间:华丽猛虎·重装上阵'] | comment=第二十一卷:幕间:华丽猛虎·重装上阵 | contentLen=2816
+[48] keys=['第一章:大图书馆普莱迪斯'] | comment=第二十二卷:第一章:大图书馆普莱迪斯 | contentLen=3936
+[49] keys=['第二章:白色星空的星群'] | comment=第二十二卷:第二章:白色星空的星群 | contentLen=3064
+[50] keys=['第三章:泰洁塔的书库'] | comment=第二十二卷:第三章:泰洁塔的书库 | contentLen=3176
+[51] keys=['第四章:挥棒的'] | comment=第二十二卷:第四章:挥棒的 | contentLen=3126
+[52] keys=['第五章:由里乌斯·尤克历乌斯'] | comment=第二十二卷:第五章:由里乌斯·尤克历乌斯 | contentLen=3168
+[53] keys=['第六章:同住塔内的建议'] | comment=第二十二卷:第六章:同住塔内的建议 | contentLen=3033
+[54] keys=['终章:月光下，踩着随性的舞步'] | comment=第二十二卷:第七章:■■■·■■■ | contentLen=3974
+[55] keys=['幕间:古老记忆'] | comment=第二十二卷:幕间:古老记忆 | contentLen=3238
+[56] keys=['第一章:一走出便利商店就到了神奇世界'] | comment=第二十三卷:第一章:一走出便利商店就到了神奇世界 | contentLen=4004
+[57] keys=['第二章:你是谁？'] | comment=第二十三卷:第二章:你是谁？ | contentLen=3038
+[58] keys=['第三章:残骸'] | comment=第二十三卷:第三章:残骸 | contentLen=2898
+[59] keys=['第四章:活人之塔'] | comment=第二十三卷:第四章:活人之塔 | contentLen=2845
+[60] keys=['终章:月光下，踩着随性的舞步'] | comment=第二十三卷:幕间:梅莉·波特鲁特 | contentLen=2957
+[61] keys=['第五章:──杀人会变成一种习惯'] | comment=第二十三卷:第五章:──杀人会变成一种习惯 | contentLen=2806
+[62] keys=['第六章:Re：从零开始的异世界生活'] | comment=第二十三卷:第六章:Re：从零开始的异世界生活 | contentLen=2843
+[63] keys=['第一章:静待雪融的你'] | comment=第二十四卷:第一章:静待雪融的你 | contentLen=2957
+[64] keys=['第二章:接下来的事'] | comment=第二十四卷:第二章:接下来的事 | contentLen=2741
+[65] keys=['第三章:——站起来'] | comment=第二十四卷:第三章:——站起来 | contentLen=4164
+[66] keys=['第四章:第五个障碍'] | comment=第二十四卷:第四章:第五个障碍 | contentLen=2945
+[67] keys=['第五章:不讲理的剑之铁锤'] | comment=第二十四卷:第五章:不讲理的剑之铁锤 | contentLen=2985
+[68] keys=['第六章:专一之星'] | comment=第二十四卷:第六章:专一之星 | contentLen=2928
+[69] keys=['第一章:■■·■'] | comment=第二十五卷:第一章:■■·■ | contentLen=2883
+[70] keys=['第二章:我和我'] | comment=第二十五卷:第二章:我和我 | contentLen=2809
+[71] keys=['第三章:露伊·亚尔聂博'] | comment=第二十五卷:第三章:露伊·亚尔聂博 | contentLen=2783
+[72] keys=['第四章:Ready Steady Go'] | comment=第二十五卷:第四章:Ready Steady Go | contentLen=2778
+[73] keys=['第五章:精神之死'] | comment=第二十五卷:第五章:精神之死 | contentLen=2902
+[74] keys=['第六章:Good Loser'] | comment=第二十五卷:第六章:Good Loser | contentLen=3087
+[75] keys=['第七章:拉姆'] | comment=第二十五卷:第七章:拉姆 | contentLen=2801
+[76] keys=['第八章:——询问目的'] | comment=第二十五卷:第八章:——询问目的 | contentLen=3003
+[77] keys=['第九章:夏乌拉'] | comment=第二十五卷:第九章:夏乌拉 | contentLen=2708
+[78] keys=['第十章:英雄'] | comment=第二十五卷:第十章:英雄 | contentLen=4053
+[79] keys=['序章:监视塔的众人'] | comment=第二十六卷:序章:监视塔的众人 | contentLen=2545
+[80] keys=['第一章:洗礼'] | comment=第二十六卷:第一章:洗礼 | contentLen=2937
+[81] keys=['第二章:有勇气的选择'] | comment=第二十六卷:第二章:有勇气的选择 | contentLen=2856
+[82] keys=['第三章:男人真命苦'] | comment=第二十六卷:第三章:男人真命苦 | contentLen=2886
+[83] keys=['第四章:帝国风格'] | comment=第二十六卷:第四章:帝国风格 | contentLen=2789
+[84] keys=['第五章:佛拉基亚帝国'] | comment=第二十六卷:第五章:佛拉基亚帝国 | contentLen=4198
+[85] keys=['第一章:想要守护的事物'] | comment= 第二十七卷:第一章:想要守护的事物 | contentLen=2642
+[86] keys=['第二章:悄悄接近的戾气'] | comment=第二十七卷:第二章:悄悄接近的戾气 | contentLen=2874
+[87] keys=['第三章:城郭都市瓜拉尔攻防战'] | comment=第二十七卷:第三章:城郭都市瓜拉尔攻防战 | contentLen=4093
+[88] keys=['终章:月光下，踩着随性的舞步'] | comment=第二十七卷:第四章:皇帝／商人／我 | contentLen=2945
+[89] keys=['幕间:迪克尔·奥斯曼'] | comment=第二十七卷:幕间:迪克尔·奥斯曼 | contentLen=2805
+[90] keys=['第五章:乐师夏美·舒瓦兹'] | comment=第二十七卷:第五章:乐师夏美·舒瓦兹 | contentLen=2758
+[91] keys=['第六章:桀骜不逊之红'] | comment=第二十七卷:第六章:桀骜不逊之红 | contentLen=2852
+[92] keys=['第一章:重逢宛如燃烧的血潮'] | comment=第二十八卷:第一章:重逢宛如燃烧的血潮 | contentLen=2880
+[93] keys=['幕间:有的东西和没有的东西'] | comment=第二十八卷:幕间:有的东西和没有的东西 | contentLen=2887
+[94] keys=['第二章:自称的英雄{{user}}'] | comment=第二十八卷:第二章:自称的英雄{{user}} | contentLen=2864
+[95] keys=['第三章:该前进的道路'] | comment=第二十八卷:第三章:该前进的道路 | contentLen=2755
+[96] keys=['第四章:混沌的魔都'] | comment=第二十八卷:第四章:混沌的魔都 | contentLen=4059
+[97] keys=['第五章:睽违八年的奖赏'] | comment=第二十八卷:第五章:睽违八年的奖赏 | contentLen=2713
+[98] keys=['第一章:野心之兽'] | comment=第二十九卷:第一章:野心之兽 | contentLen=3965
+[99] keys=['第二章:眼皮子底下'] | comment=第二十九卷:第二章:眼皮子底下 | contentLen=2859
+[100] keys=['第三章:魂婚'] | comment=第二十九卷:第三章:魂婚 | contentLen=3048
+[101] keys=['第四章:不会消失的■■'] | comment=第二十九卷:第四章:不会消失的■■ | contentLen=3035
+[102] keys=['第五章:命中注定'] | comment=第二十九卷:第五章:命中注定 | contentLen=2912
+[103] keys=['第六章:爱慕之情不会退让'] | comment=第二十九卷:第六章:爱慕之情不会退让 | contentLen=2837
+[104] keys=['第七章:十一秒之后'] | comment=第二十九卷:第七章:十一秒之后 | contentLen=3015
+[105] keys=['第八章:桃花源卡欧斯弗莱姆'] | comment=第二十九卷:第八章:桃花源卡欧斯弗莱姆 | contentLen=2930
+[106] keys=['幕间:覆盖苍穹'] | comment=第二十九卷:幕间:覆盖苍穹 | contentLen=3159
+[107] keys=['第一章:魔都狂骚曲'] | comment=第三十卷:第一章:魔都狂骚曲 | contentLen=4053
+[108] keys=['第二章:聪明人活不下去'] | comment=第三十卷:第二章:聪明人活不下去 | contentLen=2847
+[109] keys=['第三章:塔立塔·貅德拉格'] | comment=第三十卷:第三章:塔立塔·貅德拉格 | contentLen=2803
+[110] keys=['第四章:城郭都市狂骚曲'] | comment=第三十卷:第四章:城郭都市狂骚曲 | contentLen=2825
+[111] keys=['第五章:被叫大笨蛋也无所谓'] | comment=第三十卷:第五章:被叫大笨蛋也无所谓 | contentLen=3028
+[112] keys=['第六章:浮洛普·奥康奈尔'] | comment=第三十卷:第六章:浮洛普·奥康奈尔 | contentLen=2853
+[113] keys=['幕间:帝国狂骚序曲'] | comment=第三十卷:幕间:帝国狂骚序曲 | contentLen=2997
+[114] keys=['梅莉', '波多尔德'] | comment=角色卡:梅莉·波多尔德 | contentLen=1456
+[115] keys=['弗雷德莉卡', '鲍尔曼'] | comment=角色卡:弗雷德莉卡·鲍尔曼 | contentLen=2278
+[116] keys=['塞赫麦特', '怠惰魔女'] | comment=角色卡:塞赫麦特 | contentLen=2274
+[117] keys=['库林德'] | comment=角色卡:库林德 | contentLen=1916
+[118] keys=['希尔菲', '埃尔马特'] | comment=角色卡:希尔菲·埃尔马特 | contentLen=1520
+[119] keys=['亨克尔', '阿斯特雷亚'] | comment=角色卡:亨克尔·阿斯特雷亚 | contentLen=1638
+[120] keys=['八重', '天膳'] | comment=角色卡:八重·天膳 | contentLen=1702
+[121] keys=['舒尔特', '修尔特', '跋利耶尔'] | comment=角色卡:舒尔特 | contentLen=1662
+[122] keys=['约书亚', '尤克历乌斯'] | comment=角色卡:约书亚·尤克历乌斯 | contentLen=1243
+[123] keys=['密涅瓦', '愤怒魔女'] | comment=角色卡:密涅瓦 | contentLen=2034
+[124] keys=['达芙妮', '暴食魔女'] | comment=角色卡:达芙妮 | contentLen=1937
+[125] keys=['卡蜜拉', '色欲魔女'] | comment=角色卡:卡蜜拉 | contentLen=2041
+[126] keys=['堤丰', '傲慢魔女'] | comment=角色卡:堤丰 | contentLen=1939
+[127] keys=['潘多拉', '虚饰魔女'] | comment=角色卡:潘多拉 | contentLen=1772
+[128] keys=['赫克托尔', '忧郁魔人'] | comment=角色卡:赫克托尔 | contentLen=1909
+[129] keys=['雷格鲁斯', '柯尼亚斯', '强欲'] | comment=角色卡:雷格鲁斯·柯尼亚斯 | contentLen=2409
+[130] keys=['西里乌斯', '罗曼尼康帝', '愤怒'] | comment=角色卡:西里乌斯·罗曼尼康帝 | contentLen=1876
+[131] keys=['莱伊', '巴登凯托斯', '暴食', '美食家'] | comment=角色卡:莱伊·巴登凯托斯 | contentLen=2919
+[132] keys=['罗伊', '阿尔法德', '暴食', '恶食'] | comment=角色卡:罗伊·阿尔法德 | contentLen=2492
+[133] keys=['鲁伊', '阿内芙', '暴食', '丝碧卡', '饱食'] | comment=角色卡:鲁伊·阿内芙 | contentLen=2371
+[134] keys=['卡佩拉', '艾美拉达', '卢克尼卡', '色欲'] | comment=角色卡:卡佩拉·艾美拉达·卢克尼卡 | contentLen=1795
+[135] keys=['史泰', '佛拉基亚'] | comment=角色卡:史泰德·佛拉基亚 | contentLen=1854
+[136] keys=[] | comment=——性转角色—— | contentLen=0
+[137] keys=['莱因哈鲁特', '阿斯特雷亚', '剑圣'] | comment=角色卡:女版莱因哈鲁特·范·阿斯特雷亚 | contentLen=3293
+[2628] keys=['第二章:通往圣域的路上'] | comment=第十卷:第二章:通往圣域的路上 | contentLen=3856
+[5516] keys=['第五章', '威尔海姆．范．阿斯特雷亚'] | comment=第七卷:第五章:威尔海姆．范．阿斯特雷亚 | contentLen=4074
+[6190] keys=['第二章', '加持，再会，约定'] | comment=第四卷:第二章:加持，再会，约定 | contentLen=2740
+[6271] keys=['第二章', '哭过喊过就会停止哭泣'] | comment=第三卷:第二章:哭过喊过就会停止哭泣 | contentLen=2837
+[16289] keys=['第四章', '国王候补人选及其骑士们'] | comment=第四卷:第四章:国王候补人选及其骑士们 | contentLen=2810
+[18664] keys=[] | comment=等级提升系统 | contentLen=200
+[22088] keys=['第四章', '第四次的正直'] | comment=第一卷:第四章:第四次的正直 | contentLen=2246
+[23008] keys=['第六章:相信的理由'] | comment=第十三卷:第六章:相信的理由 | contentLen=2199
+[31039] keys=[] | comment=认知隔离 | contentLen=834
+[31613] keys=['第二章:置胜算于度外'] | comment=第十三卷:第二章:置胜算于度外 | contentLen=3978
+[34167] keys=['第四章:艾利欧尔大森林的永久冻土'] | comment=第十四卷:第四章:艾利欧尔大森林的永久冻土 | contentLen=4336
+[47657] keys=['第三章', '白鲸攻略战'] | comment=第七卷:第三章:白鲸攻略战 | contentLen=3253
+[61581] keys=['开局', '生成开局'] | comment=开局变量[mvu_update] | contentLen=485
+[62425] keys=['第四章:亲子'] | comment=第十卷:第四章:亲子 | contentLen=3966
+[64923] keys=['终章', '未来的事'] | comment=第三卷:终章:未来的事 | contentLen=1980
+[66354] keys=['第六章:从复仇开始'] | comment=第十五卷:第六章:从复仇开始 | contentLen=4133
+[75302] keys=['莎缇拉'] | comment=莎缇拉好感故事 | contentLen=745
+[79466] keys=['第四章:无法诉诸言语'] | comment=第六卷:第四章:无法诉诸言语 | contentLen=2487
+[80828] keys=['死亡', '死亡回溯', '回溯', '存档'] | comment=死亡回溯规则[mvu_plot] | contentLen=557
+[88221] keys=['第一章:爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我'] | comment=第十二卷:第一章:爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我爱我 | contentLen=3911
+[111206] keys=[] | comment=剧情条目不要动,本卡有自动化脚本。 | contentLen=0
+[113736] keys=['第四章:下次一定会举行茶会'] | comment=第十五卷:第四章:下次一定会举行茶会 | contentLen=3030
+[114551] keys=['第四章', '疯狂的外侧'] | comment=第五卷:第四章:疯狂的外侧 | contentLen=2449
+[114826] keys=['安娜塔西亚', '合辛', '会长', '商会'] | comment=角色卡:安娜塔西亚·合辛 | contentLen=1598
+[117302] keys=['爱蜜莉雅', '半精灵'] | comment=爱蜜莉雅好感故事 | contentLen=865
+[122516] keys=['第一章:──记忆的旅途'] | comment=第十四卷:第一章:──记忆的旅途 | contentLen=4097
+[125398] keys=['第七章:奎恩之石一个人爬不上去'] | comment=第十三卷:第七章:奎恩之石一个人爬不上去 | contentLen=4642
+[140562] keys=['普莉希拉', '跋利耶尔'] | comment=普莉希拉·跋利耶尔好感故事 | contentLen=815
+[143439] keys=['拉姆'] | comment=拉姆好感故事 | contentLen=802
+[147357] keys=['第三章', '感情恶劣到爆的与会成员'] | comment=第四卷:第三章:感情恶劣到爆的与会成员 | contentLen=2622
+[152847] keys=['菲利克斯', '阿盖尔'] | comment=角色卡:菲利克斯·阿盖尔 | contentLen=1887
+[153630] keys=[] | comment=强化思考（变量）[mvu_update] | contentLen=483
+[157077] keys=[] | comment=属性描述 | contentLen=1647
+[167782] keys=['安娜塔西亚', '合辛'] | comment=安娜塔西亚·合辛好感故事 | contentLen=761
+[168553] keys=['艾尔莎', '猎肠者'] | comment=角色卡:艾尔莎·葛兰西尔特 | contentLen=1853
+[169999] keys=['第一章', '被分到的手牌'] | comment=第七卷:第一章:被分到的手牌 | contentLen=4917
+[176183] keys=[] | comment=文风设定(第三人称)[mvu_plot] | contentLen=1635
+[178484] keys=['第五章', '只是这样的故事'] | comment=第九卷:第五章:只是这样的故事 | contentLen=5697
+[189968] keys=['库珥修', '卡尔斯腾'] | comment=角色卡:库珥修·卡尔斯腾 | contentLen=1729
+[200398] keys=['第五章', '履行契约'] | comment=第八卷:第五章:履行契约 | contentLen=2785
+[201786] keys=['雷姆'] | comment=雷姆好感故事 | contentLen=816
+[217638] keys=['拉姆', '鬼族', '姐姐'] | comment=角色卡:拉姆 | contentLen=1767
+[234302] keys=['幕间:各自的妥协'] | comment=第十五卷:幕间:各自的妥协 | contentLen=3359
+[241797] keys=['第三章', '回来的意义'] | comment=第八卷:第三章:回来的意义 | contentLen=3473
+[246265] keys=['第一章', '开始的结束'] | comment=第一卷:第一章:开始的结束 | contentLen=3051
+[246709] keys=['第五章:在唇瓣抹上殷红'] | comment=第十四卷:第五章:在唇瓣抹上殷红 | contentLen=3241
+[251880] keys=['第五章:魔女们的茶会'] | comment=第十一卷:第五章:魔女们的茶会 | contentLen=4377
+[262976] keys=['莱因哈鲁特', '剑圣', '特蕾西亚'] | comment=角色卡:莱因哈鲁特·范·阿斯特雷亚 | contentLen=2304
+[264353] keys=['第六章:我爱你爱你爱你爱你爱你爱你'] | comment=第十一卷:第六章:我爱你爱你爱你爱你爱你爱你 | contentLen=3798
+[268199] keys=['第六章:将谎言化作希望'] | comment=第十四卷:第六章:将谎言化作希望 | contentLen=4231
+[284476] keys=['第四章', '鬼上身的作法'] | comment=第三卷:第四章:鬼上身的作法 | contentLen=2591
+[286736] keys=['艾尔莎', '猎肠者'] | comment=艾尔莎·葛兰西尔特好感故事 | contentLen=986
+[291120] keys=['第一章', '拙稚的谈判'] | comment=第六卷:第一章:拙稚的谈判 | contentLen=3681
+[295675] keys=[] | comment=世界观-主要势力 | contentLen=1023
+[296462] keys=['第五章', '自称骑士的我'] | comment=第四卷:第五章:自称骑士的我 | contentLen=1796
+[301736] keys=['第四章:死亡的味道'] | comment=第十二卷:第四章:死亡的味道 | contentLen=4234
+[302923] keys=['第六章幕间:归途的代价'] | comment=第九卷:第六章间章:代价 | contentLen=2718
+[304395] keys=['第二章', '决战前夕'] | comment=第七卷:第二章:决战前夕 | contentLen=4159
+[308919] keys=['第一章', '怠惰一闪'] | comment=第八卷:第一章:怠惰一闪 | contentLen=3823
+[309730] keys=['第二章', '开始变化的事态与雷姆的意志'] | comment=第五卷:第二章:开始变化的事态与雷姆的意志 | contentLen=3238
+[318239] keys=['第五章', '怠惰'] | comment=第五卷:第五章:怠惰 | contentLen=2993
+[328428] keys=['第二章:冰炎之结果'] | comment=第十七卷:第二章:冰炎之结果 | contentLen=2059
+[332289] keys=['终章', '期望的早晨'] | comment=第二卷:终章:期望的早晨 | contentLen=4242
+[333046] keys=['第三章:──森林的漆黑之王•基尔缇拉乌来袭！！'] | comment=第十五卷:第三章:──森林的漆黑之王•基尔缇拉乌来袭！！ | contentLen=3264
+[338027] keys=['第二章', '准备好的舞台后'] | comment=第九卷:第二章:准备好的舞台后 | contentLen=3506
+[340106] keys=[] | comment=mvu更新方式[mvu_update] | contentLen=1705
+[347696] keys=['第四章', '薄暮之时的捉迷藏'] | comment=第二卷:第四章:薄暮之时的捉迷藏 | contentLen=3461
+[352429] keys=['第五章', '从零开始的异世界生活'] | comment=第一卷:第五章:从零开始的异世界生活 | contentLen=2047
+[362719] keys=['贝特鲁吉乌斯', '罗曼尼康帝', '怠惰', '魔女教', '培提奇乌斯'] | comment=角色卡:（怠惰）贝特鲁吉乌斯·罗曼尼康帝 | contentLen=1952
+[366349] keys=['第二章', '约定之晨尚远'] | comment=第二卷:第二章:约定之晨尚远 | contentLen=2518
+[379772] keys=['终章', '骑士们的想法'] | comment=第四卷:终章:骑士们的想法 | contentLen=1912
+[381901] keys=['第四章', '阴险狠毒的怠惰'] | comment=第八卷:第四章:阴险狠毒的怠惰 | contentLen=3895
+[382777] keys=['第六章:被分到的卡片'] | comment=第六卷:第六章:被分到的卡片 | contentLen=1998
+[394119] keys=['菲鲁特'] | comment=菲鲁特好感故事 | contentLen=755
+[399282] keys=['佩特拉', '莱特'] | comment=角色卡:佩特拉·莱特 | contentLen=1657
+[401696] keys=['蜜蜜', '黑塔罗', '缇碧帕尔巴顿'] | comment=角色卡:蜜蜜、黑塔罗、缇碧帕尔巴顿三胞胎 | contentLen=1743
+[410949] keys=['第五章:连鲜血和内脏都一并疼爱'] | comment=第十五卷:第五章:连鲜血和内脏都一并疼爱 | contentLen=4519
+[414608] keys=['罗姆爷', '爷爷'] | comment=角色卡:罗姆爷 | contentLen=1529
+[420998] keys=['第六章:魔女的茶会'] | comment=第十二卷:第六章:魔女的茶会 | contentLen=4137
+[431589] keys=['第三章', '名为绝望的疾病'] | comment=第五卷:第三章:名为绝望的疾病 | contentLen=2651
+[434380] keys=['第八章:雪的脸型'] | comment=第十五卷:第八章:雪的脸型 | contentLen=3948
+[437380] keys=[] | comment=好感度系统[mvu_update] | contentLen=108
+[445165] keys=['第三章', '锁链的声响'] | comment=第二卷:第三章:锁链的声响 | contentLen=3566
+[445472] keys=['人类', '精灵', '巨人族', '亚人', '矮人族', '鬼族', '猫人族', '种族'] | comment=世界观-种族 | contentLen=906
+[445929] keys=['嘉飞尔'] | comment=角色卡:嘉飞尔 | contentLen=1905
+[448117] keys=['艾姬多娜'] | comment=艾姬多娜好感故事 | contentLen=843
+[448554] keys=['第一章', '腐败的精神'] | comment=第五卷:第一章:腐败的精神 | contentLen=2449
+[453178] keys=[] | comment=__结束__[mvu_plot] | contentLen=102
+[476918] keys=['碧翠丝', '禁书库', '贝蒂'] | comment=角色卡:碧翠丝 | contentLen=2095
+[477633] keys=['威尔海姆', '阿斯特雷亚', '剑鬼', '老爷子'] | comment=角色卡:威尔海姆·范·阿斯特雷亚 | contentLen=1871
+[487829] keys=[] | comment=掷骰规则[mvu_plot] | contentLen=2544
+[494832] keys=['帕克', '爱蜜莉雅', '大精灵', '终焉之兽'] | comment=角色卡:帕克 | contentLen=2109
+[495837] keys=['第五章:从零开始'] | comment=第六卷:第五章:从零开始 | contentLen=1662
+[503275] keys=['第二章', '战斗吧'] | comment=第八卷:第二章:战斗吧 | contentLen=4015
+[515376] keys=['第六章', '各自的誓言'] | comment=第九卷:第六章:各自的誓言 | contentLen=3316
+[539923] keys=[] | comment=[InitVar]zod | contentLen=542
+[541995] keys=['第六章', '通往梅札斯领地之路'] | comment=第七卷:第六章:通往梅札斯领地之路 | contentLen=3077
+[544589] keys=['法兰黛莉卡', '鲍曼'] | comment=角色卡:法兰黛莉卡·鲍曼 | contentLen=1801
+[554926] keys=['第四章:谎言，骗子，唬烂精'] | comment=第十三卷:第四章:谎言，骗子，唬烂精 | contentLen=3890
+[558293] keys=['地理', '文明', '露格尼卡王国', '神圣-佛拉基亚帝国', '卡拉拉基城邦', '古斯提克圣王国'] | comment=世界观-地理 | contentLen=326
+[574480] keys=['第二章', '太迟的抵抗'] | comment=第一卷:第二章:太迟的抵抗 | contentLen=2330
+[575893] keys=['菜月昴'] | comment=角色卡:菜月昴 | contentLen=1484
+[588388] keys=['第七章:──选我吧'] | comment=第十五卷:第七章:──选我吧 | contentLen=3941
+[591394] keys=['第三章:始自四百年前的吶喊'] | comment=第十二卷:第三章:始自四百年前的吶喊 | contentLen=3920
+[602352] keys=['嫉妒魔女', '莎缇拉'] | comment=角色卡:嫉妒魔女莎缇拉 | contentLen=1226
+[644716] keys=['雷姆', '鬼族', '拉姆'] | comment=角色卡:雷姆 | contentLen=2214
+[670009] keys=['第四章', '怠惰的末路'] | comment=第九卷:第四章:怠惰的末路 | contentLen=3017
+[673509] keys=[] | comment=角色强制输出[mvu_plot] | contentLen=89
+[686028] keys=['第五章:奥托·思文'] | comment=第十三卷:第五章:奥托·思文 | contentLen=3953
+[690452] keys=['第五章', 'ALL IN'] | comment=第三卷:第五章:ALL IN | contentLen=2569
+[704276] keys=[] | comment=掷骰触发[mvu_plot] | contentLen=84
+[708784] keys=['第二章:圣域的起始，和崩坏的开始'] | comment=第十四卷:第二章:圣域的起始，和崩坏的开始 | contentLen=3890
+[709922] keys=['自动化判定系统', 'TRPG规则', '判定请求', '结果分级', '骰子', '判定', '对抗骰'] | comment=骰子系统[mvu_plot] | contentLen=2848
+[710944] keys=['罗兹瓦尔', '伯爵'] | comment=角色卡:罗兹瓦尔·L·梅札斯 | contentLen=1918
+[712308] keys=['第三章:白鲸之颚'] | comment=第六卷:第三章:白鲸之颚 | contentLen=2658
+[725418] keys=['第一章:女仆·女仆·女仆'] | comment=第十一卷:第一章:女仆·女仆·女仆 | contentLen=4405
+[750032] keys=['第三章:STRAIGHT\u3000BET'] | comment=第十三卷:第三章:STRAIGHT　BET | contentLen=4850
+[754200] keys=['第五章:Ending List'] | comment=第十二卷:第五章:Ending List | contentLen=3476
+[755624] keys=[] | comment=剧情推进规则[mvu_plot] | contentLen=226
+[756314] keys=[] | comment=世界观-背景历史 | contentLen=501
+[758653] keys=['第一章:在罗兹瓦尔宅邸的最后一天'] | comment=第十五卷:第一章:在罗兹瓦尔宅邸的最后一天 | contentLen=3472
+[763267] keys=['白鲸', '大兔', '黑蛇', '沃尔加姆', '魔兽', '怪物'] | comment=世界观-怪物 | contentLen=320
+[773412] keys=['第三章:贝特鲁吉乌斯曾笑开怀的日子'] | comment=第十四卷:第三章:贝特鲁吉乌斯曾笑开怀的日子 | contentLen=4791
+[779962] keys=['第一章', '自觉的感情'] | comment=第二卷:第一章:自觉的感情 | contentLen=2251
+[784320] keys=['第八章:情书'] | comment=第十三卷:第八章:情书 | contentLen=4351
+[796968] keys=[] | comment=相关设定 | contentLen=1102
+[801815] keys=['第一章', '再访王都'] | comment=第四卷:第一章:再访王都 | contentLen=2679
+[803728] keys=['第二章', '猪的欲望'] | comment=第六卷:第二章:猪的欲望 | contentLen=2597
+[811818] keys=['货币', '货币体系', '圣金币', '金币', '银币', '铜币', '钱'] | comment=世界观-货币经济 | contentLen=969
+[813014] keys=['第二章:少女的福音'] | comment=第十一卷:第二章:少女的福音 | contentLen=4587
+[824631] keys=['第一章:千辛万苦抵达的地方'] | comment=第十卷:第一章:千辛万苦抵达的地方 | contentLen=4058
+[830322] keys=['第四章:生命的价值'] | comment=第十一卷:第四章:生命的价值 | contentLen=4789
+[832809] keys=['第一章:让人泫然欲泣的声音'] | comment=第十三卷:第一章:让人泫然欲泣的声音 | contentLen=4429
+[836154] keys=['第七章:咆哮的重逢'] | comment=第十四卷:第七章:咆哮的重逢 | contentLen=4116
+[847894] keys=['第三章:朋友'] | comment=第十一卷:第三章:朋友 | contentLen=4375
+[855296] keys=['第三章', '自称骑士和最优秀骑士'] | comment=第九卷:第三章:自称骑士和最优秀骑士 | contentLen=3738
+[857318] keys=['终章', '月亮都看在眼里'] | comment=第一卷:终章:月亮都看在眼里 | contentLen=2106
+[863553] keys=['第一章', '重新开始'] | comment=第三卷:第一章:重新开始 | contentLen=2969
+[866126] keys=['琉兹', '梅埃尔'] | comment=角色卡:琉兹·梅埃尔 | contentLen=1540
+[885373] keys=['库珥修', '卡尔斯腾'] | comment=库珥修·卡尔斯腾好感故事 | contentLen=763
+[895140] keys=['第二章:我知道地狱是什么样'] | comment=第十二卷:第二章:我知道地狱是什么样 | contentLen=3824
+[904978] keys=[] | comment=__开始__ | contentLen=8
+[906394] keys=['第二章:映照在水面上的幸福'] | comment=第十五卷:第二章:映照在水面上的幸福 | contentLen=3975
+[910377] keys=['第四章', '对抗绝望的赌注'] | comment=第七卷:第四章:对抗绝望的赌注 | contentLen=4261
+[918364] keys=['第三章:久候多时的重逢'] | comment=第十卷:第三章:久候多时的重逢 | contentLen=4340
+[919883] keys=['阿尔', '阿尔迪巴兰', '穿越者'] | comment=角色卡:阿尔 | contentLen=1703
+[926808] keys=['由里乌斯', '尤克历乌斯', '最优骑士'] | comment=角色卡:由里乌斯·尤克历乌斯 | contentLen=1841
+[929345] keys=['第三章', '勇气的意义'] | comment=第三卷:第三章:勇气的意义 | contentLen=3423
+[931487] keys=['艾姬多娜', '强欲魔女'] | comment=角色卡:艾姬多娜 | contentLen=1857
+[944642] keys=['爱蜜莉雅', '帕克', '半精灵'] | comment=角色卡:爱蜜莉雅 | contentLen=1872
+[946686] keys=[] | comment=龙傲天条目 | contentLen=764
+[954176] keys=['第一章', '名为温暖的福音'] | comment=第九卷:第一章:名为温暖的福音 | contentLen=4549
+[960460] keys=[] | comment=合理性规则 | contentLen=565
+[960747] keys=['第五章:踏出的一步'] | comment=第十卷:第五章:踏出的一步 | contentLen=3895
+[965586] keys=['奥托', '苏文'] | comment=角色卡:奥托·苏文 | contentLen=1775
+[971432] keys=['第三章', '结束与开始'] | comment=第一卷:第三章:结束与开始 | contentLen=1674
+[978193] keys=['碧翠丝', '贝蒂'] | comment=碧翠丝好感故事 | contentLen=775
+[986730] keys=['菲鲁特', '盗贼'] | comment=角色卡:菲鲁特 | contentLen=2059
+[987653] keys=['普莉希拉', '跋利耶尔', '血色新娘', '妾身'] | comment=角色卡:普莉希拉·跋利耶尔 | contentLen=2125
