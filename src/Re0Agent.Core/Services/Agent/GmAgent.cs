@@ -103,7 +103,8 @@ public sealed class GmAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
-                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn, ragContext, charAttrs, roster))
+                    LlmMessage.User(promptComposer.ComposeGmJudgement(turn, ragContext, charAttrs, roster)),
+                    LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },
             cancellationToken);

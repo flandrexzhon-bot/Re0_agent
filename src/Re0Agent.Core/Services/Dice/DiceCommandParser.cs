@@ -56,6 +56,8 @@ public sealed partial class DiceCommandParser
         }
 
         var value = text.Trim();
+        // 剥离 <content>/<thought> 等标签外壳，避免标签混入判定指令。
+        value = TagRegex().Replace(value, " ").Trim();
         var judgementMatch = JudgementRegex().Match(value);
         if (judgementMatch.Success)
         {
@@ -242,8 +244,11 @@ public sealed partial class DiceCommandParser
         };
     }
 
-    [GeneratedRegex("判定\\s*[:：]\\s*(?<command>[^\\r\\n。；;]+)", RegexOptions.Compiled)]
+    [GeneratedRegex("判定\\s*[:：]\\s*(?<command>[^\\r\\n。；;<]+)", RegexOptions.Compiled)]
     private static partial Regex JudgementRegex();
+
+    [GeneratedRegex("</?[a-zA-Z_][^>]*>", RegexOptions.Compiled)]
+    private static partial Regex TagRegex();
 
     [GeneratedRegex("类型=(?<type>死亡回归|Invisible Providence|Cor Leonis|狮子的心脏)", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
     private static partial Regex AuthorityTypeRegex();

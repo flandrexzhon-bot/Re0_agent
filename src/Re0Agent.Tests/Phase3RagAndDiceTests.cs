@@ -266,6 +266,19 @@ public sealed class Phase3RagAndDiceTests
         Assert.Equal(isSuccess, result.IsSuccess);
     }
 
+    [Theory]
+    [InlineData("<content>判定：攻击 #4 vs #2 武器伤害=20</content>", DiceCommandKind.Attack)]
+    [InlineData("<thought>x</thought><content>判定：检定 #4 力量 目标值=12</content>", DiceCommandKind.Check)]
+    [InlineData("判定：无", DiceCommandKind.None)]
+    public void ParserStripsContentTagsAroundJudgement(string raw, DiceCommandKind expectedKind)
+    {
+        var parser = new DiceCommandParser();
+        var command = parser.Parse(raw);
+
+        Assert.Equal(expectedKind, command.Kind);
+        Assert.DoesNotContain("<", command.RawText);
+    }
+
     [Fact]
     public async Task DiceEngineEvaluatesFullSuccess()
     {
