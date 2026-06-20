@@ -40,6 +40,37 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
+    public async Task FormExecutorAcceptsSkillsJsonWithBraces()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+
+            var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
+
+            // skills_json 含 '{' —— EF 的 ExecuteSqlRawAsync 会把它当 {0} 占位符解析失败；
+            // 原生 DbCommand 应按字面执行成功。
+            var sql = "INSERT INTO important_npc (row_id, char_id, name, gender, age, brief_intro, appearance, identity_text, base_attributes, location_name, past_experience, self_status, skills_json) "
+                + "VALUES (1, 5, '拉姆', '女', 17, '双胞胎女仆姐姐', '粉色短发女仆装', '宅邸女仆', '力量:28; 敏捷:48', '罗兹瓦尔宅邸', '侍奉罗兹瓦尔。', '正常', "
+                + "'[{\"技能名\":\"风魔法\",\"manaCost\":20,\"staminaCost\":3,\"说明\":\"操纵风。\",\"可用\":true}]');";
+
+            var result = await executor.ExecuteAsync([sql]);
+
+            context.ChangeTracker.Clear();
+            var npc = await context.ImportantNpcs.SingleAsync();
+            Assert.Equal("拉姆", npc.Name);
+            Assert.Contains("风魔法", npc.SkillsJson);
+            Assert.Equal(1, result.StatementsExecuted);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task FormExecutorStripsNonIntegerChapterWriteFromGlobalState()
     {
         var databasePath = CreateTempDatabasePath();

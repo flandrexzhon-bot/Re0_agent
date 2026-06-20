@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Re0Agent.Core.Database;
 
 namespace Re0Agent.Core.Services.Database;
@@ -30,9 +31,16 @@ public sealed partial class FormAgentSqlExecutor(
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
+        var connection = dbContext.Database.GetDbConnection();
         foreach (var statement in safeStatements)
         {
-            await dbContext.Database.ExecuteSqlRawAsync(statement, cancellationToken);
+            // 用原生 DbCommand 执行：EF 的 ExecuteSqlRawAsync 会把 SQL 里的 '{' 当作
+            // {0} 参数占位符解析，而 skills_json 等 JSON 值含 '{' 会触发
+            // "Expected an ASCII digit" 解析错误。原生命令按字面执行，规避该问题。
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction.GetDbTransaction();
+            command.CommandText = statement;
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
