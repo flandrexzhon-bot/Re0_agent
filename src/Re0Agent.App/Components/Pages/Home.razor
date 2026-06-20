@@ -330,10 +330,6 @@ else
                             <input type="checkbox" @bind="skipPlayerTurn" />
                             <span>旁观模式（跳过主角本回合行动）</span>
                         </label>
-                        <label class="inline-toggle">
-                            <input type="checkbox" @bind="directPlayerOutput" />
-                            <span>直接输出（不经过角色agent）</span>
-                        </label>
                         <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
                             @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
                         </button>
@@ -611,6 +607,13 @@ else
                                         <option value="@p.AgentName">@p.AgentName</option>
                                     }
                                 </select>
+                            </div>
+
+                            <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
+                                <label class="inline-toggle" style="font-size: 0.8rem;">
+                                    <input type="checkbox" @bind="directPlayerOutput" />
+                                    <span>直接输出（不经过角色agent）</span>
+                                </label>
                             </div>
 
                             <!-- 角色与模型绑定 -->
