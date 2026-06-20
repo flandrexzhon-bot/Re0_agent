@@ -19,11 +19,34 @@ public static class ChronicleSelector
         IEnumerable<string> keywords,
         CancellationToken cancellationToken = default)
     {
+        return await SelectAsync(dbContext, keywords, fallbackToPrologueWhenEmpty: false, cancellationToken);
+    }
+
+    /// <param name="fallbackToPrologueWhenEmpty">
+    /// 当不存在任何正式编年史(AM0001+)时，是否回退为序章 AM0000。
+    /// 用于角色调度等开局场景：此时唯一的历史就是序章。
+    /// </param>
+    public static async Task<IReadOnlyList<ChronicleEntry>> SelectAsync(
+        Re0AgentDbContext dbContext,
+        IEnumerable<string> keywords,
+        bool fallbackToPrologueWhenEmpty,
+        CancellationToken cancellationToken = default)
+    {
         // 全部正式编年史（排除序章 AM0000），按时间升序。
         var all = await dbContext.Chronicle.AsNoTracking()
             .Where(c => c.CodeIndex != "AM0000")
             .OrderBy(c => c.RowId)
             .ToListAsync(cancellationToken);
+
+        if (all.Count == 0 && fallbackToPrologueWhenEmpty)
+        {
+            // 仅有序章时，把 AM0000 当作历史返回。
+            var prologue = await dbContext.Chronicle.AsNoTracking()
+                .Where(c => c.CodeIndex == "AM0000")
+                .OrderBy(c => c.RowId)
+                .ToListAsync(cancellationToken);
+            return prologue;
+        }
 
         return Select(all, keywords);
     }
