@@ -41,17 +41,6 @@ public sealed class CharacterSubAgent(
     {
         var config = await configResolver.FindConfigAsync("CharacterSub", "CharacterSub", cancellationToken);
 
-        var recentChronicle = await dbContext.Chronicle
-            .AsNoTracking()
-            .OrderByDescending(c => c.RowId)
-            .Take(5)
-            .OrderBy(c => c.RowId)
-            .ToListAsync(cancellationToken);
-
-        var history = recentChronicle.Count == 0
-            ? "无历史记录。"
-            : string.Join('\n', recentChronicle.Select(c => $"[{c.CodeIndex}] {c.ChronicleText}"));
-
         var allEntries = await ragService.ListAllEntriesAsync(cancellationToken);
 
         // 当前地点术语（用于匹配 locations:X 类别）
@@ -60,6 +49,14 @@ public sealed class CharacterSubAgent(
         AddTerm(locationTerms, state?.CurrentLocation);
         AddTerm(locationTerms, state?.CurrentMinorRegion);
         AddTerm(locationTerms, state?.CurrentMajorRegion);
+
+        // 编年史(AM)：最近 5 条 + 关键词匹配最多的 15 条（关键词为出场角色名 + 当前地点）。
+        var chronicleKeywords = allProfiles.Select(p => p.CharacterName).Concat(locationTerms);
+        var recentChronicle = await ChronicleSelector.SelectAsync(dbContext, chronicleKeywords, cancellationToken);
+
+        var history = recentChronicle.Count == 0
+            ? "无历史记录。"
+            : string.Join('\n', recentChronicle.Select(c => $"[{c.CodeIndex}] {c.ChronicleText}"));
 
         var allowedCategories = allEntries
             .Select(WorldBookCategory.GetKey)

@@ -35,15 +35,16 @@ public sealed class ChapterSwitchAgent(
             ?? ChapterData.GetCurrentChapterText(allEntries, chapterVariantRenderer, chapter);
         var upcomingChapters = ChapterData.GetUpcomingText(allEntries, chapterVariantRenderer, chapter);
 
-        // 历史上下文：本回合原版全文（GM开场 + 全部角色行动）+ 最近 5 条编年史(AM)总结。
+        // 历史上下文：本回合原版全文（GM开场 + 全部角色行动）+ 编年史(AM)总结。
+        // 编年史选取：最近 5 条 + 关键词匹配最多的 15 条（关键词为当前地点/区域）。
         // 章节切换 Agent 与填表 Agent 并发运行，本回合内容此刻尚未写入 chronicle，
         // 因此必须直接用 round 的原始内容，而非只读 DB 的 AM 总结，否则会显示"无历史"。
-        var recentChronicle = await dbContext.Chronicle.AsNoTracking()
-            .Where(c => c.CodeIndex != "AM0000")
-            .OrderByDescending(c => c.RowId)
-            .Take(5)
-            .OrderBy(c => c.RowId)
-            .ToListAsync(cancellationToken);
+        var keywords = new[]
+        {
+            state?.CurrentLocation, state?.CurrentMinorRegion, state?.CurrentMajorRegion
+        }.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k!);
+
+        var recentChronicle = await ChronicleSelector.SelectAsync(dbContext, keywords, cancellationToken);
 
         var history = RoundContextBuilder.BuildHistory(round, recentChronicle);
 

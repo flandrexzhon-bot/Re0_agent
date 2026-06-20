@@ -120,4 +120,63 @@ public sealed class Phase2AgentTests
         Assert.Contains("抵达王都", history);
         Assert.Contains("次日清晨", history);
     }
+
+    [Fact]
+    public void ChronicleSelectorAlwaysKeepsRecentFiveAndTopKeywordMatches()
+    {
+        // 构造 30 条编年史：RowId 1..30，升序。
+        // 偶数条提到"雷姆"，其中 RowId=2/4/6 提及多次（命中数更高）。
+        var all = new List<Re0Agent.Core.Entities.ChronicleEntry>();
+        for (var i = 1; i <= 30; i++)
+        {
+            var text = i % 2 == 0 ? $"第{i}回合，雷姆出现了。" : $"第{i}回合，平淡无事。";
+            if (i is 2 or 4 or 6)
+            {
+                text += "雷姆雷姆雷姆"; // 提高命中数
+            }
+
+            all.Add(new Re0Agent.Core.Entities.ChronicleEntry
+            {
+                RowId = i, CodeIndex = $"AM{i:0000}", TimeSpan = "x ~ y",
+                Summary = "s", ChronicleText = text
+            });
+        }
+
+        var selected = Re0Agent.Core.Services.Agent.ChronicleSelector.Select(all, ["雷姆"]);
+        var ids = selected.Select(c => c.RowId).ToList();
+
+        // 最近 5 条（26..30）必选。
+        foreach (var id in new[] { 26, 27, 28, 29, 30 })
+        {
+            Assert.Contains(id, ids);
+        }
+
+        // 关键词命中最高的 2/4/6 应入选（不在最近5里，命中数最高）。
+        Assert.Contains(2, ids);
+        Assert.Contains(4, ids);
+        Assert.Contains(6, ids);
+
+        // 总数 = 5 最近 + 至多 15 关键词，且升序排列。
+        Assert.True(selected.Count <= 20);
+        Assert.Equal(ids.OrderBy(x => x), ids);
+
+        // 关键词命中数为 0 的奇数条（不在最近5里），不会被关键词选中（如 RowId=1）。
+        Assert.DoesNotContain(1, ids);
+    }
+
+    [Fact]
+    public void ChronicleSelectorReturnsAllWhenFewerThanFive()
+    {
+        var all = Enumerable.Range(1, 3)
+            .Select(i => new Re0Agent.Core.Entities.ChronicleEntry
+            {
+                RowId = i, CodeIndex = $"AM{i:0000}", TimeSpan = "x ~ y",
+                Summary = "s", ChronicleText = $"第{i}回合。"
+            })
+            .ToList();
+
+        var selected = Re0Agent.Core.Services.Agent.ChronicleSelector.Select(all, ["雷姆"]);
+
+        Assert.Equal(3, selected.Count);
+    }
 }
