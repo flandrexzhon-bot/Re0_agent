@@ -226,35 +226,6 @@
             </div>
         </div>
 
-        <!-- 重要 NPC 列表 -->
-        <div class="work-surface">
-            <h2>羁绊角色 (Important NPCs)</h2>
-            <div class="table-responsive">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>姓名</th>
-                            <th>年龄/性别</th>
-                            <th>所在位置</th>
-                            <th>关系简述</th>
-                            <th>简介</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var npc in npcs)
-                        {
-                            <tr>
-                                <td style="font-family: var(--font-heading); color: var(--color-gold-glow);">@npc.Name</td>
-                                <td>@npc.Age 岁 / @npc.Gender</td>
-                                <td>@npc.LocationName</td>
-                                <td style="font-size: 0.85rem;">@npc.RelationsText</td>
-                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.BriefIntro</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
     }
 
     <!-- 标签页内容：记忆刻印 -->
@@ -415,6 +386,7 @@
     {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-vintage); padding-bottom: 0.5rem;">
             <div class="vintage-sub-tabs" style="display: flex; gap: 0.5rem; flex-wrap: wrap; border: none; padding: 0; margin: 0;">
+                <button class="btn-custom @(activeSubTab == "npcs" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "npcs"'>👥 羁绊角色 (@npcs.Count)</button>
                 <button class="btn-custom @(activeSubTab == "factions" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "factions"'>🚩 阵营势力 (@factions.Count)</button>
                 <button class="btn-custom @(activeSubTab == "mappoints" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "mappoints"'>🗺️ 探索场景 (@mapPoints.Count)</button>
                 <button class="btn-custom @(activeSubTab == "elements" ? "primary-action" : "")" style="padding: 0.45rem 1rem; font-size: 0.85rem;" @onclick='() => activeSubTab = "elements"'>🔍 场景要素 (@mapElements.Count)</button>
@@ -426,7 +398,61 @@
             </button>
         </div>
 
-        @if (activeSubTab == "factions")
+        @if (activeSubTab == "npcs")
+        {
+            <div class="work-surface">
+                <h2>羁绊角色 (Important NPCs)</h2>
+                @if (npcs.Count == 0)
+                {
+                    <p style="color: var(--color-text-secondary);">暂无羁绊角色记录。</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>姓名</th>
+                                    <th>性别</th>
+                                    <th>年龄</th>
+                                    <th>所在位置</th>
+                                    <th>当前状态</th>
+                                    <th>简介</th>
+                                    <th>外貌特征</th>
+                                    <th>身份背景</th>
+                                    <th>基础属性</th>
+                                    <th>特殊加护/权能</th>
+                                    <th>关系简述</th>
+                                    <th>交互选项</th>
+                                    <th>过往经历</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var npc in npcs)
+                                {
+                                    <tr>
+                                        <td style="font-family: var(--font-heading); color: var(--color-gold-glow); white-space: nowrap;">@npc.Name</td>
+                                        <td>@npc.Gender</td>
+                                        <td>@npc.Age 岁</td>
+                                        <td>@npc.LocationName</td>
+                                        <td>@npc.SelfStatus</td>
+                                        <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.BriefIntro</td>
+                                        <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.Appearance</td>
+                                        <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.IdentityText</td>
+                                        <td style="font-family: Consolas, monospace; font-size: 0.8rem; color: var(--color-gold);">@npc.BaseAttributes</td>
+                                        <td style="font-family: Consolas, monospace; font-size: 0.8rem; color: var(--color-crimson-glow);">@npc.SpecialAttributes</td>
+                                        <td style="font-size: 0.85rem;">@npc.RelationsText</td>
+                                        <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.InteractionOptions</td>
+                                        <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@npc.PastExperience</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+        else if (activeSubTab == "factions")
         {
             <div class="work-surface">
                 <h2>阵营势力设定 (Factions)</h2>
@@ -653,7 +679,7 @@
 
 @code {
     private string activeTab = "characters";
-    private string activeSubTab = "factions";
+    private string activeSubTab = "npcs";
     private string? statusMessage;
     private string? errorMessage;
     private string deathCauseInput = string.Empty;
