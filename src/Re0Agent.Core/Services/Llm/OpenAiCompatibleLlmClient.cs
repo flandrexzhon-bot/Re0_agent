@@ -128,13 +128,14 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             reasoning = r.GetString();
         }
 
-        // 部分模型把思维链以 <think>...</think> 内联在 content 里，剥离出来单独展示。
-        if (string.IsNullOrEmpty(reasoning))
+        // 部分模型把思维链以 <think>/<thought> 内联在 content 里，剥离出来单独展示，
+        // 避免思维链进入后续轮次传给 AI 的上下文。
+        var (stripped, thought) = ExtractInlineThink(content);
+        if (thought is not null)
         {
-            var (stripped, thought) = ExtractInlineThink(content);
-            if (thought is not null)
+            content = stripped;
+            if (string.IsNullOrEmpty(reasoning))
             {
-                content = stripped;
                 reasoning = thought;
             }
         }
@@ -146,15 +147,40 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
     {
         if (string.IsNullOrEmpty(content)) return (content, null);
 
-        var match = System.Text.RegularExpressions.Regex.Match(
+        // 同时剥离 <think>…</think> 与 <thought>…</thought>（可多段），大小写不敏感。
+        var matches = System.Text.RegularExpressions.Regex.Matches(
             content,
-            @"<think>(.*?)</think>",
-            System.Text.RegularExpressions.RegexOptions.Singleline);
+            @"<(think|thought)>(.*?)</\1>",
+            System.Text.RegularExpressions.RegexOptions.Singleline
+                | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-        if (!match.Success) return (content, null);
+        if (matches.Count == 0)
+        {
+            // 兜底：思维链开标签存在但未闭合（如输出被截断），剥离从该标签起的剩余内容。
+            var openMatch = System.Text.RegularExpressions.Regex.Match(
+                content,
+                @"<(think|thought)>",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (openMatch.Success)
+            {
+                var head = content[..openMatch.Index].Trim();
+                var tail = content[(openMatch.Index + openMatch.Length)..].Trim();
+                return (head, tail);
+            }
 
-        var thought = match.Groups[1].Value.Trim();
-        var stripped = content.Remove(match.Index, match.Length).Trim();
-        return (stripped, thought);
+            return (content, null);
+        }
+
+        var thoughts = new System.Text.StringBuilder();
+        var stripped = content;
+        // 从后往前移除，保持索引有效。
+        for (var i = matches.Count - 1; i >= 0; i--)
+        {
+            var match = matches[i];
+            thoughts.Insert(0, match.Groups[2].Value.Trim() + "\n");
+            stripped = stripped.Remove(match.Index, match.Length);
+        }
+
+        return (stripped.Trim(), thoughts.ToString().Trim());
     }
 }
