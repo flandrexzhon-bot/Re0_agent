@@ -69,6 +69,12 @@ public sealed class GameProgressService
     public string SelectedChapterSwitchPreset { get; set; } = string.Empty;
     public double DelaySeconds { get; set; } = 0.0;
 
+    /// <summary>全局自动重试开关：输出为空或报错时自动重复请求（最多 3 次）。</summary>
+    public bool AutoRetryEnabled { get; set; } = true;
+
+    /// <summary>静态全局暴露，供 AgentLlmClient 等无需 DI 的底层读取。</summary>
+    public static bool AutoRetryGlobal { get; private set; } = true;
+
     public List<CharacterBinding> CharacterBindings { get; private set; } = new();
     public List<TempNpcBinding> TempNpcBindings { get; private set; } = new();
 
@@ -282,6 +288,10 @@ public sealed class GameProgressService
             {
                 DelaySeconds = 0.0;
             }
+
+            var autoRetryStr = routings.FirstOrDefault(r => r.RoutingKey == "AutoRetry")?.PresetName;
+            AutoRetryEnabled = !string.Equals(autoRetryStr, "0", StringComparison.Ordinal);
+            AutoRetryGlobal = AutoRetryEnabled;
 
             CharacterBindings = routings
                 .Where(r => r.RoutingKey.StartsWith("Character_"))
@@ -693,6 +703,9 @@ public sealed class GameProgressService
                 newRoutings.Add(new ApiRouting { RoutingKey = "Dice", PresetName = SelectedDicePreset });
             
             newRoutings.Add(new ApiRouting { RoutingKey = "Delay", PresetName = DelaySeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+
+            newRoutings.Add(new ApiRouting { RoutingKey = "AutoRetry", PresetName = AutoRetryEnabled ? "1" : "0" });
+            AutoRetryGlobal = AutoRetryEnabled;
 
             if (!string.IsNullOrWhiteSpace(SelectedMemoryPreset))
                 newRoutings.Add(new ApiRouting { RoutingKey = "Memory", PresetName = SelectedMemoryPreset });

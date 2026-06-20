@@ -30,7 +30,7 @@ public sealed class AgentLlmClient(
             throw new InvalidOperationException(err);
         }
 
-        var autoRetry = request.Options.AutoRetry;
+        var autoRetry = request.Options.AutoRetry && Re0Agent.Core.Services.Agent.GameProgressService.AutoRetryGlobal;
         var lastResponse = default(LlmResponse);
         var lastException = default(Exception);
 
