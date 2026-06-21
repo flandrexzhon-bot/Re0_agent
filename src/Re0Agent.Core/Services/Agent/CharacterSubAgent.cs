@@ -51,10 +51,10 @@ public sealed class CharacterSubAgent(
         AddTerm(locationTerms, state?.CurrentMajorRegion);
 
         // 编年史(AM)：最近 5 条 + 关键词匹配最多的 15 条（关键词为出场角色名 + 当前地点）。
-        // 仅有序章 AM0000（开局）时回退为 AM0000，否则不计入序章。
+        // 序章 AM0000（前序故事）与其他 AM 地位相同，照常参与选取。
         var chronicleKeywords = allProfiles.Select(p => p.CharacterName).Concat(locationTerms);
         var recentChronicle = await ChronicleSelector.SelectAsync(
-            dbContext, chronicleKeywords, fallbackToPrologueWhenEmpty: true, cancellationToken);
+            dbContext, chronicleKeywords, cancellationToken);
 
         var history = recentChronicle.Count == 0
             ? "无历史记录。"

@@ -811,9 +811,9 @@ public sealed class GameProgressService
                 {
                     prologueText = prologueText + "\n" + new string(' ', 200 - prologueText.Length);
                 }
-                else if (prologueText.Length > 600)
+                else if (prologueText.Length > 2000)
                 {
-                    prologueText = prologueText.Substring(0, 600);
+                    prologueText = prologueText.Substring(0, 2000);
                 }
 
                 var nowStr = DateTime.Now.ToString("yyyy-MM-dd HH:mm");

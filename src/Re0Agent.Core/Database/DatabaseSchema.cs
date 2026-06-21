@@ -161,7 +161,7 @@ public static class DatabaseSchema
           code_index TEXT NOT NULL UNIQUE CHECK(code_index GLOB 'AM[0-9][0-9][0-9][0-9]'),
           time_span TEXT NOT NULL CHECK(time_span GLOB '????-??-?? ??:?? ~ ????-??-?? ??:??'),
           summary TEXT NOT NULL CHECK(LENGTH(summary) <= 30),
-          chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 1000)
+          chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 2000)
         );
         """,
         """

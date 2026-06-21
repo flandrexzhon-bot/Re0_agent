@@ -231,7 +231,13 @@ public static class DatabaseInitializer
             }
         }
 
-        if (tableSql.Contains(">= 200 AND LENGTH(chronicle_text) <= 600", StringComparison.OrdinalIgnoreCase))
+        // 历次提高 chronicle_text 上限：旧库可能是 <=600 或 <=1000，统一迁移到 <=2000，
+        // 以便前序故事/编年史容纳更多文字。
+        var needsChronicleUpgrade =
+            tableSql.Contains("LENGTH(chronicle_text) <= 600", StringComparison.OrdinalIgnoreCase)
+            || tableSql.Contains("LENGTH(chronicle_text) <= 1000", StringComparison.OrdinalIgnoreCase);
+
+        if (needsChronicleUpgrade)
         {
             var migrationStatements = new[]
             {
@@ -242,7 +248,7 @@ public static class DatabaseInitializer
                   code_index TEXT NOT NULL UNIQUE,
                   time_span TEXT NOT NULL CHECK(time_span GLOB '????-??-?? ??:?? ~ ????-??-?? ??:??'),
                   summary TEXT NOT NULL CHECK(LENGTH(summary) <= 30),
-                  chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 1000)
+                  chronicle_text TEXT NOT NULL CHECK(LENGTH(chronicle_text) >= 100 AND LENGTH(chronicle_text) <= 2000)
                 );
                 """,
                 "INSERT INTO chronicle (row_id, code_index, time_span, summary, chronicle_text) SELECT row_id, code_index, time_span, summary, chronicle_text FROM chronicle_old;",

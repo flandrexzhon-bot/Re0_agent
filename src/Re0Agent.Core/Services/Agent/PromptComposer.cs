@@ -728,7 +728,7 @@ public sealed class PromptComposer
         - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增）。
         - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'。
         - `summary` (TEXT): 概括本回合主要事件，<= 30 字符。
-        - `chronicle_text` (TEXT): 详细剧情，100~1000 字符，建议 300~500 字。
+        - `chronicle_text` (TEXT): 详细剧情，100~2000 字符，建议 300~600 字。
 
         【表 character_memory】角色记忆，本回合有互动或内心活动的角色分别 INSERT 一条。
         - `character_name`, `round_index`, `memory_text`(<=400字), `emotional_state`, `created_at`('yyyy-MM-dd HH:mm')。
