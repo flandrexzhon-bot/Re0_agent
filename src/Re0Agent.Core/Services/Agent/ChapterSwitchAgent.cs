@@ -76,7 +76,7 @@ public sealed class ChapterSwitchAgent(
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是帕秋莉，负责判断章节是否需要切换。只输出 <update>_.set</update> 指令，不需要输出其他内容。"),
                     LlmMessage.User(promptComposer.ComposeChapterSwitch(
-                        state, history, currentChapterPlot, upcomingChapters,
+                        state, currentChapterPlot, upcomingChapters,
                         ragContext, prologue, dbSummary, lastChronicle)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)

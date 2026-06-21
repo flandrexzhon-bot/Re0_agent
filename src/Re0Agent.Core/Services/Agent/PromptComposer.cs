@@ -34,7 +34,6 @@ public sealed class PromptComposer
 
     public string ComposeCharacterSub(
         IReadOnlyList<CharacterAgentProfile> allProfiles,
-        string history,
         string currentLocation,
         RagContext? ragContext = null,
         string? chapterInfo = null)
@@ -164,7 +163,6 @@ public sealed class PromptComposer
 
     public string ComposeChapterSwitch(
         GlobalState? globalState,
-        string history,
         string currentChapterPlot,
         string upcomingChapters,
         RagContext? ragContext = null,

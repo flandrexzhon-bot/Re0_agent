@@ -104,7 +104,7 @@ public sealed class CharacterSubAgent(
                 Options = AgentConfigResolver.ToLlmOptions(config),
                 Messages =
                 [
-                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, history, currentLocation, compactRag, chapterInfo)),
+                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, currentLocation, compactRag, chapterInfo)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
