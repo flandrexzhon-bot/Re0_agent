@@ -54,6 +54,13 @@ public sealed class GmAgent(
 
         var dbSummary = await BuildDbSummaryAsync(cancellationToken);
 
+        // 历史上下文（深度注入）：序章 + 最近一条编年史，作为独立消息紧贴生成点。
+        var openingHistory = string.Join("\n\n", new[]
+        {
+            string.IsNullOrWhiteSpace(prologue) ? null : $"【序章/前序故事 AM0000】\n{prologue}",
+            string.IsNullOrWhiteSpace(lastChronicle) ? null : $"【上一回合编年史】\n{lastChronicle}"
+        }.Where(s => s is not null));
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -63,6 +70,7 @@ public sealed class GmAgent(
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
                     LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, slotList, ragContext, prologue, dbSummary, lastChronicle)),
+                    LlmMessage.User(promptComposer.ComposeHistoryInjection(openingHistory)),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },

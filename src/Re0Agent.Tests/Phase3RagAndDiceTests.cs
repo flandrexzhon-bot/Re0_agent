@@ -161,10 +161,26 @@ public sealed class Phase3RagAndDiceTests
             "向爱蜜莉雅道谢",
             new RagContext { Content = "基础设定、王都地点设定、菜月昴角色设定。" });
 
-        Assert.Contains("world_settings", prompt);
+        Assert.Contains("角色可见世界书", prompt);
         Assert.Contains("全角括号（）", prompt);
         Assert.Contains("不得超过150个中文字符", prompt);
         Assert.Contains("“爱蜜莉雅正是个好人啊！”（微笑着点头）", prompt);
+    }
+
+    [Fact]
+    public void HistoryInjectionMarksHistoryAsHighestPriority()
+    {
+        var composer = new PromptComposer();
+
+        var block = composer.ComposeHistoryInjection("菜月昴在王都广场遇袭并死亡回归。");
+
+        Assert.Contains("菜月昴在王都广场遇袭并死亡回归。", block);
+        Assert.Contains("最高优先", block);
+        Assert.Contains("权重最高", block);
+
+        // 空历史时给出占位，不抛异常。
+        var empty = composer.ComposeHistoryInjection(null);
+        Assert.Contains("无历史记录", empty);
     }
 
     [Fact]
@@ -219,7 +235,8 @@ public sealed class Phase3RagAndDiceTests
             },
             null);
 
-        var prompt = Assert.Single(llmClient.LastRequest!.Messages.Where(message => message.Role == "user")).Content;
+        // 主体提示词为首条 user 消息；第二条 user 是历史深度注入消息。
+        var prompt = llmClient.LastRequest!.Messages.First(message => message.Role == "user").Content;
         Assert.Contains("基础可见", prompt);
         Assert.Contains("基础世界可见", prompt);
         Assert.Contains("时间历法可见", prompt);

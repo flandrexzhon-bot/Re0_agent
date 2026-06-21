@@ -77,6 +77,12 @@ public sealed class CharacterAgentService(
             },
             cancellationToken);
 
+        // 历史上下文（深度注入）：与本角色相关的编年史(最近5+关键词) + 本回合原版上文，
+        // 作为独立消息紧贴生成点，权重高于世界书设定。
+        var chronicleKeywords = new[] { profile.CharacterName };
+        var selectedChronicle = await ChronicleSelector.SelectAsync(dbContext, chronicleKeywords, cancellationToken);
+        var history = RoundContextBuilder.BuildHistory(round, selectedChronicle);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -86,6 +92,7 @@ public sealed class CharacterAgentService(
                 [
                     LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的专属角色Agent。"),
                     LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext)),
+                    LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },

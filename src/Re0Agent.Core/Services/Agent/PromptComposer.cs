@@ -14,6 +14,24 @@ public sealed class PromptComposer
     /// </summary>
     public const string ThoughtPrefill = "<thought>\nOK，开始思考啦。\n先看看现在是什么个情况？";
 
+    /// <summary>
+    /// 历史上下文「深度注入」块（SillyTavern @depth=0 思路）。
+    /// 作为一条独立 User 消息插在 assistant 前缀之前、紧贴生成点，
+    /// 让模型把"已发生的历史/编年史"放在最高注意力位，权重高于章节剧情/世界书设定。
+    /// </summary>
+    public string ComposeHistoryInjection(string? history)
+    {
+        var historyText = string.IsNullOrWhiteSpace(history) ? "无历史记录。" : history.Trim();
+        return $"""
+        【最高优先·历史上下文（已发生的事实）】
+        以下是本场冒险真实已发生的剧情、编年史与上文记录。请【优先依据这些已发生的事实】来推进剧情、保持人物与情节连贯。
+
+        {historyText}
+
+        ——再次强调：以上"已发生的历史"权重最高，高于"当前章节剧情/世界书设定"。章节剧情与世界书仅作背景参考，绝不可凌驾于已经发生的事实之上，也不要为了套用章节剧本而无视上文。
+        """;
+    }
+
     public string ComposeCharacterSub(
         IReadOnlyList<CharacterAgentProfile> allProfiles,
         string history,
@@ -115,9 +133,7 @@ public sealed class PromptComposer
         里面写着：
         World_settings:{{worldSettings}}
         泉此方："哦哦！都是我认识的角色！好幸福！"
-        本章剧情：{{chapterInfo ?? "无"}}
-
-        开普勒先生："这里是历史上下文{{history}}。"
+        本章剧情（仅作背景参考，调度出场角色时以历史上下文中已发生的事实为准）：{{chapterInfo ?? "无"}}
 
         以下为总体格式输出顺序，严格遵守
         <Output_format>
@@ -266,14 +282,13 @@ public sealed class PromptComposer
         设定背景 {{FormatRagContext(ragContext)}}
         帕秋莉："嗯，让我看看现在的剧情进行到哪了。"
 
-        【当前章节剧情（来自世界书）】
+        【当前章节剧情（来自世界书，仅用于判断是否切章；剧情走向以历史上下文中已发生的事实为准）】
         {{currentChapterPlot}}
 
         【后面可选章节（本章往后10章，来自世界书；切章时只能选这里列出的合法章节号）】
         {{upcomingChapters}}
 
-        开普勒先生："这是历史上下文{{history}}。"
-        帕秋莉："好的，知道了。"
+        帕秋莉："好的，历史上下文我待会儿单独细看。"
         以下为总体格式输出顺序，严格遵守
         <Output_format>
         格式示例开始:
@@ -413,10 +428,8 @@ public sealed class PromptComposer
         设定背景 {{FormatRagContext(ragContext)}}
         泉此方："好的先生，人物位号我已经帮忙整理好了！这里是位号数据{{slotList}}"
         开普勒先生："小此真能干。"
-        帕秋莉："开普勒，这里是现在可能会用到的章节{{chapter}}"
-        开普勒先生："好的，知道了。"
-
-        这里是历史上下文：{{prologueText}} {{lastChronicle}}
+        帕秋莉："开普勒，这里是现在可能会用到的章节（仅作背景参考，剧情走向以历史上下文为准）{{chapter}}"
+        开普勒先生："好的，知道了。历史上下文我待会儿单独细看，那才是真正发生过的事。"
 
         以下为总体格式输出顺序，严格遵守
         <Output_format>
@@ -622,7 +635,7 @@ public sealed class PromptComposer
         - 个人状态 (ImportantNpc / ProtagonistInfo): {{profile.CurrentStateReference}}
         - 基础背景设定 (WorldBook): {{profile.WorldBookEntryKey ?? "暂无特定设定"}}
 
-        【角色可见世界书】
+        【角色可见世界书（仅作背景参考，行动以历史上下文与本回合实况为准）】
         {{FormatRagContext(ragContext)}}
 
         【个人记忆 (Character Memory)】
