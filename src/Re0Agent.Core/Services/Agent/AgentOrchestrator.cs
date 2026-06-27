@@ -56,11 +56,9 @@ public sealed class AgentOrchestrator(
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         round.PendingProtagonistProfiles = profiles.Where(profile => profile.IsPlayerControlled).ToList();
 
-        // 新顺序：GM 先铺陈开场（不依赖位号），泉此方再读开场决定本回合阵容（主角排第一）。
+        // 新顺序：GM 先铺陈开场（不依赖位号）。主角行动后，泉此方再依据开场+主角行动调度 NPC。
         round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, slotList: "", cancellationToken);
         round.Events.Add(round.GmOpening);
-
-        round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, cancellationToken);
 
         if (onStepCompleted is not null)
         {
@@ -203,7 +201,7 @@ public sealed class AgentOrchestrator(
     }
 
     /// <summary>
-    /// 第二阶段：主角先行动（消费玩家输入），随后在场 NPC 依位号回应，
+    /// 第二阶段：主角先行动（消费玩家输入），随后泉此方调度 NPC 阵容、在场 NPC 依位号回应，
     /// 最后 GM 总结、填表写库、自动存档或死亡回归。
     /// </summary>
     public async Task<GameRound> RunPlayerThenNpcTurnsAsync(
@@ -237,9 +235,19 @@ public sealed class AgentOrchestrator(
 
         round.PendingProtagonistProfiles = [];
 
-        // 2. 主角已触发死亡回归则跳过 NPC，直接结算。
+        // 2. 主角已触发死亡回归则跳过调度与 NPC，直接结算。
         if (round.DeathReturnCause is null)
         {
+            // 泉此方依据 GM 开场 + 主角已完成的行动调度本回合 NPC 阵容（不涉及主角）。
+            var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, cancellationToken);
+
+            if (onStepCompleted is not null)
+            {
+                await onStepCompleted(round);
+            }
+            await ApplyDelayAsync(cancellationToken);
+
             await RunNpcTurnsAsync(round, onStepCompleted, cancellationToken);
         }
 
