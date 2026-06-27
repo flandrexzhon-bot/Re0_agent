@@ -139,6 +139,15 @@ public sealed class PromptComposer
     public string ComposeGmOpeningThoughtGuide()
     {
         return """
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        </thought>
+        <content>
+        {简体中文正文内容}
+        </content>
+
         <Chain_of_Thought>
         正式创作正文前，按照以下条目**一条一条**仔细思考，**每条字数多点不许偷懒**
         思考需用<thought>标签包裹，不重复思考不打草稿
@@ -172,6 +181,15 @@ public sealed class PromptComposer
     public string ComposeCharacterTurnThoughtGuide()
     {
         return """
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        </thought>
+        <content>
+        {简体中文正文内容}
+        </content>
+
         <Chain_of_Thought>
         正式创作正文前，按照以下条目**一条一条**仔细思考，**每条字数多点不许偷懒**
         思考需用<thought>标签包裹，不重复思考不打草稿
@@ -183,6 +201,8 @@ public sealed class PromptComposer
          * 人物关系？
 
         - 我拿到了些什么信息？
+
+        - 根据在场角色（即角色位号中有的角色）我如何进行合理的互动？
 
         - 如何使用最新输入内容？
 
@@ -635,15 +655,6 @@ public sealed class PromptComposer
         帕秋莉："开普勒，这里是现在可能会用到的章节，仅作背景参考哦，剧情走向请以历史上下文为准{{chapter}}"
         开普勒先生："好的，知道了。历史上下文我待会儿单独细看，那才是真正发生过的事。"
 
-        以下为总体格式输出顺序，严格遵守
-        <Output_format>
-        格式示例开始:
-        {思考内容}
-        </thought>
-        <content>
-        {简体中文正文内容}
-        </content>
-
         {{GmWritingRulesBlock()}}
 
         正文内容要求：
@@ -729,6 +740,10 @@ public sealed class PromptComposer
         var previousTurns = round.CharacterTurns.Count == 0
             ? "本大轮中，目前尚无其他角色在之前行动。"
             : string.Join('\n', round.CharacterTurns.Select(turn => $"- {turn.CharacterName}: {turn.ActionText} (判定: {turn.GmJudgement} / 结果: {turn.ResultResponse})"));
+
+        var slotList = string.IsNullOrWhiteSpace(round.CharacterSubSlots)
+            ? "（本回合暂无位号安排，按开场与上文判断在场角色。）"
+            : round.CharacterSubSlots.Trim();
 
         var instructionPrompt = profile.IsPlayerControlled
             ? $"""
@@ -832,6 +847,8 @@ public sealed class PromptComposer
 
         【当前回合情境上下文 (大回合上文)】
         - GM 开场白描述: {{round.GmOpening}}
+        - 本回合在场角色位号（即此刻在场、会参与互动的角色）:
+            {{slotList}}
                 {{instructionPrompt}}
         - 本大回合在你之前的角色行动记录:
             {{previousTurns}}
@@ -843,15 +860,6 @@ public sealed class PromptComposer
         2. 总字数不得少于50个中文字符，不得超过150个中文字符。（可以写多句）
         3. 不要输出旁白、内心独白、GM裁定、骰子命令、Markdown、章节脚本或其他角色的台词/动作。
         4. 格式示例：“爱蜜莉雅正是个好人啊！”（微笑着点头）
-
-        以下为总体格式输出顺序，严格遵守
-        <Output_format>
-        格式示例开始:
-        {思考内容}
-        </thought>
-        <content>
-        {简体中文正文内容}
-        </content>
         """;
     }
 
