@@ -79,6 +79,7 @@ public sealed class ChapterSwitchAgent(
                         state, currentChapterPlot, upcomingChapters,
                         ragContext, prologue, dbSummary, lastChronicle)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
+                    LlmMessage.User(promptComposer.ComposeChapterSwitchThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },

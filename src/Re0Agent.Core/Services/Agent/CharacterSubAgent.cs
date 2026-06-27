@@ -106,6 +106,7 @@ public sealed class CharacterSubAgent(
                 [
                     LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, currentLocation, compactRag, chapterInfo)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
+                    LlmMessage.User(promptComposer.ComposeCharacterSubThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },

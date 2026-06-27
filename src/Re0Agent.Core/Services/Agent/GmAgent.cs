@@ -71,6 +71,7 @@ public sealed class GmAgent(
                     LlmMessage.System(config?.SystemPrompt ?? "你是Re:Zero桌游GM。"),
                     LlmMessage.User(promptComposer.ComposeGmOpening(state, profiles, slotList, ragContext, prologue, dbSummary, lastChronicle)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(openingHistory)),
+                    LlmMessage.User(promptComposer.ComposeGmOpeningThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },

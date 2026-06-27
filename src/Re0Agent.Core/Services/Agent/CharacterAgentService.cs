@@ -93,6 +93,7 @@ public sealed class CharacterAgentService(
                     LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的专属角色Agent。"),
                     LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
+                    LlmMessage.User(promptComposer.ComposeCharacterTurnThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]
             },
