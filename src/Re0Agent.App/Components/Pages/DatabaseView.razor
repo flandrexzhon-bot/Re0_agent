@@ -8,7 +8,6 @@
 @using Re0Agent.Core.Services.Llm
 @using Re0Agent.Core.Models
 @inject Re0AgentDbContext DbContext
-@inject SaveSystem SaveSys
 @inject ProtagonistTemplateService TemplateService
 @inject FormAgent FormAgent
 @inject FormAgentSqlExecutor SqlExecutor
@@ -50,9 +49,6 @@
         </button>
         <button class="vintage-tab-btn @(activeTab == "memories" ? "active" : "")" @onclick='() => SwitchTab("memories")'>
             🧠 记忆刻印
-        </button>
-        <button class="vintage-tab-btn @(activeTab == "saves" ? "active" : "")" @onclick='() => SwitchTab("saves")'>
-            ⏳ 命运锚地 & 死亡日志
         </button>
         <button class="vintage-tab-btn @(activeTab == "worldbook" ? "active" : "")" @onclick='() => SwitchTab("worldbook")'>
             📖 现世处境
@@ -263,116 +259,6 @@
                                 <td style="font-size: 0.9rem; white-space: pre-wrap;">@memory.MemoryText</td>
                                 <td style="color: var(--color-text-secondary);">@memory.EmotionalState</td>
                                 <td style="font-size: 0.8rem; color: var(--color-text-secondary);">@memory.CreatedAt</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
-
-    <!-- 标签页内容：命运锚点与死亡日志 -->
-    @if (activeTab == "saves")
-    {
-        <!-- 手动触发死亡回归控制台 -->
-        <div class="work-surface error-panel">
-            <h2>魔女的眷顾：手动触发“死亡回归”</h2>
-            <p>通过遭受重创或主动舍弃世界线，主角将强制重置时间并返回最近的因果锚点。</p>
-            <div style="display: flex; gap: 1rem; align-items: flex-end; margin-top: 1rem;">
-                <div style="flex: 1;">
-                    <label style="display: block; font-size: 0.85rem; color: #ffb8b8; margin-bottom: 0.35rem;">回归死因 / 触发契机</label>
-                    <input type="text" @bind="deathCauseInput" placeholder="例如：在冰冷的森林中被魔兽撕碎..." style="border-color: var(--color-crimson); background: rgba(0,0,0,0.5);" />
-                </div>
-                <button type="button" class="danger-action" style="padding: 0.75rem 1.5rem;" @onclick="TriggerManualDeathReturnAsync">
-                    💔 触发死亡回归
-                </button>
-            </div>
-        </div>
-
-        <!-- 命运存档锚地 -->
-        <div class="work-surface">
-            <h2>时间因果锚点 (Save Points)</h2>
-            <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
-                每一条记录代表一个保存的世界状态副本。最新的存档代表当前世界线的根基，不可删除。
-            </p>
-            <div class="table-responsive">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 80px;">锚点ID</th>
-                            <th style="width: 80px;">章节</th>
-                            <th>记录契机 (Trigger Reason)</th>
-                            <th style="width: 220px;">刻印时间</th>
-                            <th style="width: 220px; text-align: right;">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var save in savePoints)
-                        {
-                            <tr>
-                                <td style="font-family: Consolas, monospace;">#@save.SaveId</td>
-                                <td>第 @save.Chapter 章</td>
-                                <td style="color: var(--color-gold-glow);">@save.TriggerReason</td>
-                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@save.CreatedAt</td>
-                                <td style="text-align: right; white-space: nowrap;">
-                                    @if (save.IsLatest)
-                                    {
-                                        <span class="latest-bookmark" style="margin-right: 0.5rem;">最新锚点</span>
-                                    }
-                                    
-                                    <button type="button" class="btn-custom primary-action" style="font-size: 0.75rem; padding: 0.3rem 0.6rem; margin-right: 0.35rem;"
-                                            @onclick="() => ConfirmRollback(save.SaveId)">
-                                        ⏳ 回滚至此
-                                    </button>
-
-                                    @if (!save.IsLatest)
-                                    {
-                                        <button type="button" class="danger-action" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;"
-                                                @onclick="() => DeleteSaveAsync(save.SaveId)">
-                                            删除
-                                        </button>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 死亡回归日志 -->
-        <div class="work-surface">
-            <h2>魔女瘴气与回归纪事 (Death Return Logs)</h2>
-            <div class="table-responsive">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 100px;">回归循环</th>
-                            <th>回归原因</th>
-                            <th style="width: 120px;">累积瘴气度</th>
-                            <th style="width: 100px;">关联存档</th>
-                            <th style="width: 200px;">发生时间</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @if (deathLogs.Count == 0)
-                        {
-                            <tr>
-                                <td colspan="5" style="text-align: center; color: var(--color-text-secondary);">尚无死亡回归经历（未有循环记录）。</td>
-                            </tr>
-                        }
-                        @foreach (var log in deathLogs)
-                        {
-                            <tr>
-                                <td style="font-family: var(--font-heading); color: var(--color-crimson-glow); font-weight: bold;">
-                                    LOOP @log.LoopCount
-                                </td>
-                                <td style="font-style: italic; color: #ff9e9e;">@log.DeathCause</td>
-                                <td style="font-family: Consolas, monospace; color: var(--color-purple-glow); font-weight: bold;">
-                                    @log.MiasmaLevel%
-                                </td>
-                                <td style="font-family: Consolas, monospace;">#@log.SavePointId</td>
-                                <td style="font-size: 0.85rem; color: var(--color-text-secondary);">@log.CreatedAt</td>
                             </tr>
                         }
                     </tbody>
@@ -657,39 +543,16 @@
 
 </div>
 
-<!-- 确认回滚对话框弹窗 -->
-@if (showConfirmRollbackModal)
-{
-    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: flex; align-items: center; justify-content: center;">
-        <div class="work-surface" style="max-width: 480px; border-color: var(--color-crimson);">
-            <h2 style="color: var(--color-crimson-glow);">⚠️ 扭转因果链确认</h2>
-            <p style="margin-top: 1rem; line-height: 1.5;">
-                你确定要将因果回滚至存档 <strong>#@rollbackSaveId</strong> 吗？
-            </p>
-            <p style="color: var(--color-text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                警告：一旦执行，当前所有的角色状态与故事进度将倒退回该锚点。<strong>所有非主角角色（NPC）在此时间段内产生的独立记忆将被魔女的瘴气彻底抹除。</strong>仅主角菜月昴的记忆仍会留存。
-            </p>
-            <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; border-top: 1px solid rgba(84, 56, 44, 0.4); padding-top: 1rem;">
-                <button type="button" class="btn-custom" @onclick="() => showConfirmRollbackModal = false">取消</button>
-                <button type="button" class="danger-action" @onclick="RollbackToSavePointAsync">确定回滚</button>
-            </div>
-        </div>
-    </div>
-}
-
 @code {
     private string activeTab = "characters";
     private string activeSubTab = "npcs";
     private string? statusMessage;
     private string? errorMessage;
-    private string deathCauseInput = string.Empty;
 
     // Data models
     private ProtagonistInfo? protagonist;
     private List<ImportantNpc> npcs = new();
     private List<CharacterMemory> memories = new();
-    private IReadOnlyList<SavePointSummary> savePoints = new List<SavePointSummary>();
-    private List<DeathReturnLog> deathLogs = new();
 
     private List<Faction> factions = new();
     private List<WorldMapPoint> mapPoints = new();
@@ -706,9 +569,6 @@
     private string newTemplateName = string.Empty;
     private bool isBusy = false;
 
-    // Rollback confirmation
-    private bool showConfirmRollbackModal = false;
-    private int rollbackSaveId;
     private bool showDeathGlitch = false;
 
     private bool _isDisposed = false;
@@ -756,8 +616,6 @@
             protagonist = await DbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync();
             npcs = await DbContext.ImportantNpcs.AsNoTracking().OrderBy(n => n.Name).ToListAsync();
             memories = await DbContext.CharacterMemory.AsNoTracking().OrderByDescending(m => m.RowId).ToListAsync();
-            savePoints = await SaveSys.ListSavePointsAsync();
-            deathLogs = await DbContext.DeathReturnLog.AsNoTracking().OrderByDescending(l => l.LogId).ToListAsync();
 
             factions = await DbContext.Factions.AsNoTracking().OrderBy(f => f.FactionName).ToListAsync();
             mapPoints = await DbContext.WorldMapPoints.AsNoTracking().OrderBy(m => m.LocationName).ToListAsync();
@@ -783,94 +641,6 @@
         activeTab = tab;
         statusMessage = null;
         errorMessage = null;
-    }
-
-    private async Task DeleteSaveAsync(int saveId)
-    {
-        statusMessage = null;
-        errorMessage = null;
-
-        try
-        {
-            var success = await SaveSys.DeleteSavePointAsync(saveId);
-            if (success)
-            {
-                statusMessage = $"已抹除因果锚点 #{saveId}。";
-                await RefreshDataAsync();
-            }
-            else
-            {
-                errorMessage = $"无法删除该锚点。";
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"删除因果锚点错误: {ex.Message}";
-        }
-    }
-
-    private void ConfirmRollback(int saveId)
-    {
-        rollbackSaveId = saveId;
-        showConfirmRollbackModal = true;
-    }
-
-    private async Task RollbackToSavePointAsync()
-    {
-        showConfirmRollbackModal = false;
-        statusMessage = null;
-        errorMessage = null;
-
-        try
-        {
-            showDeathGlitch = true;
-            StateHasChanged();
-            
-            // Execute rollback in the background
-            var result = await SaveSys.TriggerDeathReturnAsync(
-                "玩家通过终端执行时空回溯",
-                chronicleIndex: null,
-                specificSaveId: rollbackSaveId);
-
-            await Task.Delay(1800); // Allow death glitch animations to complete
-            showDeathGlitch = false;
-            
-            statusMessage = $"已成功执行回归。时空已重置至存档 #{rollbackSaveId}，进入第 {result.LoopCount} 次循环，当前瘴气累积量为 {result.MiasmaLevel}%。";
-            await RefreshDataAsync();
-        }
-        catch (Exception ex)
-        {
-            showDeathGlitch = false;
-            errorMessage = $"回滚因果锚点错误: {ex.Message}";
-        }
-    }
-
-    private async Task TriggerManualDeathReturnAsync()
-    {
-        statusMessage = null;
-        errorMessage = null;
-
-        var cause = string.IsNullOrWhiteSpace(deathCauseInput) ? "未说明具体死因的手动时空分裂" : deathCauseInput;
-
-        try
-        {
-            showDeathGlitch = true;
-            StateHasChanged();
-
-            var result = await SaveSys.TriggerDeathReturnAsync(cause);
-            
-            await Task.Delay(1800); // Play glitch
-            showDeathGlitch = false;
-
-            deathCauseInput = string.Empty;
-            statusMessage = $"死亡回归触发！已恢复最近存档点，进入第 {result.LoopCount} 次循环，瘴气量为 {result.MiasmaLevel}%。原因：{result.DeathCause}";
-            await RefreshDataAsync();
-        }
-        catch (Exception ex)
-        {
-            showDeathGlitch = false;
-            errorMessage = $"手动死亡回归发生错误: {ex.Message}";
-        }
     }
 
     private void StartEditingProtagonist()

@@ -36,6 +36,23 @@ public sealed class SaveSystem(
         string triggerReason,
         CancellationToken cancellationToken = default)
     {
+        var savePoint = await BuildSnapshotAsync(triggerReason, cancellationToken);
+        dbContext.SavePoints.Add(savePoint);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new SavePointSummary(savePoint.SaveId, savePoint.Chapter, savePoint.TriggerReason, savePoint.CreatedAt, IsLatest: true);
+    }
+
+    /// <summary>
+    /// 抓取当前 9 张表的快照，返回未持久化的 <see cref="SavePoint"/> 实例（不写库）。
+    /// 供 <see cref="CreateSavePointAsync"/> 与内存重 roll cache 复用。
+    /// </summary>
+    public async Task<SavePoint> CaptureInMemorySnapshotAsync(CancellationToken cancellationToken = default)
+        => await BuildSnapshotAsync("inmemory_reroll", cancellationToken);
+
+    private async Task<SavePoint> BuildSnapshotAsync(
+        string triggerReason,
+        CancellationToken cancellationToken)
+    {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
 
         var globalState = await dbContext.GlobalStates.AsNoTracking()
@@ -45,7 +62,7 @@ public sealed class SaveSystem(
             .OrderBy(item => item.RowId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var savePoint = new SavePoint
+        return new SavePoint
         {
             Chapter = globalState?.CurrentChapter ?? 1,
             TriggerReason = string.IsNullOrWhiteSpace(triggerReason) ? "manual" : triggerReason,
@@ -60,10 +77,6 @@ public sealed class SaveSystem(
             QuestSnapshot = Serialize(await dbContext.Quests.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
             CreatedAt = await ReadCreatedAtAsync(cancellationToken)
         };
-
-        dbContext.SavePoints.Add(savePoint);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return new SavePointSummary(savePoint.SaveId, savePoint.Chapter, savePoint.TriggerReason, savePoint.CreatedAt, IsLatest: true);
     }
 
     public async Task<IReadOnlyList<SavePointSummary>> ListSavePointsAsync(
@@ -170,7 +183,28 @@ public sealed class SaveSystem(
         return new DeathReturnResult(savePoint.SaveId, loopCount, log.DeathCause, newMiasma, miasmaResult.Detail ?? string.Empty);
     }
 
-    private async Task RestoreGameStateAsync(
+    /// <summary>
+    /// fork「引入叙事」：从指定存档锚点 restore 世界状态（复用死亡回归的 restore 路径），
+    /// 但<strong>不</strong>写 DeathReturnLog、<strong>不</strong>滚瘴气、<strong>不</strong>计入循环次数。
+    /// 用于「类死亡回归但不计死亡」的分歧点回溯。
+    /// </summary>
+    public async Task ForkRestoreAsync(int saveId, CancellationToken cancellationToken = default)
+    {
+        await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
+
+        var savePoint = await dbContext.SavePoints.FindAsync(new object[] { saveId }, cancellationToken)
+            ?? throw new InvalidOperationException($"找不到用于 fork 的存档锚点 #{saveId}。");
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await RestoreGameStateAsync(savePoint, cancellationToken);
+        await DeleteNonProtagonistMemoryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 用给定快照（可来自持久化存档或内存重 roll cache）覆盖 9 张状态表。
+    /// </summary>
+    public async Task RestoreGameStateAsync(
         SavePoint savePoint,
         CancellationToken cancellationToken)
     {

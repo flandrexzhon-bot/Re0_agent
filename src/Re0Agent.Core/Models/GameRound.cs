@@ -25,6 +25,9 @@ public sealed class GameRound
     /// <summary>命中死亡回归时的死因；非空表示本回合触发死亡回归。</summary>
     public string? DeathReturnCause { get; set; }
 
+    /// <summary>本回合开始时所基于的存档锚点 ID（=上一回合末自动存档）。fork「引入叙事」回溯到此锚点；首回合为 null 时禁用 fork。</summary>
+    public int? BaseSavePointId { get; set; }
+
     /// <summary>本回合是否已触发死亡回归（供前端播放转场动画）。</summary>
     public bool DeathReturnTriggered => DeathReturnCause is not null;
 }

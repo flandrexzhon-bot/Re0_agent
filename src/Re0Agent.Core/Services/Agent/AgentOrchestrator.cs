@@ -33,7 +33,7 @@ public sealed class AgentOrchestrator(
         }
 
         // 新顺序：主角先行动（消费玩家输入），随后 NPC 依位号回应，最后结算。
-        return await RunPlayerThenNpcTurnsAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, cancellationToken);
+        return await RunPlayerThenNpcTurnsAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, onBeforeTurn: null, cancellationToken: cancellationToken);
     }
 
     /// <summary>
@@ -50,7 +50,9 @@ public sealed class AgentOrchestrator(
         {
             RoundIndex = await CreateRoundIndexAsync(cancellationToken),
             Chapter = await ReadCurrentChapterAsync(cancellationToken),
-            PreviousRounds = previousRounds ?? []
+            PreviousRounds = previousRounds ?? [],
+            BaseSavePointId = await dbContext.SavePoints.AsNoTracking()
+                .MaxAsync(item => (int?)item.SaveId, cancellationToken)
         };
 
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
@@ -75,6 +77,8 @@ public sealed class AgentOrchestrator(
     public async Task RunNpcTurnsAsync(
         GameRound round,
         Func<GameRound, Task>? onStepCompleted = null,
+        Func<Task>? onBeforeTurn = null,
+        int skipNpcCount = 0,
         CancellationToken cancellationToken = default)
     {
         // 1. Parse slots from CharacterSub output
@@ -174,8 +178,19 @@ public sealed class AgentOrchestrator(
 
         var sortedNpcProfiles = npcProfilesToRun.OrderBy(x => x.Slot).Select(x => x.Profile).ToList();
 
+        // 级联重 roll：跳过前 skipNpcCount 个已保留的 NPC，只重跑其后的。
+        if (skipNpcCount > 0)
+        {
+            sortedNpcProfiles = sortedNpcProfiles.Skip(skipNpcCount).ToList();
+        }
+
         foreach (var profile in sortedNpcProfiles)
         {
+            if (onBeforeTurn is not null)
+            {
+                await onBeforeTurn();
+            }
+
             var turn = await RunCharacterTurnAsync(round, profile, playerInput: null, skip: false, directOutput: false, cancellationToken);
             if (turn.DiceResult is not null && round.DeathReturnCause is null)
             {
@@ -210,6 +225,7 @@ public sealed class AgentOrchestrator(
         bool skipPlayerTurn,
         bool directOutput = true,
         Func<GameRound, Task>? onStepCompleted = null,
+        Func<Task>? onBeforeTurn = null,
         CancellationToken cancellationToken = default)
     {
         round.PlayerInput = playerInput;
@@ -219,6 +235,11 @@ public sealed class AgentOrchestrator(
         {
             foreach (var profile in round.PendingProtagonistProfiles)
             {
+                if (onBeforeTurn is not null)
+                {
+                    await onBeforeTurn();
+                }
+
                 var turn = await RunCharacterTurnAsync(round, profile, playerInput, skipPlayerTurn, directOutput, cancellationToken);
                 if (!turn.Skipped && turn.DiceResult is not null && round.DeathReturnCause is null)
                 {
@@ -248,10 +269,70 @@ public sealed class AgentOrchestrator(
             }
             await ApplyDelayAsync(cancellationToken);
 
-            await RunNpcTurnsAsync(round, onStepCompleted, cancellationToken);
+            await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, cancellationToken: cancellationToken);
         }
 
         // 3. 结算。
+        await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
+        return round;
+    }
+
+    /// <summary>
+    /// 级联重 roll：在已 restore 好对应 DB 快照的前提下，重跑某回合的「开场/某一格起」到回合末。
+    /// <para><paramref name="keepTurnCount"/>=0 → 整局重跑（开场重 roll 或主角重 roll，由 <paramref name="regenerateOpening"/> 区分）。</para>
+    /// <para><paramref name="keepTurnCount"/>≥1 → 保留前 N 格（主角 + N-1 个 NPC），从第 N 格 NPC 起级联重跑。</para>
+    /// 调用方（GameProgressService）负责先 restore 快照、并在重跑前后管理变体 cache。
+    /// </summary>
+    public async Task<GameRound> ReRunRoundAsync(
+        GameRound baseRound,
+        int keepTurnCount,
+        bool regenerateOpening,
+        Func<GameRound, Task>? onStepCompleted = null,
+        Func<Task>? onBeforeTurn = null,
+        CancellationToken cancellationToken = default)
+    {
+        var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+
+        var round = new GameRound
+        {
+            RoundIndex = baseRound.RoundIndex,
+            Chapter = baseRound.Chapter,
+            PlayerInput = baseRound.PlayerInput,
+            BaseSavePointId = baseRound.BaseSavePointId,
+            PreviousRounds = baseRound.PreviousRounds,
+            PendingProtagonistProfiles = profiles.Where(p => p.IsPlayerControlled).ToList()
+        };
+
+        // 开场：重 roll 开场则重生成，否则沿用原开场。
+        round.GmOpening = regenerateOpening || string.IsNullOrWhiteSpace(baseRound.GmOpening)
+            ? await gmAgent.CreateOpeningAsync(round, profiles, slotList: "", cancellationToken)
+            : baseRound.GmOpening;
+        round.Events.Add(round.GmOpening ?? "");
+
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+        await ApplyDelayAsync(cancellationToken);
+
+        if (keepTurnCount <= 0)
+        {
+            // 整局重跑：主角 → 泉此方调度 → NPC → 结算。
+            return await RunPlayerThenNpcTurnsAsync(
+                round, baseRound.PlayerInput, skipPlayerTurn: false, directOutput: true,
+                onStepCompleted, onBeforeTurn, cancellationToken);
+        }
+
+        // 保留前 keepTurnCount 格（含主角），沿用原位号安排，从其后的 NPC 级联重跑。
+        foreach (var kept in baseRound.CharacterTurns.Take(keepTurnCount))
+        {
+            round.CharacterTurns.Add(kept);
+        }
+        round.CharacterSubSlots = baseRound.CharacterSubSlots;
+        round.PendingProtagonistProfiles = [];
+
+        // turns[0] 为主角，NPC 从 turns[1] 起；保留 keepTurnCount 格意味着已保留 keepTurnCount-1 个 NPC。
+        await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, skipNpcCount: keepTurnCount - 1, cancellationToken: cancellationToken);
         await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }

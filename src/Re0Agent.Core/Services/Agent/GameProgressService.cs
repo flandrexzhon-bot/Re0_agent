@@ -32,6 +32,22 @@ public sealed class GameProgressService
 
     private CancellationTokenSource? _roundCts;
 
+    // ── 重 roll / 变体 cache（纯内存，仅当前回合存活；开新大回合时整批释放）──
+    /// <summary>当前回合起点（GM 开场前）的 DB 快照。整局重跑 restore 到此。</summary>
+    private SavePoint? _roundStartSnapshot;
+    /// <summary>当前回合「每格开始前」的 DB 快照列表（含主角格）。逐格重 roll restore 到对应项。</summary>
+    private readonly List<SavePoint> _preTurnSnapshots = new();
+    /// <summary>当前回合的整回合变体列表（#0 为原版）。</summary>
+    private readonly List<RoundVariant> _currentRoundVariants = new();
+    private int _activeVariantIndex;
+
+    /// <summary>当前回合已记录的变体数量（含原版）。</summary>
+    public int CurrentVariantCount => _currentRoundVariants.Count;
+    /// <summary>当前激活的变体序号（0 基）。</summary>
+    public int ActiveVariantIndex => _activeVariantIndex;
+    /// <summary>是否可对当前（最新已结算）回合重 roll：存在原版变体且回合已结算、且空闲。</summary>
+    public bool CanReRoll => !IsBusy && _currentRoundVariants.Count > 0 && _roundStartSnapshot is not null;
+
     /// <summary>请求中止当前正在运行的大回合（GM/NPC/结算阶段）。用于调试。</summary>
     public void StopRound()
     {
@@ -394,6 +410,13 @@ public sealed class GameProgressService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+
+                // 释放上一回合的重 roll cache，并抓本回合起点快照（GM 开场前）。
+                _currentRoundVariants.Clear();
+                _preTurnSnapshots.Clear();
+                _activeVariantIndex = 0;
+                _roundStartSnapshot = await saveSystem.CaptureInMemorySnapshotAsync(token);
 
                 // 1. GM Opening
                 IReadOnlyList<GameRound> prevRounds;
@@ -482,6 +505,7 @@ public sealed class GameProgressService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
 
                 var round = await orchestrator.RunPlayerThenNpcTurnsAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
                 {
@@ -494,7 +518,14 @@ public sealed class GameProgressService
                     await AutoSaveChatSessionAsync();
                     NotifyStateChanged();
                     await Task.Delay(10);
+                }, onBeforeTurn: async () =>
+                {
+                    // 每格开始前抓快照，供逐格重 roll 回档。
+                    _preTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
                 }, cancellationToken: token);
+
+                // 记录原版变体（#0）：结算后的回合内容 + 末态快照。
+                await CaptureVariantAsync(round, saveSystem, token);
 
                 await HandleRoundCompletionAsync(round);
             }
@@ -548,6 +579,210 @@ public sealed class GameProgressService
                 SessionRounds.Remove(ActiveRound);
             }
             ActiveRound = null;
+        }
+    }
+
+    /// <summary>把一个已结算回合的内容 + 当前 DB 末态快照打包成变体，追加到当前回合变体列表并设为激活。</summary>
+    private async Task CaptureVariantAsync(GameRound round, SaveSystem saveSystem, CancellationToken token)
+    {
+        var snapshot = await saveSystem.CaptureInMemorySnapshotAsync(token);
+        _currentRoundVariants.Add(new RoundVariant
+        {
+            GmOpening = round.GmOpening,
+            Turns = round.CharacterTurns.ToList(),
+            Events = round.Events.ToList(),
+            DbSnapshot = snapshot
+        });
+        _activeVariantIndex = _currentRoundVariants.Count - 1;
+    }
+
+    /// <summary>
+    /// 级联重 roll 当前（最新已结算）回合。
+    /// <para><paramref name="fromTurnIndex"/> = -1：重 roll GM 开场并整局重跑。</para>
+    /// <para><paramref name="fromTurnIndex"/> = 0：保留开场，从主角格起重跑（重抽判定/骰子 + 级联 NPC）。</para>
+    /// <para><paramref name="fromTurnIndex"/> ≥ 1：保留开场 + 前 fromTurnIndex 格，从该 NPC 格起级联重跑。</para>
+    /// </summary>
+    public Task ReRollAsync(int fromTurnIndex, bool regenerateOpening)
+    {
+        if (IsBusy || _roundStartSnapshot is null) return Task.CompletedTask;
+
+        GameRound? baseRound;
+        lock (SessionRounds)
+        {
+            baseRound = SessionRounds.LastOrDefault();
+        }
+        if (baseRound is null) return Task.CompletedTask;
+
+        IsBusy = true;
+        Phase = fromTurnIndex < 0 ? RoundPhase.GmRunning : RoundPhase.NpcRunning;
+        ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
+        NotifyStateChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+
+                // keepTurnCount：保留多少格（含主角）。fromTurnIndex<0 或 0 → 整局重跑(0)；≥1 → 保留 fromTurnIndex 格。
+                int keepTurnCount = fromTurnIndex <= 0 ? 0 : fromTurnIndex;
+
+                // 1. 回档到对应快照。
+                var restoreFrom = keepTurnCount == 0
+                    ? _roundStartSnapshot
+                    : (_preTurnSnapshots.Count > keepTurnCount ? _preTurnSnapshots[keepTurnCount] : _roundStartSnapshot);
+                await saveSystem.RestoreGameStateAsync(restoreFrom!, token);
+
+                // 2. 从该点向后级联重跑。重跑期间继续抓「每格前快照」覆盖式更新 cache。
+                var newPreTurnSnapshots = _preTurnSnapshots.Take(keepTurnCount).ToList();
+
+                var round = await orchestrator.ReRunRoundAsync(
+                    baseRound, keepTurnCount, regenerateOpening,
+                    onStepCompleted: async (r) =>
+                    {
+                        ActiveRound = r;
+                        lock (SessionRounds)
+                        {
+                            var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == r.RoundIndex);
+                            if (idx >= 0) SessionRounds[idx] = r;
+                        }
+                        NotifyStateChanged();
+                        await Task.Delay(10);
+                    },
+                    onBeforeTurn: async () =>
+                    {
+                        newPreTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
+                    },
+                    cancellationToken: token);
+
+                // 3. 更新 cache + 记录新变体。
+                _preTurnSnapshots.Clear();
+                _preTurnSnapshots.AddRange(newPreTurnSnapshots);
+
+                lock (SessionRounds)
+                {
+                    var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
+                    if (idx >= 0) SessionRounds[idx] = round;
+                }
+                ActiveRound = null;
+                await CaptureVariantAsync(round, saveSystem, token);
+
+                Phase = RoundPhase.Idle;
+                await LoadDatabaseStateAsync();
+                await AutoSaveChatSessionAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已中止重 roll。";
+                Phase = RoundPhase.Idle;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"重 roll 失败: {ex.Message}";
+                Phase = RoundPhase.Idle;
+            }
+            finally
+            {
+                _roundCts?.Dispose();
+                _roundCts = null;
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>在已记录的变体之间切换：restore 该变体的 DB 末态快照，并把其叙事回填到会话。</summary>
+    public async Task SelectVariant(int index)
+    {
+        if (IsBusy || index < 0 || index >= _currentRoundVariants.Count || index == _activeVariantIndex)
+        {
+            return;
+        }
+
+        var variant = _currentRoundVariants[index];
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+            await saveSystem.RestoreGameStateAsync(variant.DbSnapshot, CancellationToken.None);
+
+            lock (SessionRounds)
+            {
+                var last = SessionRounds.LastOrDefault();
+                if (last is not null)
+                {
+                    last.GmOpening = variant.GmOpening;
+                    last.CharacterTurns = variant.Turns.ToList();
+                    last.Events = variant.Events.ToList();
+                }
+            }
+            _activeVariantIndex = index;
+            await LoadDatabaseStateAsync();
+            await AutoSaveChatSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"切换变体失败: {ex.Message}";
+        }
+        finally
+        {
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// fork「引入叙事」：从指定回合的 BaseSavePointId 回溯世界状态（不计死亡/瘴气），
+    /// 并把会话裁剪到该回合之前。
+    /// </summary>
+    public async Task ForkAtAsync(GameRound round)
+    {
+        if (IsBusy || round.BaseSavePointId is null)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        NotifyStateChanged();
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+            await saveSystem.ForkRestoreAsync(round.BaseSavePointId.Value);
+
+            lock (SessionRounds)
+            {
+                var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
+                if (idx >= 0)
+                {
+                    SessionRounds.RemoveRange(idx, SessionRounds.Count - idx);
+                }
+            }
+
+            // fork 后当前回合 cache 失效。
+            _currentRoundVariants.Clear();
+            _preTurnSnapshots.Clear();
+            _roundStartSnapshot = null;
+            _activeVariantIndex = 0;
+
+            ActiveRound = null;
+            Phase = RoundPhase.Idle;
+            await LoadDatabaseStateAsync();
+            await AutoSaveChatSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"fork 引入叙事失败: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+            NotifyStateChanged();
         }
     }
 

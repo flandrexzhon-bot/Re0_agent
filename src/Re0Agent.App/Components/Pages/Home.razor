@@ -209,26 +209,69 @@ else
                 </div>
             }
 
-            <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片） -->
-            @foreach (var round in sessionRounds)
+            <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片）。仅显示最近 3 个回合，更早的由上方编年史(AM)覆盖。 -->
+            @{
+                var visibleRounds = sessionRounds.Count > 3 ? sessionRounds.Skip(sessionRounds.Count - 3).ToList() : sessionRounds;
+                var latestRound = sessionRounds.LastOrDefault();
+            }
+            @foreach (var round in visibleRounds)
             {
-                <div class="system-event-log">─── 命运分歧点：@round.RoundIndex ───</div>
+                var isLatest = ReferenceEquals(round, latestRound);
+                var canSwipe = isLatest && Progress.CanReRoll && round.CompletedAt is not null;
+
+                <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
+                    <span>─── 命运分歧点：@round.RoundIndex ───</span>
+                    @if (round.BaseSavePointId is not null && !isBusy)
+                    {
+                        <button type="button" title="Fork：从此处引入新叙事分支（回溯世界状态，不计入死亡）" disabled="@isBusy"
+                                style="background: none; border: none; cursor: pointer; color: var(--color-purple-glow); font-size: 1rem; padding: 0 0.2rem;"
+                                @onclick="() => ForkAt(round)">⑂</button>
+                    }
+                </div>
 
                 @if (!string.IsNullOrWhiteSpace(round.GmOpening))
                 {
                     <div class="grimoire-entry gm-narrative">
-                        <div class="entry-header"><span>GM 引入叙事</span></div>
+                        <div class="entry-header">
+                            <span>GM 引入叙事</span>
+                            @if (canSwipe)
+                            {
+                                <span class="reroll-swipe" style="display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; font-size: 0.8rem;">
+                                    <button type="button" title="上一个版本" disabled="@(Progress.ActiveVariantIndex <= 0)"
+                                            class="swipe-btn" @onclick="() => SelectVariant(Progress.ActiveVariantIndex - 1)">&lt;</button>
+                                    <span style="color: var(--color-text-secondary);">@(Progress.ActiveVariantIndex + 1)/@Progress.CurrentVariantCount</span>
+                                    @if (Progress.ActiveVariantIndex < Progress.CurrentVariantCount - 1)
+                                    {
+                                        <button type="button" title="下一个版本" class="swipe-btn" @onclick="() => SelectVariant(Progress.ActiveVariantIndex + 1)">&gt;</button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" title="重新生成开场并整局重跑" class="swipe-btn" @onclick="() => ReRoll(-1, true)">&gt;</button>
+                                    }
+                                </span>
+                            }
+                        </div>
                         <div class="entry-body">@((MarkupString)CleanEjsText(round.GmOpening))</div>
                     </div>
                 }
 
-                @foreach (var turn in round.CharacterTurns)
+                @for (int ti = 0; ti < round.CharacterTurns.Count; ti++)
                 {
+                    var turn = round.CharacterTurns[ti];
+                    var turnIndex = ti;
                     <div class="grimoire-entry">
                         <div class="character-speech-bubble @(turn.IsPlayerControlled ? "player-bubble" : "npc-bubble")">
                             <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
                             <div class="bubble-content">
-                                <span class="bubble-sender">@turn.CharacterName</span>
+                                <span class="bubble-sender">
+                                    @turn.CharacterName
+                                    @if (canSwipe)
+                                    {
+                                        <button type="button" title="从这一格起级联重 roll（其后角色一并重跑）" class="swipe-btn"
+                                                style="margin-left: 0.4rem; font-size: 0.75rem;"
+                                                @onclick="() => ReRoll(turnIndex, false)">↻</button>
+                                    }
+                                </span>
                                 <div class="bubble-text">@((MarkupString)CleanEjsText(turn.ActionText))</div>
                                 @if (!turn.Skipped && turn.DiceResult is not null)
                                 {
@@ -856,6 +899,22 @@ else
     private void RemoveTempNpcBinding(GameProgressService.TempNpcBinding b)
     {
         Progress.RemoveTempNpcBinding(b);
+    }
+
+    // ── 重 roll / 变体切换 / fork ──
+    private async Task ReRoll(int fromTurnIndex, bool regenerateOpening)
+    {
+        await Progress.ReRollAsync(fromTurnIndex, regenerateOpening);
+    }
+
+    private async Task SelectVariant(int index)
+    {
+        await Progress.SelectVariant(index);
+    }
+
+    private async Task ForkAt(GameRound round)
+    {
+        await Progress.ForkAtAsync(round);
     }
 
     protected override async Task OnInitializedAsync()

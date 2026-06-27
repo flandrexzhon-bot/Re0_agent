@@ -528,6 +528,28 @@ button:disabled {
     white-space: pre-wrap;
 }
 
+/* 重 roll / swipe 控件按钮 */
+.swipe-btn {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border-vintage);
+    border-radius: 4px;
+    color: var(--color-gold-glow);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0.1rem 0.4rem;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.swipe-btn:hover:not(:disabled) {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--color-gold);
+}
+
+.swipe-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
 /* Character Speech Bubbles */
 .character-speech-bubble {
     display: flex;
