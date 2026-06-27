@@ -83,7 +83,7 @@ public sealed class AgentOrchestrator(
     {
         // 1. Parse slots from CharacterSub output
         var parsedSlots = new List<(string Name, int Slot, bool IsPlayer)>();
-        var lines = (round.CharacterSubSlots ?? round.GmOpening ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = (round.CharacterSubSlots ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
             if (line.Contains("最后行动", StringComparison.OrdinalIgnoreCase))
