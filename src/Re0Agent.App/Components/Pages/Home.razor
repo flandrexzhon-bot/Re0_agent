@@ -22,11 +22,6 @@
     <div class="death-glitch-text">死 亡 回 归</div>
 </div>
 
-<!-- 魔女叹息紫色滤镜 -->
-@if (miasmaLevel > 0)
-{
-    <div class="miasma-fog-layer" style="opacity: @(((double)miasmaLevel / 150.0).ToString(System.Globalization.CultureInfo.InvariantCulture));"></div>
-}
 
 @if (isInitializingGame)
 {
@@ -186,12 +181,6 @@ else
         <!-- 顶部状态面板 -->
         <div class="novel-header-bar">
             <div class="novel-header-badge chapter">章节 @currentChapter</div>
-            <div class="miasma-container">
-                <span class="miasma-label">瘴气: @miasmaLevel%</span>
-                <div class="miasma-bar-bg">
-                    <div class="miasma-bar-fill" style="width: @(miasmaLevel)%"></div>
-                </div>
-            </div>
             @if (loopCount > 0)
             {
                 <div class="novel-header-badge loop-badge">LOOP @loopCount</div>
@@ -323,7 +312,7 @@ else
             {
                 <h2>书写主角的抉择</h2>
                 <div class="round-console">
-                    <textarea @bind="playerInput" rows="3"
+                    <textarea @bind="playerInput" @bind:event="oninput" @bind:after="PersistDraft" rows="3"
                               placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
                         <label class="inline-toggle">
@@ -897,6 +886,7 @@ else
             
             chatSessions = Progress.ChatSessions;
             activeSessionId = Progress.ActiveSessionId;
+            playerInput = Progress.GetPlayerInputDraft(Progress.ActiveSessionId);
             currentChapter = Progress.CurrentChapter;
             loopCount = Progress.LoopCount;
             miasmaLevel = Progress.MiasmaLevel;
@@ -968,7 +958,13 @@ else
     {
         var input = playerInput;
         playerInput = string.Empty;
+        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, string.Empty);
         await Progress.SubmitPlayerTurnAsync(input, skipPlayerTurn, directPlayerOutput);
+    }
+
+    private void PersistDraft()
+    {
+        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, playerInput);
     }
 
 
@@ -979,7 +975,12 @@ else
 
     private async Task OnSessionChangedAsync()
     {
+        // @bind 已把 activeSessionId 改成目标会话，但 Progress.ActiveSessionId 此刻仍是
+        // 即将离开的旧会话——先把当前输入存到旧会话名下，再切换、再恢复目标会话的草稿。
+        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, playerInput);
         await Progress.SwitchSessionAsync(activeSessionId);
+        activeSessionId = Progress.ActiveSessionId;
+        playerInput = Progress.GetPlayerInputDraft(Progress.ActiveSessionId);
     }
 
     private async Task CreateSessionAsync()

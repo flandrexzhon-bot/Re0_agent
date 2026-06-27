@@ -24,6 +24,13 @@ public static class RoundContextBuilder
             sections.Add($"【过往编年史总结(AM)】\n{summaries}");
         }
 
+        foreach (var prev in round.PreviousRounds)
+        {
+            var transcript = BuildCurrentRoundTranscript(prev);
+            if (!string.IsNullOrWhiteSpace(transcript))
+                sections.Add($"【上回合原版上下文(编号 {prev.RoundIndex})】\n{transcript}");
+        }
+
         var current = BuildCurrentRoundTranscript(round);
         if (!string.IsNullOrWhiteSpace(current))
         {

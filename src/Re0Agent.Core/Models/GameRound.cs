@@ -19,6 +19,9 @@ public sealed class GameRound
     /// <summary>CharacterSub agent 输出的位号安排（在 GM 开场前确定）。</summary>
     public string? CharacterSubSlots { get; set; }
 
+    /// <summary>上一回合及上上回合的原版内容（供历史上下文注入，由 GameProgressService 在启动回合前填入）。</summary>
+    public IReadOnlyList<GameRound> PreviousRounds { get; init; } = [];
+
     /// <summary>命中死亡回归时的死因；非空表示本回合触发死亡回归。</summary>
     public string? DeathReturnCause { get; set; }
 

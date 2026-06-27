@@ -47,6 +47,7 @@ public sealed class AgentOrchestrator(
     /// </summary>
     public async Task<GameRound> BeginRoundAsync(
         Func<GameRound, Task>? onStepCompleted = null,
+        IReadOnlyList<GameRound>? previousRounds = null,
         CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
@@ -54,7 +55,8 @@ public sealed class AgentOrchestrator(
         var round = new GameRound
         {
             RoundIndex = await CreateRoundIndexAsync(cancellationToken),
-            Chapter = await ReadCurrentChapterAsync(cancellationToken)
+            Chapter = await ReadCurrentChapterAsync(cancellationToken),
+            PreviousRounds = previousRounds ?? []
         };
 
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);

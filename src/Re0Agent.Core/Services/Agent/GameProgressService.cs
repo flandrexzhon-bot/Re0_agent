@@ -42,6 +42,18 @@ public sealed class GameProgressService
     public int ActiveSessionId { get; private set; }
     public string NewSessionName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 每个会话未提交的输入栏草稿（按 SessionId 索引）。存在单例服务里，
+    /// 这样切到别的栏目/页面再回来、或切换会话，草稿都不丢。
+    /// </summary>
+    private readonly Dictionary<int, string> _playerInputDrafts = new();
+
+    public string GetPlayerInputDraft(int sessionId)
+        => _playerInputDrafts.GetValueOrDefault(sessionId, string.Empty);
+
+    public void SavePlayerInputDraft(int sessionId, string? draft)
+        => _playerInputDrafts[sessionId] = draft ?? string.Empty;
+
     public int CurrentChapter { get; private set; } = 1;
     public int LoopCount { get; private set; } = 0;
     public int MiasmaLevel { get; private set; } = 0;
@@ -384,6 +396,10 @@ public sealed class GameProgressService
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
 
                 // 1. GM Opening
+                IReadOnlyList<GameRound> prevRounds;
+                lock (SessionRounds)
+                    prevRounds = SessionRounds.TakeLast(2).ToList();
+
                 var round = await orchestrator.BeginRoundAsync(onStepCompleted: async (r) =>
                 {
                     ActiveRound = r;
@@ -396,7 +412,7 @@ public sealed class GameProgressService
                     await AutoSaveChatSessionAsync();
                     NotifyStateChanged();
                     await Task.Delay(10);
-                }, cancellationToken: token);
+                }, previousRounds: prevRounds, cancellationToken: token);
 
                 ActiveRound = round;
                 lock (SessionRounds)
