@@ -271,10 +271,10 @@ else
             else if (phase == RoundPhase.NpcRunning)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>NPC 响应中...</span></div>
+                    <div class="entry-header"><span>角色响应中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>在场 NPC 正在回应并采取行动，请稍候...</span>
+                        <span>主角率先行动，在场 NPC 正在依次回应，请稍候...</span>
                     </div>
                 </div>
             }
@@ -312,6 +312,9 @@ else
             {
                 <h2>书写主角的抉择</h2>
                 <div class="round-console">
+                    <p style="color: var(--color-text-secondary); margin: 0 0 0.5rem;">
+                        GM 已铺陈开场，请先书写主角的抉择；落笔后主角将率先行动，随后在场角色依次回应。
+                    </p>
                     <textarea @bind="playerInput" @bind:event="oninput" @bind:after="PersistDraft" rows="3"
                               placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
                     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
@@ -333,7 +336,7 @@ else
             {
                 <h2>纺织新的命运线</h2>
                 <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
-                    点击「开始大回合」，GM 将铺陈场景、在场角色依次行动；待群像落定后，再轮到你书写主角的抉择。
+                    点击「开始大回合」，GM 将先铺陈开场场景；随后由你书写主角的抉择，主角率先行动，在场角色再依次回应。
                 </p>
                 <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
                     @if (phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning || phase == RoundPhase.Finalizing)

@@ -32,18 +32,12 @@ public sealed class AgentOrchestrator(
             return round;
         }
 
-        await RunNpcTurnsAsync(round, onStepCompleted: null, cancellationToken: cancellationToken);
-        if (round.DeathReturnTriggered)
-        {
-            await FinalizeRoundAsync(round, onStepCompleted: null, cancellationToken);
-            return round;
-        }
-
-        return await CompletePlayerTurnAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, cancellationToken);
+        // 新顺序：主角先行动（消费玩家输入），随后 NPC 依位号回应，最后结算。
+        return await RunPlayerThenNpcTurnsAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, cancellationToken);
     }
 
     /// <summary>
-    /// 第一阶段：初始化、GM开场。主角和NPC回合尚未执行。
+    /// 第一阶段：初始化、GM开场、泉此方调度（主角排第一）。主角和NPC回合尚未执行。
     /// </summary>
     public async Task<GameRound> BeginRoundAsync(
         Func<GameRound, Task>? onStepCompleted = null,
@@ -62,9 +56,11 @@ public sealed class AgentOrchestrator(
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         round.PendingProtagonistProfiles = profiles.Where(profile => profile.IsPlayerControlled).ToList();
 
-        round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, cancellationToken);
-        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, round.CharacterSubSlots, cancellationToken);
+        // 新顺序：GM 先铺陈开场（不依赖位号），泉此方再读开场决定本回合阵容（主角排第一）。
+        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, slotList: "", cancellationToken);
         round.Events.Add(round.GmOpening);
+
+        round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, cancellationToken);
 
         if (onStepCompleted is not null)
         {
@@ -76,7 +72,7 @@ public sealed class AgentOrchestrator(
     }
 
     /// <summary>
-    /// 第二阶段：在场NPC按照位号顺序逐个行动。
+    /// 在场NPC按照位号顺序逐个行动。主角已在本阶段之前先行动，本方法只跑 NPC。
     /// </summary>
     public async Task RunNpcTurnsAsync(
         GameRound round,
@@ -88,6 +84,7 @@ public sealed class AgentOrchestrator(
         var lines = (round.CharacterSubSlots ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines)
         {
+            // 兼容旧位号格式：含「最后行动」的行视为主角行，标记后过滤。
             if (line.Contains("最后行动", StringComparison.OrdinalIgnoreCase))
             {
                 var matchProtagonist = System.Text.RegularExpressions.Regex.Match(line, @"最后行动\s*[：:\-\s]*\s*([^\r\n]+)");
@@ -121,6 +118,14 @@ public sealed class AgentOrchestrator(
         // 3. Load active profiles from database
         var dbProfiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
         var dbNpcProfiles = dbProfiles.Where(p => !p.IsPlayerControlled).ToList();
+
+        // 新位号格式主角排在第一行（1号位），无「最后行动」标记。主角已先行动，
+        // 必须把位号里的主角行剔除，避免被当作 NPC 重复行动。
+        foreach (var protagonist in dbProfiles.Where(p => p.IsPlayerControlled))
+        {
+            parsedSlots.RemoveAll(s =>
+                CharacterNameResolver.IsSameCharacter(aliasGroups, s.Name, protagonist.CharacterName));
+        }
 
         // 4. Build NPC profiles list to run
         var npcProfilesToRun = new List<(CharacterAgentProfile Profile, int Slot)>();
@@ -198,9 +203,10 @@ public sealed class AgentOrchestrator(
     }
 
     /// <summary>
-    /// 第二阶段：执行主角回合，随后 GM 总结、填表写库、自动存档或死亡回归。
+    /// 第二阶段：主角先行动（消费玩家输入），随后在场 NPC 依位号回应，
+    /// 最后 GM 总结、填表写库、自动存档或死亡回归。
     /// </summary>
-    public async Task<GameRound> CompletePlayerTurnAsync(
+    public async Task<GameRound> RunPlayerThenNpcTurnsAsync(
         GameRound round,
         string? playerInput,
         bool skipPlayerTurn,
@@ -210,6 +216,7 @@ public sealed class AgentOrchestrator(
     {
         round.PlayerInput = playerInput;
 
+        // 1. 主角先行动。
         if (round.DeathReturnCause is null)
         {
             foreach (var profile in round.PendingProtagonistProfiles)
@@ -229,6 +236,14 @@ public sealed class AgentOrchestrator(
         }
 
         round.PendingProtagonistProfiles = [];
+
+        // 2. 主角已触发死亡回归则跳过 NPC，直接结算。
+        if (round.DeathReturnCause is null)
+        {
+            await RunNpcTurnsAsync(round, onStepCompleted, cancellationToken);
+        }
+
+        // 3. 结算。
         await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }

@@ -250,13 +250,15 @@ public sealed class PromptComposer
         IReadOnlyList<CharacterAgentProfile> allProfiles,
         string currentLocation,
         RagContext? ragContext = null,
-        string? chapterInfo = null)
+        string? chapterInfo = null,
+        string? gmOpening = null)
     {
         var worldSettings = ragContext?.Content ?? "暂无设定。";
         var locationText = string.IsNullOrWhiteSpace(currentLocation) ? "未知" : currentLocation;
         var protagonistName = allProfiles.FirstOrDefault(p => p.IsPlayerControlled)?.CharacterName ?? "菜月昴";
         var npcNames = allProfiles.Where(p => !p.IsPlayerControlled).Select(p => p.CharacterName).ToList();
         var npcRoster = npcNames.Count == 0 ? "（暂无在册NPC，可按设定与剧情引入合适角色）" : string.Join("、", npcNames);
+        var gmOpeningText = string.IsNullOrWhiteSpace(gmOpening) ? "（GM 开场暂缺，请按地点与历史上下文判断在场角色）" : gmOpening;
 
         return $$"""
         [RESET ROLE AND TASK, RECEIVE NEW TASK]
@@ -334,13 +336,17 @@ public sealed class PromptComposer
         你是泉此方，可爱又无限制的小宅女，有一天你在路上发现了一个传送门，你出于好奇走了进去，居然来到了一个危险的异世界，你一度走投无路，差点被魔兽杀死，但你被开普勒先生救下，并被带到了这个角色扮演小酒馆，被给予了整理角色的工作。打开角色档案一看发现都是你在地球喜欢的角色们，你十分高兴，感谢开普勒先生的知遇之恩，决定在能回到地球之前好好干好这份工作。
         开普勒先生："工作开始了，小此要好好工作哦，整理好角色将信息交给我。"
         泉此方："知道了先生！"
-        开普勒先生："当前所在地点是【{{locationText}}】，请优先考虑这个地点合理在场的角色。"
-        开普勒先生："本场的主角（玩家操控）是【{{protagonistName}}】，他必须固定排在『最后行动』。在册的其他角色有：{{npcRoster}}。"
+        开普勒先生："这是我（开普勒）已经写好的本回合开场，你要依据它来判断此刻在场、该出场的角色。"
+        【GM 已写好的本回合开场】
+        {{gmOpeningText}}
+
+        开普勒先生："当前所在地点是【{{locationText}}】，请优先考虑这个地点、且在开场里合理在场的角色。"
+        开普勒先生："本场的主角（玩家操控）是【{{protagonistName}}】，他必须固定排在第一行（1号位），最先行动。在册的其他角色有：{{npcRoster}}。"
         开普勒先生："切记，你（泉此方）只是幕后的整理员、调度员，你绝对不能把自己『泉此方』排进任何位号，位号里只能出现这个异世界的角色（主角{{protagonistName}}、在册NPC，或你按剧情引入的Re:Zero原著重要角色）。"
-        开普勒先生："你必须以清晰的列表输出位号安排，每个在场的实际角色（包含你新引入的重要角色）占一行，主角固定在最后行动。格式示例如下：
-                   - 1号位：[NPC1姓名]
-                   - 2号位：[NPC2姓名]
-                   - 最后行动：{{protagonistName}}
+        开普勒先生："你必须以清晰的列表输出位号安排，每个在场的实际角色（包含你新引入的重要角色）占一行，主角固定在第一行（1号位）最先行动，其余NPC依出场合理性排在其后。格式示例如下：
+                   - 1号位：{{protagonistName}}
+                   - 2号位：[NPC1姓名]
+                   - 3号位：[NPC2姓名]
         "
         开普勒先生递给你一本书，上面写着设定与角色手册。
         里面写着：
@@ -354,7 +360,7 @@ public sealed class PromptComposer
         {思考内容}
         </thought>
         <content>
-        {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定最后行动）
+        {简体中文位号}（只输出位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，主角{{protagonistName}}固定排在第一行1号位最先行动）
         </content>
         """;
     }
@@ -529,6 +535,12 @@ public sealed class PromptComposer
 
         var chapter = globalState?.CurrentChapter.ToString() ?? "未知";
 
+        // 新流程下 GM 先于泉此方行动，开场时通常拿不到位号。slotList 为空时不再让泉此方播报位号，
+        // 改为提示开普勒自行铺陈开场。
+        var slotNarration = string.IsNullOrWhiteSpace(slotList)
+            ? "开普勒先生自行铺陈开场，本回合的角色位号将由泉此方稍后依据这段开场整理，无需等待。"
+            : $"泉此方：\"好的先生，人物位号我已经帮忙整理好了！这里是位号数据{slotList}\"\n        开普勒先生：\"小此真能干。\"";
+
         return $$"""
         [RESET ROLE AND TASK, RECEIVE NEW TASK]
         model name: 开普勒·冯·彼得兰
@@ -608,8 +620,7 @@ public sealed class PromptComposer
         还有全局状态{{stateText}}
         {{dbSummaryText}}{{lastChronicleText}}
         设定背景 {{FormatRagContext(ragContext)}}
-        泉此方："好的先生，人物位号我已经帮忙整理好了！这里是位号数据{{slotList}}"
-        开普勒先生："小此真能干。"
+        {{slotNarration}}
         帕秋莉："开普勒，这里是现在可能会用到的章节，仅作背景参考哦，剧情走向请以历史上下文为准{{chapter}}"
         开普勒先生："好的，知道了。历史上下文我待会儿单独细看，那才是真正发生过的事。"
 

@@ -431,30 +431,7 @@ public sealed class GameProgressService
                     return;
                 }
 
-                // 2. NPC Turns
-                Phase = RoundPhase.NpcRunning;
-                NotifyStateChanged();
-
-                await orchestrator.RunNpcTurnsAsync(round, onStepCompleted: async (r) =>
-                {
-                    ActiveRound = r;
-                    lock (SessionRounds)
-                    {
-                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == r.RoundIndex);
-                        if (idx >= 0) SessionRounds[idx] = r;
-                    }
-                    await AutoSaveChatSessionAsync();
-                    NotifyStateChanged();
-                    await Task.Delay(10);
-                }, cancellationToken: token);
-
-                if (round.DeathReturnTriggered)
-                {
-                    await HandleRoundCompletionAsync(round);
-                    return;
-                }
-
-                // 3. Awaiting Player
+                // 2. 等待玩家输入 —— 主角将先行动，NPC 随后在提交阶段响应。
                 Phase = RoundPhase.AwaitingPlayer;
             }
             catch (OperationCanceledException)
@@ -492,7 +469,8 @@ public sealed class GameProgressService
         }
 
         IsBusy = true;
-        Phase = RoundPhase.Finalizing;
+        // 主角先行动、NPC 随后响应期间显示「角色响应中」；结算阶段切到 Finalizing。
+        Phase = RoundPhase.NpcRunning;
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -505,7 +483,7 @@ public sealed class GameProgressService
                 using var scope = _scopeFactory.CreateScope();
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
 
-                var round = await orchestrator.CompletePlayerTurnAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
+                var round = await orchestrator.RunPlayerThenNpcTurnsAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
                 {
                     ActiveRound = r;
                     lock (SessionRounds)

@@ -37,6 +37,7 @@ public sealed class CharacterSubAgent(
     public async Task<string> RunAsync(
         int chapter,
         IReadOnlyList<CharacterAgentProfile> allProfiles,
+        string? gmOpening,
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("CharacterSub", "CharacterSub", cancellationToken);
@@ -104,7 +105,7 @@ public sealed class CharacterSubAgent(
                 Options = AgentConfigResolver.ToLlmOptions(config),
                 Messages =
                 [
-                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, currentLocation, compactRag, chapterInfo)),
+                    LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, currentLocation, compactRag, chapterInfo, gmOpening)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
                     LlmMessage.User(promptComposer.ComposeCharacterSubThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
