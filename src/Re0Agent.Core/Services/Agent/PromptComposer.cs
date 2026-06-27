@@ -166,7 +166,7 @@ public sealed class PromptComposer
 
         - 如何和角色互动？
 
-        - 确认自己只扮演”开普勒”，不扮演任何其他角色。
+        - 确认自己只扮演”开普勒”，不扮演任何其他角色，不描写其他角色的行为、心理、语言或动作！！
 
         - 禁用词自查：我的正文里有没有出现”共犯””极其””Master””并不存在的””一丝””四肢百骸””不易察觉””生理性””虔诚””沙哑””指节泛白”？有没有用”不是xx而是xx””不容”句式？有没有小动物比喻、手术刀/针类比喻、语气形容词？有则删改。
 
@@ -222,6 +222,15 @@ public sealed class PromptComposer
     public string ComposeCharacterSubThoughtGuide()
     {
         return """
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        </thought>
+        <content>
+        {简体中文位号}（只输出NPC位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，也绝不能出现主角{{protagonistName}}或任何关于主角的描述）
+        </content>
+
         <Chain_of_Thought>
         正式创作正文前，按照以下条目**一条一条**仔细思考，**每条字数多点不许偷懒**
         思考需用<thought>标签包裹，不重复思考不打草稿
@@ -244,6 +253,15 @@ public sealed class PromptComposer
     public string ComposeChapterSwitchThoughtGuide()
     {
         return """
+        以下为总体格式输出顺序，严格遵守
+        <Output_format>
+        格式示例开始:
+        {思考内容}
+        </thought>
+        <update>
+        _.set('chapter', ${新值或不变});
+        </update>
+
         <Chain_of_Thought>
         正式输出前，按照以下条目**一条一条**仔细思考，**每条字数多点不许偷懒**
         思考需用<thought>标签包裹，不重复思考不打草稿
@@ -385,14 +403,6 @@ public sealed class PromptComposer
         {{dbSummaryText}}
         本章剧情（仅作背景参考，调度出场角色时以历史上下文中已发生的事实为准）：{{chapterInfo ?? "无"}}
 
-        以下为总体格式输出顺序，严格遵守
-        <Output_format>
-        格式示例开始:
-        {思考内容}
-        </thought>
-        <content>
-        {简体中文位号}（只输出NPC位号内容 不输出任何其他内容；位号里绝不能出现『泉此方』，也绝不能出现主角{{protagonistName}}或任何关于主角的描述）
-        </content>
         """;
     }
 
@@ -522,14 +532,6 @@ public sealed class PromptComposer
         {{upcomingChapters}}
 
         帕秋莉："好的，历史上下文我待会儿单独细看。"
-        以下为总体格式输出顺序，严格遵守
-        <Output_format>
-        格式示例开始:
-        {思考内容}
-        </thought>
-        <update>
-        _.set('chapter', ${新值或不变});
-        </update>
         """;
     }
 
@@ -661,7 +663,7 @@ public sealed class PromptComposer
         用说书人式的语言描述，自己动作用（）包裹
         先使用白描描写主角身边的环境，然后稍微推动剧情发展，留下悬念但不能剧透！！！
         只扮演“开普勒”，不扮演任何其他角色，仅为剧情指导。
-        不能写任何其他人物（包括泉此方和帕秋莉）的行为、心理、语言或动作！！！
+        不能写任何其他人物的行为、心理、语言或动作！！！
         字数不少于250字 小于等于450字。
         """;
     }
