@@ -52,7 +52,7 @@ public sealed class GmAgent(
             .Select(c => c.ChronicleText)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var dbSummary = await BuildDbSummaryAsync(cancellationToken);
+        var dbSummary = await DbSummaryBuilder.BuildAsync(dbContext, cancellationToken);
 
         // 历史上下文（深度注入）：序章 + 最近一条编年史，作为独立消息紧贴生成点。
         var openingHistory = string.Join("\n\n", new[]
@@ -162,23 +162,6 @@ public sealed class GmAgent(
             .Select(s => s.Name);
         var skillText = skills.Any() ? $"｜技能:{string.Join('/', skills)}" : "";
         return $"{id} = {name}｜HP {hp}/{maxHp}｜MP {mp}/{maxMp}｜体力 {stamina}/{maxStamina}｜护甲 {armor}{skillText}";
-    }
-
-    private async Task<string> BuildDbSummaryAsync(CancellationToken cancellationToken)
-    {
-        var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var npcs = await dbContext.ImportantNpcs.AsNoTracking()
-            .Select(n => $"{n.Name}（{n.LocationName}，{n.SelfStatus}，{n.BaseAttributes}）")
-            .ToListAsync(cancellationToken);
-
-        var stateStr = state is null ? "无" :
-            $"位置:{state.CurrentLocation}/{state.CurrentMinorRegion}/{state.CurrentMajorRegion}，时间:{state.CurTime}，章节:{state.CurrentChapter}";
-        var protagonistStr = protagonist is null ? "无" :
-            $"{protagonist.Name}，位于{protagonist.LocationName}，状态:{protagonist.SelfStatus}，{protagonist.BaseAttributes}{(string.IsNullOrWhiteSpace(protagonist.SpecialAttributes) ? "" : "，" + protagonist.SpecialAttributes)}";
-        var npcStr = npcs.Count == 0 ? "（无）" : string.Join("；", npcs);
-
-        return $"[全局状态] {stateStr}\n[主角] {protagonistStr}\n[在册NPC] {npcStr}";
     }
 
     private async Task<string> LoadCharacterAttrsAsync(string characterName, CancellationToken cancellationToken)

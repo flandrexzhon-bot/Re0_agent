@@ -251,7 +251,9 @@ public sealed class PromptComposer
         string currentLocation,
         RagContext? ragContext = null,
         string? chapterInfo = null,
-        string? gmOpening = null)
+        string? gmOpening = null,
+        string? playerInput = null,
+        string? dbSummary = null)
     {
         var worldSettings = ragContext?.Content ?? "暂无设定。";
         var locationText = string.IsNullOrWhiteSpace(currentLocation) ? "未知" : currentLocation;
@@ -259,6 +261,8 @@ public sealed class PromptComposer
         var npcNames = allProfiles.Where(p => !p.IsPlayerControlled).Select(p => p.CharacterName).ToList();
         var npcRoster = npcNames.Count == 0 ? "（暂无在册NPC，可按设定与剧情引入合适角色）" : string.Join("、", npcNames);
         var gmOpeningText = string.IsNullOrWhiteSpace(gmOpening) ? "（GM 开场暂缺，请按地点与历史上下文判断在场角色）" : gmOpening;
+        var playerInputText = string.IsNullOrWhiteSpace(playerInput) ? "（本回合主角无玩家输入。）" : playerInput;
+        var dbSummaryText = string.IsNullOrWhiteSpace(dbSummary) ? "（暂无数据库摘要。）" : dbSummary;
 
         return $$"""
         [RESET ROLE AND TASK, RECEIVE NEW TASK]
@@ -340,6 +344,10 @@ public sealed class PromptComposer
         【GM 已写好的本回合开场】
         {{gmOpeningText}}
 
+        【主角{{protagonistName}}这一回合的行动（玩家输入）】
+        {{playerInputText}}
+        开普勒先生："这就是主角刚刚做出的行动，你要据此安排哪些NPC会在此刻登场回应——谁被主角的言行牵动，谁该出现，都由你判断。"
+
         开普勒先生："当前所在地点是【{{locationText}}】，请优先考虑这个地点、且在开场里合理在场的角色。"
         开普勒先生："本场的主角是【{{protagonistName}}】，他由玩家操控、且已经先行动过了。所以你【绝对不要】把主角{{protagonistName}}排进位号，也【不要】在输出里提及、描述或安排主角的任何内容——你只负责调度需要回应的【NPC】。在册的NPC有：{{npcRoster}}。"
         开普勒先生："切记，你（泉此方）只是幕后的整理员、调度员，你绝对不能把自己『泉此方』排进任何位号，位号里只能出现这个异世界的【NPC】角色（在册NPC，或你按剧情引入的Re:Zero原著重要角色），绝不能出现主角{{protagonistName}}。"
@@ -352,6 +360,9 @@ public sealed class PromptComposer
         里面写着：
         World_settings:{{worldSettings}}
         泉此方："哦哦！都是我认识的角色！好幸福！"
+        开普勒先生："这是现在的数据库状态，和我看到的完全一样，你照着它判断此刻的处境与在场角色。"
+        【数据库状态（所有SQL表摘要）】
+        {{dbSummaryText}}
         本章剧情（仅作背景参考，调度出场角色时以历史上下文中已发生的事实为准）：{{chapterInfo ?? "无"}}
 
         以下为总体格式输出顺序，严格遵守

@@ -240,7 +240,7 @@ public sealed class AgentOrchestrator(
         {
             // 泉此方依据 GM 开场 + 主角已完成的行动调度本回合 NPC 阵容（不涉及主角）。
             var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
-            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, cancellationToken);
+            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, round.PlayerInput, cancellationToken);
 
             if (onStepCompleted is not null)
             {
