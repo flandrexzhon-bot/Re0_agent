@@ -243,6 +243,9 @@ public sealed class GameProgressService
                 {
                     ActiveRound = null;
                     Phase = RoundPhase.Idle;
+                    // 应用重启 / 切会话后内存重 roll cache 为空——为最新已结算回合
+                    // 从持久化存档锚点重建最小 cache，使 swipe/↻ 按钮重新可用。
+                    await TryReconstructRerollCacheAsync(db, lastRound, cancellationToken);
                 }
             }
             else
@@ -342,6 +345,69 @@ public sealed class GameProgressService
         catch (Exception ex)
         {
             ErrorMessage = $"加载状态错误: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// 应用重启 / 切会话后内存重 roll cache 丢失。为最新已结算回合从持久化存档锚点
+    /// 重建最小 cache：起点快照 = 本回合 BaseSavePointId（上一回合末存档），变体 #0 末态
+    /// = 最新持久化存档。逐格快照无法从持久化重建（只有 round_end 存档），故留空——
+    /// 此时逐格 ↻ 会回退到回合起点重跑（见 ReRollAsync），整局 ↻ 仍精确。
+    /// 首回合无起点基线（BaseSavePointId=null）时不重建，保持重 roll 禁用。
+    /// </summary>
+    private async Task TryReconstructRerollCacheAsync(Re0AgentDbContext db, GameRound lastRound, CancellationToken cancellationToken)
+    {
+        // 已有内存 cache（本会话内刚跑过）则不覆盖。
+        if (_currentRoundVariants.Count > 0 && _roundStartSnapshot is not null)
+        {
+            return;
+        }
+
+        _currentRoundVariants.Clear();
+        _preTurnSnapshots.Clear();
+        _activeVariantIndex = 0;
+        _roundStartSnapshot = null;
+
+        try
+        {
+            // 末态快照：最新持久化存档（FinalizeRoundAsync 的 round_end）。
+            var endSnapshot = await db.SavePoints.AsNoTracking()
+                .OrderByDescending(sp => sp.SaveId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (endSnapshot is null)
+            {
+                return;
+            }
+
+            // 起点快照：本回合 BaseSavePointId 指向的存档（上一回合末）。
+            // 拿不到真正的回合起点基线时不重建——用末态当起点会在重跑时把填表叠加到
+            // 已结算状态上，宁可禁用重 roll 也不污染数据库。首回合(BaseSavePointId=null)即此情形。
+            if (lastRound.BaseSavePointId is not int baseId)
+            {
+                return;
+            }
+            var startSnapshot = await db.SavePoints.AsNoTracking()
+                .FirstOrDefaultAsync(sp => sp.SaveId == baseId, cancellationToken);
+            if (startSnapshot is null)
+            {
+                return;
+            }
+            _roundStartSnapshot = startSnapshot;
+
+            _currentRoundVariants.Add(new RoundVariant
+            {
+                GmOpening = lastRound.GmOpening,
+                Turns = lastRound.CharacterTurns.ToList(),
+                Events = lastRound.Events.ToList(),
+                DbSnapshot = endSnapshot
+            });
+            _activeVariantIndex = 0;
+        }
+        catch
+        {
+            // 重建失败不致命——仅意味着该回合暂不可重 roll。
+            _currentRoundVariants.Clear();
+            _roundStartSnapshot = null;
         }
     }
 
@@ -631,10 +697,19 @@ public sealed class GameProgressService
                 // keepTurnCount：保留多少格（含主角）。fromTurnIndex<0 或 0 → 整局重跑(0)；≥1 → 保留 fromTurnIndex 格。
                 int keepTurnCount = fromTurnIndex <= 0 ? 0 : fromTurnIndex;
 
+                // 逐格重 roll 需要对应的「每格前快照」才能精确回档；若 cache 缺失该项
+                // （如应用重启后从持久化重建、只有回合起点快照），降级为整局重跑——
+                // 否则会出现「保留前 N 格、却把 DB 全量回退到回合起点」的不一致。
+                if (keepTurnCount > 0 && _preTurnSnapshots.Count <= keepTurnCount)
+                {
+                    keepTurnCount = 0;
+                    regenerateOpening = false; // 保留原开场，仅重跑主角+NPC。
+                }
+
                 // 1. 回档到对应快照。
                 var restoreFrom = keepTurnCount == 0
                     ? _roundStartSnapshot
-                    : (_preTurnSnapshots.Count > keepTurnCount ? _preTurnSnapshots[keepTurnCount] : _roundStartSnapshot);
+                    : _preTurnSnapshots[keepTurnCount];
                 await saveSystem.RestoreGameStateAsync(restoreFrom!, token);
 
                 // 2. 从该点向后级联重跑。重跑期间继续抓「每格前快照」覆盖式更新 cache。
@@ -772,8 +847,10 @@ public sealed class GameProgressService
 
             ActiveRound = null;
             Phase = RoundPhase.Idle;
-            await LoadDatabaseStateAsync();
+            // 先把裁剪后的会话落盘，再刷新数据库面板状态——否则 LoadDatabaseStateAsync
+            // 会用尚未更新的旧快照覆盖 SessionRounds，导致裁剪被撤销、fork 看起来没反应。
             await AutoSaveChatSessionAsync();
+            await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
         {
