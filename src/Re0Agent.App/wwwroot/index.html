@@ -27,6 +27,15 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        // 滚动指定容器到底部（用于切回主页面时自动定位到最新内容）。
+        window.scrollElementToBottom = function (elementId) {
+            var el = document.getElementById(elementId);
+            if (el) {
+                el.scrollTop = el.scrollHeight;
+            }
+        };
+    </script>
 
 </body>
 

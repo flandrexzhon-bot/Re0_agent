@@ -12,6 +12,7 @@
 @inject ProtagonistTemplateService TemplateService
 @inject ChatSessionService SessionService
 @inject GameProgressService Progress
+@inject IJSRuntime JS
 @implements IDisposable
 
 
@@ -939,6 +940,16 @@ else
             await Progress.LoadDatabaseStateAsync();
         }
         SyncState();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // 切回主页面时编年史容器首次渲染后自动滚到底部，定位到最新内容方便玩家操作。
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("scrollElementToBottom", "grimoireLogScroll"); }
+            catch { /* JS 尚未就绪时忽略 */ }
+        }
     }
 
     public void Dispose()
