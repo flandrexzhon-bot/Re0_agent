@@ -217,7 +217,7 @@ else
             @foreach (var round in visibleRounds)
             {
                 var isLatest = ReferenceEquals(round, latestRound);
-                var canSwipe = isLatest && Progress.CanReRoll && round.CompletedAt is not null;
+                var canSwipe = isLatest && Progress.CanReRoll && (round.CompletedAt is not null || phase == RoundPhase.Interrupted);
 
                 <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
                     <span>─── 命运分歧点：@round.RoundIndex ───</span>
@@ -375,6 +375,20 @@ else
                     </div>
                 </div>
             }
+            else if (phase == RoundPhase.Interrupted)
+            {
+                <h2>命运暂歇</h2>
+                <div class="round-console">
+                    <p style="color: var(--color-text-secondary); margin: 0 0 0.75rem;">
+                        本回合已手动停止。可点「继续」从断点恢复并跑完结算，或对上方任意一格点 ↻ 重 roll。
+                    </p>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="ResumeRoundAsync">
+                            ▶ 继续
+                        </button>
+                    </div>
+                </div>
+            }
             else
             {
                 <h2>纺织新的命运线</h2>
@@ -385,7 +399,7 @@ else
                     @if (phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning || phase == RoundPhase.Finalizing)
                     {
                         <button class="primary-action" type="button" style="background: var(--color-danger, #b03a3a); border-color: var(--color-danger, #b03a3a);" @onclick="StopRound">
-                            ⏹ 停止 (调试)
+                            ⏹ 停止
                         </button>
                     }
                     else
@@ -1012,6 +1026,11 @@ else
     private void StopRound()
     {
         Progress.StopRound();
+    }
+
+    private async Task ResumeRoundAsync()
+    {
+        await Progress.ResumeRoundAsync();
     }
 
 

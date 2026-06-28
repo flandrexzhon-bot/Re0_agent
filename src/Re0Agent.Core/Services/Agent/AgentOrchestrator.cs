@@ -278,6 +278,52 @@ public sealed class AgentOrchestrator(
     }
 
     /// <summary>
+    /// 「继续」：手动停止后恢复一个未结算的回合，保留已生成的格，从断点接着跑到回合末。
+    /// 不回档数据库——沿用停止时的现状继续推进。调用方负责把 cache 与回合的格数对齐。
+    /// </summary>
+    public async Task<GameRound> ResumeRoundAsync(
+        GameRound round,
+        Func<GameRound, Task>? onStepCompleted = null,
+        Func<Task>? onBeforeTurn = null,
+        CancellationToken cancellationToken = default)
+    {
+        // RunCharacterTurnAsync 在所有 await 之后才把格加入列表，故被取消的「进行中」格不会留半成品：
+        // 主角格存在 ⇒ 主角已完整行动。
+        bool protagonistDone = round.CharacterTurns.Any(t => t.IsPlayerControlled);
+
+        if (!protagonistDone)
+        {
+            // 主角尚未行动（停在主角格或更早）——PendingProtagonistProfiles 在取消时未被清空，
+            // 直接走完整第二阶段：主角 → 调度 → NPC → 结算。
+            return await RunPlayerThenNpcTurnsAsync(
+                round, round.PlayerInput, skipPlayerTurn: false, directOutput: true,
+                onStepCompleted, onBeforeTurn, cancellationToken);
+        }
+
+        // 主角已完成。若调度尚未产出位号（停在主角与首个 NPC 之间），补跑泉此方调度。
+        if (string.IsNullOrWhiteSpace(round.CharacterSubSlots) && round.DeathReturnCause is null)
+        {
+            var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, round.PlayerInput, cancellationToken);
+            if (onStepCompleted is not null)
+            {
+                await onStepCompleted(round);
+            }
+            await ApplyDelayAsync(cancellationToken);
+        }
+
+        // 从已完成的 NPC 之后继续。已完成 NPC 数 = 非主角格数；据此 skip。
+        if (round.DeathReturnCause is null)
+        {
+            int npcsDone = round.CharacterTurns.Count(t => !t.IsPlayerControlled);
+            await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, skipNpcCount: npcsDone, cancellationToken: cancellationToken);
+        }
+
+        await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
+        return round;
+    }
+
+    /// <summary>
     /// 级联重 roll：在已 restore 好对应 DB 快照的前提下，重跑某回合的「开场/某一格起」到回合末。
     /// <para><paramref name="keepTurnCount"/>=0 → 整局重跑（开场重 roll 或主角重 roll，由 <paramref name="regenerateOpening"/> 区分）。</para>
     /// <para><paramref name="keepTurnCount"/>≥1 → 保留前 N 格（主角 + N-1 个 NPC），从第 N 格 NPC 起级联重跑。</para>

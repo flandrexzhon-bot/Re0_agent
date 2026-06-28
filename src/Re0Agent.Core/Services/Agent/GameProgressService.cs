@@ -567,12 +567,11 @@ public sealed class GameProgressService
 
         _ = Task.Run(async () =>
         {
+            using var scope = _scopeFactory.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+            var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
-                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
-
                 var round = await orchestrator.RunPlayerThenNpcTurnsAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
                 {
                     ActiveRound = r;
@@ -597,13 +596,103 @@ public sealed class GameProgressService
             }
             catch (OperationCanceledException)
             {
-                ErrorMessage = "已手动中止本回合结算。";
-                Phase = RoundPhase.AwaitingPlayer;
+                // 手动停止：回合未结算但 GM 开场与（部分）格已生成。进入 Interrupted，
+                // 保留已生成内容 + 抓当前 DB 状态为变体 #0，使「继续」可恢复、各格可重 roll。
+                ErrorMessage = "已手动停止本回合，可点「继续」恢复或对某格重 roll。";
+                if (ActiveRound is not null)
+                {
+                    try { await CaptureVariantAsync(ActiveRound, saveSystem, CancellationToken.None); } catch { /* 抓变体失败不致命 */ }
+                    await AutoSaveChatSessionAsync();
+                }
+                Phase = RoundPhase.Interrupted;
             }
             catch (Exception ex)
             {
                 ErrorMessage = ex.Message;
                 Phase = RoundPhase.AwaitingPlayer;
+            }
+            finally
+            {
+                _roundCts?.Dispose();
+                _roundCts = null;
+                IsBusy = false;
+                NotifyStateChanged();
+                await LoadDatabaseStateAsync();
+                NotifyStateChanged();
+            }
+        });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>「继续」：从手动停止处恢复未结算回合，保留已生成的格、接着跑到回合末。</summary>
+    public Task ResumeRoundAsync()
+    {
+        if (IsBusy || Phase != RoundPhase.Interrupted || ActiveRound is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        IsBusy = true;
+        Phase = RoundPhase.NpcRunning;
+        ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
+        var resumeRound = ActiveRound;
+        NotifyStateChanged();
+
+        _ = Task.Run(async () =>
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+            var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+            try
+            {
+                // 停止时已抓过变体 #0；恢复要继续写库，先丢弃它，跑完后重新打包为权威 #0。
+                _currentRoundVariants.Clear();
+                _activeVariantIndex = 0;
+
+                // 把「每格前快照」对齐到已完成的格数——丢弃停止时为半成品格抓的多余快照，
+                // 否则恢复后续格 onBeforeTurn 追加的快照会与 CharacterTurns 错位，逐格重 roll 索引偏移。
+                int doneTurns;
+                lock (SessionRounds) { doneTurns = resumeRound.CharacterTurns.Count; }
+                if (_preTurnSnapshots.Count > doneTurns)
+                {
+                    _preTurnSnapshots.RemoveRange(doneTurns, _preTurnSnapshots.Count - doneTurns);
+                }
+
+                var round = await orchestrator.ResumeRoundAsync(resumeRound, onStepCompleted: async (r) =>
+                {
+                    ActiveRound = r;
+                    lock (SessionRounds)
+                    {
+                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == r.RoundIndex);
+                        if (idx >= 0) SessionRounds[idx] = r;
+                    }
+                    await AutoSaveChatSessionAsync();
+                    NotifyStateChanged();
+                    await Task.Delay(10);
+                }, onBeforeTurn: async () =>
+                {
+                    _preTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
+                }, cancellationToken: token);
+
+                await CaptureVariantAsync(round, saveSystem, token);
+                await HandleRoundCompletionAsync(round);
+            }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已再次停止本回合，可点「继续」恢复或对某格重 roll。";
+                if (ActiveRound is not null)
+                {
+                    try { await CaptureVariantAsync(ActiveRound, saveSystem, CancellationToken.None); } catch { }
+                    await AutoSaveChatSessionAsync();
+                }
+                Phase = RoundPhase.Interrupted;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                Phase = RoundPhase.Interrupted;
             }
             finally
             {
