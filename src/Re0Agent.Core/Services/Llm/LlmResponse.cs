@@ -23,4 +23,5 @@ public sealed record LlmUsage(
 public sealed record LlmStreamChunk(
     string AgentName,
     string ContentDelta,
-    bool IsDone);
+    bool IsDone,
+    LlmUsage? Usage = null);

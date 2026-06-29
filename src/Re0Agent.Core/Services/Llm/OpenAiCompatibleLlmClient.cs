@@ -42,8 +42,13 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         CancellationToken cancellationToken)
     {
         var builder = new StringBuilder();
+        LlmUsage? usage = null;
         await foreach (var chunk in StreamChatAsync(request, cancellationToken))
         {
+            if (chunk.Usage is not null)
+            {
+                usage = chunk.Usage;
+            }
             if (!chunk.IsDone && !string.IsNullOrEmpty(chunk.ContentDelta))
             {
                 builder.Append(chunk.ContentDelta);
@@ -55,7 +60,8 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         return new LlmResponse(
             request.AgentName,
             content,
-            ReasoningContent: string.IsNullOrWhiteSpace(thought) ? null : thought);
+            ReasoningContent: string.IsNullOrWhiteSpace(thought) ? null : thought,
+            Usage: usage);
     }
 
     public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(
@@ -78,12 +84,20 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
-        await foreach (var delta in SseParser.ReadContentDeltasAsync(reader, cancellationToken))
+        LlmUsage? usage = null;
+        await foreach (var item in SseParser.ReadStreamAsync(reader, cancellationToken))
         {
-            yield return new LlmStreamChunk(request.AgentName, delta, IsDone: false);
+            if (item.Usage is not null)
+            {
+                usage = item.Usage;
+            }
+            else if (item.Content is not null)
+            {
+                yield return new LlmStreamChunk(request.AgentName, item.Content, IsDone: false);
+            }
         }
 
-        yield return new LlmStreamChunk(request.AgentName, string.Empty, IsDone: true);
+        yield return new LlmStreamChunk(request.AgentName, string.Empty, IsDone: true, Usage: usage);
     }
 
     private static HttpRequestMessage CreateHttpRequest(LlmRequest request, bool stream)
@@ -101,6 +115,13 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             ["max_tokens"] = options.MaxTokens,
             ["stream"] = stream
         };
+
+        // 流式请求要求服务端在末尾追加 usage 块（DeepSeek/OpenAI 支持），
+        // 否则流式下拿不到缓存命中统计。
+        if (stream)
+        {
+            payload["stream_options"] = new { include_usage = true };
+        }
 
         // DeepSeek 思考模式（OpenAI 格式）：thinking.type 是真正的开关，
         // 且 DeepSeek 默认 enabled，故关闭时也必须显式发送 disabled。

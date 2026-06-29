@@ -30,6 +30,35 @@ public sealed class Phase2AgentTests
     }
 
     [Fact]
+    public async Task SseParserReadsTrailingUsageChunk()
+    {
+        // stream_options.include_usage=true 时，末尾 usage 块的 choices 为空数组。
+        const string payload = """
+            data: {"choices":[{"delta":{"content":"正文"}}]}
+
+            data: {"choices":[],"usage":{"prompt_tokens":1000,"completion_tokens":50,"prompt_cache_hit_tokens":768}}
+
+            data: [DONE]
+
+            """;
+
+        using var reader = new StringReader(payload);
+        var contents = new List<string>();
+        LlmUsage? usage = null;
+
+        await foreach (var item in SseParser.ReadStreamAsync(reader))
+        {
+            if (item.Content is not null) contents.Add(item.Content);
+            if (item.Usage is not null) usage = item.Usage;
+        }
+
+        Assert.Equal(["正文"], contents);
+        Assert.NotNull(usage);
+        Assert.Equal(1000, usage!.PromptTokens);
+        Assert.Equal(768, usage.CachedTokens);
+    }
+
+    [Fact]
     public void SqlSafetyValidatorRejectsUnsafeStatements()
     {
         var validator = new SqlSafetyValidator();
