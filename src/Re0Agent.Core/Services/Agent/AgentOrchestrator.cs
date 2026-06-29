@@ -261,7 +261,7 @@ public sealed class AgentOrchestrator(
         {
             // 泉此方依据 GM 开场 + 主角已完成的行动调度本回合 NPC 阵容（不涉及主角）。
             var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
-            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, round.PlayerInput, cancellationToken);
+            round.CharacterSubSlots = await characterSubAgent.RunAsync(round, profiles, cancellationToken);
 
             if (onStepCompleted is not null)
             {
@@ -304,7 +304,7 @@ public sealed class AgentOrchestrator(
         if (string.IsNullOrWhiteSpace(round.CharacterSubSlots) && round.DeathReturnCause is null)
         {
             var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
-            round.CharacterSubSlots = await characterSubAgent.RunAsync(round.Chapter, profiles, round.GmOpening, round.PlayerInput, cancellationToken);
+            round.CharacterSubSlots = await characterSubAgent.RunAsync(round, profiles, cancellationToken);
             if (onStepCompleted is not null)
             {
                 await onStepCompleted(round);
@@ -468,31 +468,35 @@ public sealed class AgentOrchestrator(
         // 章节切换：启动但不等待 —— 填表 SQL 不依赖章节切换结果。
         var chapterSwitchTask = chapterSwitchAgent.RunAsync(round, cancellationToken);
 
-        int maxFormRetries = 3;
-        int formAttempt = 0;
-        bool formSuccess = false;
+        // 4 个分区各自独立重试（见 FormAgent.GeneratePartitionedAsync）：某分区报错只重发该分区，
+        // 不波及其余分区。这里汇总所有成功分区的 SQL 一次性原子执行，并逐条记录失败分区。
         SqlExecutionResult? formExecution = null;
-
-        while (formAttempt < maxFormRetries && !formSuccess)
+        try
         {
-            formAttempt++;
-            try
+            var partitions = await formAgent.GeneratePartitionedAsync(round, cancellationToken);
+
+            foreach (var failed in partitions.Where(p => p.ErrorMessage is not null))
             {
-                var sql = await formAgent.GenerateSqlAsync(round, cancellationToken);
-                formExecution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
-                formSuccess = true;
+                round.Events.Add($"填表Agent[{DescribePartition(failed.Partition)}]分区填表失败（已重试），原因：{failed.ErrorMessage}");
             }
-            catch (Exception ex)
+
+            var sql = partitions.SelectMany(p => p.Sql).ToList();
+            if (sql.Count > 0)
             {
-                round.Events.Add($"填表Agent填表失败第 {formAttempt} 次，原因：{ex.Message}");
-                if (formAttempt >= maxFormRetries)
-                {
-                    round.Events.Add($"填表Agent填表最终失败。可稍后在【现世处境】手动重试。");
-                }
+                formExecution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
             }
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 汇总执行阶段（SQL 校验/事务）失败：整批未落库。
+            round.Events.Add($"填表Agent执行SQL失败，原因：{ex.Message}。可稍后在【现世处境】手动重试。");
+        }
 
-        if (formSuccess && formExecution is not null)
+        if (formExecution is not null)
         {
             round.Events.Add($"填表Agent执行SQL：{formExecution.StatementsExecuted}条。");
         }
@@ -580,6 +584,15 @@ public sealed class AgentOrchestrator(
         var next = await dbContext.Chronicle.CountAsync(cancellationToken) + 1;
         return $"R{next:0000}";
     }
+
+    private static string DescribePartition(FormTablePartition partition) => partition switch
+    {
+        FormTablePartition.CharacterMemory => "角色记忆",
+        FormTablePartition.Chronicle => "AM世界概括",
+        FormTablePartition.ImportantNpc => "重要NPC",
+        FormTablePartition.Rest => "其余表",
+        _ => partition.ToString()
+    };
 
     private async Task<int> ReadCurrentChapterAsync(CancellationToken cancellationToken)
     {

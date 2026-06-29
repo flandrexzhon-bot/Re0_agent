@@ -147,6 +147,34 @@ public sealed class PromptComposer
         """;
     }
 
+    /// <summary>
+    /// 泉此方（角色调度）专用的深度注入(depth=0)块：把【GM 已写好的本回合开场】与
+    /// 【主角这一回合的行动（玩家输入）】提到紧贴生成点的最高注意力位，
+    /// 与历史上下文同等深度，确保调度 NPC 时始终以「本回合刚发生了什么」为准。
+    /// </summary>
+    public string ComposeCharacterSubFocusInjection(
+        IReadOnlyList<CharacterAgentProfile> allProfiles,
+        string? gmOpening,
+        string? playerInput)
+    {
+        var protagonistName = allProfiles.FirstOrDefault(p => p.IsPlayerControlled)?.CharacterName ?? "菜月昴";
+        var gmOpeningText = string.IsNullOrWhiteSpace(gmOpening) ? "（GM 开场暂缺，请按地点与历史上下文判断在场角色）" : gmOpening.Trim();
+        var playerInputText = string.IsNullOrWhiteSpace(playerInput) ? "（本回合主角无玩家输入。）" : playerInput.Trim();
+
+        return $"""
+        【最高优先·本回合刚发生的事（调度依据）】
+        以下是 GM 已写好的本回合开场，以及主角【{protagonistName}】这一回合已完成的行动。请【优先依据这两件刚发生的事】判断此刻在场、该出场回应的【NPC】角色。
+
+        【GM 已写好的本回合开场】
+        {gmOpeningText}
+
+        【主角{protagonistName}这一回合的行动（玩家输入）】
+        {playerInputText}
+
+        ——你只负责调度需要回应的【NPC】：绝不要把主角{protagonistName}或你自己『泉此方』排进位号，也不要描述主角的任何内容。
+        """;
+    }
+
     // ── 思维链引导块（深度注入）──
     // 作为独立 User 消息插在「历史上下文」之后、assistant 前缀之前，
     // 让逐条思考清单紧贴生成点，权重高于前面的正文要求/格式说明。

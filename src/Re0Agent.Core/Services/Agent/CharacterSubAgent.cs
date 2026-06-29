@@ -16,12 +16,14 @@ public sealed class CharacterSubAgent(
     ChapterVariantRenderer chapterVariantRenderer)
 {
     public async Task<string> RunAsync(
-        int chapter,
+        GameRound round,
         IReadOnlyList<CharacterAgentProfile> allProfiles,
-        string? gmOpening,
-        string? playerInput,
         CancellationToken cancellationToken = default)
     {
+        var chapter = round.Chapter;
+        var gmOpening = round.GmOpening;
+        var playerInput = round.PlayerInput;
+
         var config = await configResolver.FindConfigAsync("CharacterSub", "CharacterSub", cancellationToken);
 
         var allEntries = await ragService.ListAllEntriesAsync(cancellationToken);
@@ -39,9 +41,9 @@ public sealed class CharacterSubAgent(
         var recentChronicle = await ChronicleSelector.SelectAsync(
             dbContext, chronicleKeywords, cancellationToken);
 
-        var history = recentChronicle.Count == 0
-            ? "无历史记录。"
-            : string.Join('\n', recentChronicle.Select(c => $"[{c.CodeIndex}] {c.ChronicleText}"));
+        // 历史上下文与 GM/角色 Agent 一致：编年史(AM) + 最近若干大回合原版全文（round.PreviousRounds）。
+        // 之前泉此方只注入编年史、漏了前序回合原版，导致「调度时看不到原本三回合上下文」。
+        var history = RoundContextBuilder.BuildHistory(round, recentChronicle);
 
         var allowedCategories = allEntries
             .Select(WorldBookCategory.GetKey)
@@ -84,6 +86,9 @@ public sealed class CharacterSubAgent(
                 [
                     LlmMessage.User(promptComposer.ComposeCharacterSub(allProfiles, currentLocation, ragContext, chapterInfo, gmOpening, playerInput, dbSummary)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
+                    // 深度注入(depth=0)：GM 开场 + 主角玩家输入，紧贴生成点放在最高注意力位，
+                    // 与原版上下文同等深度，确保泉此方调度 NPC 时始终盯着「本回合刚发生了什么」。
+                    LlmMessage.User(promptComposer.ComposeCharacterSubFocusInjection(allProfiles, gmOpening, playerInput)),
                     LlmMessage.User(promptComposer.ComposeCharacterSubThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
                 ]

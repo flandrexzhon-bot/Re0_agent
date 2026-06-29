@@ -13,7 +13,31 @@ public sealed partial class FormAgent(
     PromptComposer promptComposer,
     ILlmClient llmClient)
 {
+    /// <summary>单个分区请求的最大重试次数（仅重试报错/空输出的那个分区，不波及其余分区）。</summary>
+    private const int MaxPartitionRetries = 3;
+
+    /// <summary>一个分区填表请求的结果：成功则带 SQL，失败则带最终错误信息。</summary>
+    public sealed record PartitionResult(
+        FormTablePartition Partition,
+        IReadOnlyList<string> Sql,
+        string? ErrorMessage);
+
     public async Task<IReadOnlyList<string>> GenerateSqlAsync(
+        GameRound round,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await GeneratePartitionedAsync(round, cancellationToken);
+        return result.SelectMany(r => r.Sql).ToList();
+    }
+
+    /// <summary>
+    /// 把单次大填表拆成 4 个并发子请求，各自只负责自己分区的表，互不干扰：
+    ///  1. 角色记忆(character_memory) 2. AM 世界概括(chronicle) 3. important_npc 表 4. 其余所有表。
+    /// <para>每个分区<strong>独立重试</strong>（最多 <see cref="MaxPartitionRetries"/> 次）——某个分区报错
+    /// 只重发该分区的请求，不影响、也不重发其余 3 个分区。</para>
+    /// 返回每个分区的结果（含失败信息），由调用方汇总 SQL 并记录失败事件。
+    /// </summary>
+    public async Task<IReadOnlyList<PartitionResult>> GeneratePartitionedAsync(
         GameRound round,
         CancellationToken cancellationToken = default)
     {
@@ -21,11 +45,6 @@ public sealed partial class FormAgent(
         // 数据库概览只算一次，4 个分区请求共用，避免重复查询。
         var databaseSummary = await CreateDatabaseSummaryAsync(cancellationToken);
 
-        // 把单次大填表拆成 4 个并发子请求，各自只负责自己分区的表，互不干扰：
-        //  1. 角色记忆(character_memory)
-        //  2. AM 世界概括(chronicle)
-        //  3. important_npc 表
-        //  4. 其余所有表
         var partitions = new[]
         {
             FormTablePartition.CharacterMemory,
@@ -38,33 +57,57 @@ public sealed partial class FormAgent(
             .Select(partition => GeneratePartitionSqlAsync(round, databaseSummary, config, partition, cancellationToken))
             .ToArray();
 
-        var results = await Task.WhenAll(tasks);
-
-        // 汇总 4 个分区的 SQL，统一交给执行器在同一事务内原子执行。
-        return results.SelectMany(statements => statements).ToList();
+        return await Task.WhenAll(tasks);
     }
 
-    private async Task<IReadOnlyList<string>> GeneratePartitionSqlAsync(
+    private async Task<PartitionResult> GeneratePartitionSqlAsync(
         GameRound round,
         string databaseSummary,
         Re0Agent.Core.Entities.AgentConfig? config,
         FormTablePartition partition,
         CancellationToken cancellationToken)
     {
-        var response = await llmClient.SendChatAsync(
-            new LlmRequest
-            {
-                AgentName = "填表Agent",
-                Options = AgentConfigResolver.ToLlmOptions(config),
-                Messages =
-                [
-                    LlmMessage.System(config?.SystemPrompt ?? "你是填表Agent，按 <tableEdit> 格式输出 SQL。"),
-                    LlmMessage.User(promptComposer.ComposeFormAgent(round, databaseSummary, partition))
-                ]
-            },
-            cancellationToken);
+        string? lastError = null;
 
-        return ParseSqlPayload(response.Content);
+        for (var attempt = 1; attempt <= MaxPartitionRetries; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var response = await llmClient.SendChatAsync(
+                    new LlmRequest
+                    {
+                        AgentName = "填表Agent",
+                        Options = AgentConfigResolver.ToLlmOptions(config),
+                        Messages =
+                        [
+                            LlmMessage.System(config?.SystemPrompt ?? "你是填表Agent，按 <tableEdit> 格式输出 SQL。"),
+                            LlmMessage.User(promptComposer.ComposeFormAgent(round, databaseSummary, partition))
+                        ]
+                    },
+                    cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(response.ErrorMessage))
+                {
+                    lastError = response.ErrorMessage;
+                    continue;
+                }
+
+                var sql = ParseSqlPayload(response.Content);
+                return new PartitionResult(partition, sql, ErrorMessage: null);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex.Message;
+            }
+        }
+
+        // 该分区重试用尽仍失败：返回空 SQL + 错误信息，不抛出，保证其余分区照常落库。
+        return new PartitionResult(partition, [], lastError ?? "未知错误");
     }
 
     private async Task<string> CreateDatabaseSummaryAsync(CancellationToken cancellationToken)
