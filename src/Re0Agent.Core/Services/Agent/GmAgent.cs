@@ -54,12 +54,19 @@ public sealed class GmAgent(
 
         var dbSummary = await DbSummaryBuilder.BuildAsync(dbContext, cancellationToken);
 
-        // 历史上下文（深度注入）：序章 + 最近一条编年史，作为独立消息紧贴生成点。
+        // 历史上下文（深度注入）：序章 + 最近一条编年史 + 最近若干大回合的原版全文
+        // （由 GameProgressService 经 round.PreviousRounds 传入），作为独立消息紧贴生成点。
+        // 缺了 PreviousRounds 会导致「开局 GM 没有原本三回合上下文」。
+        var previousTranscripts = round.PreviousRounds
+            .Select(prev => (Round: prev, Text: RoundContextBuilder.BuildCurrentRoundTranscript(prev)))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Text))
+            .Select(x => $"【上回合原版上下文(编号 {x.Round.RoundIndex})】\n{x.Text}");
+
         var openingHistory = string.Join("\n\n", new[]
         {
             string.IsNullOrWhiteSpace(prologue) ? null : $"【序章/前序故事 AM0000】\n{prologue}",
             string.IsNullOrWhiteSpace(lastChronicle) ? null : $"【上一回合编年史】\n{lastChronicle}"
-        }.Where(s => s is not null));
+        }.Where(s => s is not null).Concat(previousTranscripts));
 
         var response = await llmClient.SendChatAsync(
             new LlmRequest

@@ -931,7 +931,7 @@ public sealed class GameProgressService
         {
             using var scope = _scopeFactory.CreateScope();
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
-            await saveSystem.ForkRestoreAsync(round.BaseSavePointId.Value);
+            await saveSystem.ForkRestoreAsync(round.BaseSavePointId.Value, round.RoundIndex);
 
             lock (SessionRounds)
             {

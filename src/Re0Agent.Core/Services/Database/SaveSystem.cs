@@ -188,7 +188,7 @@ public sealed class SaveSystem(
     /// 但<strong>不</strong>写 DeathReturnLog、<strong>不</strong>滚瘴气、<strong>不</strong>计入循环次数。
     /// 用于「类死亡回归但不计死亡」的分歧点回溯。
     /// </summary>
-    public async Task ForkRestoreAsync(int saveId, CancellationToken cancellationToken = default)
+    public async Task ForkRestoreAsync(int saveId, string forkRoundIndex, CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
 
@@ -198,7 +198,74 @@ public sealed class SaveSystem(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await RestoreGameStateAsync(savePoint, cancellationToken);
         await DeleteNonProtagonistMemoryAsync(cancellationToken);
+        // 存档快照不含 chronicle/character_memory，须在此显式回滚被 fork 回合写入的内容，
+        // 否则：① 新回合编号会顺延到 R{N+1} 而非平行 R{N}（CreateRoundIndexAsync=Chronicle.Count()+1）；
+        //       ② 被 fork 时间线的编年史/记忆会漏进新回合的 GM 与角色上下文。
+        await TrimChronicleForForkAsync(forkRoundIndex, cancellationToken);
+        await DeleteMemoryFromRoundAsync(forkRoundIndex, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 把 chronicle 行数恢复到 fork 点：fork 到 R{N} 的平行回合，须保留前 N-1 条 AM，删掉其后全部
+    /// （即被 fork 回合及更晚回合写入的总结）。直接逆推 CreateRoundIndexAsync 的 R{Count+1} 公式，
+    /// 与 AM0000 序章是否存在无关。
+    /// </summary>
+    private async Task TrimChronicleForForkAsync(string forkRoundIndex, CancellationToken cancellationToken)
+    {
+        if (!TryParseRoundNumber(forkRoundIndex, out var roundNumber))
+        {
+            return;
+        }
+
+        var keepCount = Math.Max(0, roundNumber - 1);
+        var ordered = await dbContext.Chronicle
+            .OrderBy(c => c.RowId)
+            .ToListAsync(cancellationToken);
+
+        var toDelete = ordered.Skip(keepCount).ToList();
+        if (toDelete.Count > 0)
+        {
+            dbContext.Chronicle.RemoveRange(toDelete);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    /// <summary>删除被 fork 回合及更晚回合（round_index &gt;= forkRoundIndex，零填充故可字典序比较）写入的角色记忆。</summary>
+    private async Task DeleteMemoryFromRoundAsync(string forkRoundIndex, CancellationToken cancellationToken)
+    {
+        if (!TryParseRoundNumber(forkRoundIndex, out var forkNumber))
+        {
+            return;
+        }
+
+        var stale = await dbContext.CharacterMemory
+            .Where(m => m.RoundIndex.StartsWith("R"))
+            .ToListAsync(cancellationToken);
+
+        var toDelete = stale
+            .Where(m => TryParseRoundNumber(m.RoundIndex, out var n) && n >= forkNumber)
+            .ToList();
+
+        if (toDelete.Count > 0)
+        {
+            dbContext.CharacterMemory.RemoveRange(toDelete);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+        }
+    }
+
+    private static bool TryParseRoundNumber(string? roundIndex, out int number)
+    {
+        number = 0;
+        if (string.IsNullOrWhiteSpace(roundIndex))
+        {
+            return false;
+        }
+
+        var digits = roundIndex.TrimStart('R', 'r');
+        return int.TryParse(digits, out number);
     }
 
     /// <summary>

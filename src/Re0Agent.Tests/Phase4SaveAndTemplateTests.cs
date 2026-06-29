@@ -277,6 +277,64 @@ public sealed class Phase4SaveAndTemplateTests
         }
     }
 
+    [Fact]
+    public async Task ForkRestoreTrimsChronicleAndMemoryToParallelRound()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await SeedGameStateAsync(context);
+            var saveSystem = CreateSaveSystem(context, [50]);
+
+            // 模拟回合 R0002 结束时的存档锚点（此刻 chronicle 仅有 AM0001=R0001 的总结）。
+            var anchor = await saveSystem.CreateSavePointAsync("round_end");
+
+            // R0002、R0003 各写入一条编年史与一条记忆（被 fork 的时间线）。
+            context.Chronicle.Add(new ChronicleEntry
+            {
+                RowId = 2, CodeIndex = "AM0002", TimeSpan = "2024-04-01 09:10 ~ 2024-04-01 09:20",
+                Summary = "R0002", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0002 剧情。", 8))
+            });
+            context.Chronicle.Add(new ChronicleEntry
+            {
+                RowId = 3, CodeIndex = "AM0003", TimeSpan = "2024-04-01 09:20 ~ 2024-04-01 09:30",
+                Summary = "R0003", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0003 剧情。", 8))
+            });
+            context.CharacterMemory.Add(new CharacterMemory
+            {
+                RowId = 1, CharacterName = "爱蜜莉雅", RoundIndex = "R0002",
+                MemoryText = "R0002 记忆", CreatedAt = "2024-04-01 09:20"
+            });
+            context.CharacterMemory.Add(new CharacterMemory
+            {
+                RowId = 2, CharacterName = "爱蜜莉雅", RoundIndex = "R0003",
+                MemoryText = "R0003 记忆", CreatedAt = "2024-04-01 09:30"
+            });
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+
+            // 在 R0002 的分歧点 fork：应回到平行 R0002 —— 保留 R0001 的 AM0001，删掉 AM0002/AM0003，
+            // 以及 R0002 及更晚回合的记忆。新回合编号 = Chronicle.Count()+1 = 2 → 平行 R0002。
+            await saveSystem.ForkRestoreAsync(anchor.SaveId, "R0002");
+            context.ChangeTracker.Clear();
+
+            var remainingChronicle = await context.Chronicle.AsNoTracking().OrderBy(c => c.RowId).ToListAsync();
+            Assert.Single(remainingChronicle);
+            Assert.Equal("AM0001", remainingChronicle[0].CodeIndex);
+
+            // 编号回到平行 R0002，而非顺延到 R0004。
+            Assert.Equal(2, await context.Chronicle.CountAsync() + 1);
+
+            // R0002 起的记忆被清除（主角记忆本就会被 DeleteNonProtagonistMemory 清，这里验证 NPC 记忆也清干净）。
+            Assert.Empty(await context.CharacterMemory.AsNoTracking().ToListAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
     private static SaveSystem CreateSaveSystem(Re0AgentDbContext context, IEnumerable<int> rolls)
     {
         return new SaveSystem(context, CreateEngine(context, rolls));
