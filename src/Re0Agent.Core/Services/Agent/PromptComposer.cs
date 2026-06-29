@@ -849,7 +849,8 @@ public sealed class PromptComposer
 
         【扮演角色】
         你现在只扮演一个特定角色: {{profile.CharacterName}}。
-        你必须完全代入该角色的视角，保持性格特征、语气与行为的绝对一致性。
+        不能写任何其他人物的行为、心理、语言或动作！！！
+        你必须完全代入该角色的视角，保持性格特征、语气与行为的一致性。
 
         【角色个人属性与现状】
         - 主角标识: {{profile.IsPlayerControlled}}
