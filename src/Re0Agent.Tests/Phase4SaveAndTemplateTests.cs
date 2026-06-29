@@ -314,8 +314,9 @@ public sealed class Phase4SaveAndTemplateTests
             await context.SaveChangesAsync();
             context.ChangeTracker.Clear();
 
-            // 在 R0002 的分歧点 fork：应回到平行 R0002 —— 保留 R0001 的 AM0001，删掉 AM0002/AM0003，
-            // 以及 R0002 及更晚回合的记忆。新回合编号 = Chronicle.Count()+1 = 2 → 平行 R0002。
+            // 在 R0002 的分歧点 fork：anchor 快照含 chronicle=[AM0001]/记忆=[]（创建锚点时的状态），
+            // 走「精确快照回滚」路径——chronicle 还原成 [AM0001]，记忆还原成空，AM0002/AM0003 与
+            // R0002/R0003 记忆被快照覆盖清除。新回合编号 = Chronicle.Count()+1 = 2 → 平行 R0002。
             await saveSystem.ForkRestoreAsync(anchor.SaveId, "R0002");
             context.ChangeTracker.Clear();
 
@@ -326,8 +327,62 @@ public sealed class Phase4SaveAndTemplateTests
             // 编号回到平行 R0002，而非顺延到 R0004。
             Assert.Equal(2, await context.Chronicle.CountAsync() + 1);
 
-            // R0002 起的记忆被清除（主角记忆本就会被 DeleteNonProtagonistMemory 清，这里验证 NPC 记忆也清干净）。
+            // R0002/R0003 的记忆被快照覆盖清除。
             Assert.Empty(await context.CharacterMemory.AsNoTracking().ToListAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task ForkRestoreWithPrologueKeepsRoundNumberExact()
+    {
+        // 复现「截止 N-1 仍有 BUG」：存在序章 AM0000 时，回合号 R{N} 不再等于 AM 序号，
+        // 旧的「保留前 N-1 条 chronicle」启发式会差一。精确快照回滚不依赖任何计数，故正确。
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await SeedGameStateAsync(context);
+
+            // 序章 AM0000 + R0001 的 AM0001（SeedGameStateAsync 已加 AM0001 于 RowId=1）。
+            // 注：RowId=0 会被 EF 当作「未设值」自动改写，故序章用 RowId=10 占位，仅需保证唯一。
+            context.Chronicle.Add(new ChronicleEntry
+            {
+                RowId = 10, CodeIndex = "AM0000", TimeSpan = "2024-04-01 08:50 ~ 2024-04-01 09:00",
+                Summary = "序章", ChronicleText = string.Concat(Enumerable.Repeat("前序故事。", 30))
+            });
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+
+            var saveSystem = CreateSaveSystem(context, [50]);
+
+            // R0002 结束锚点：此刻 chronicle = [AM0000, AM0001]，count=2，下一回合应是 R0003。
+            var anchor = await saveSystem.CreateSavePointAsync("round_end");
+
+            // 被 fork 的 R0002 写入 AM0002（注意：R0002 对应 AM0002，因为序章占了 AM0000）。
+            context.Chronicle.Add(new ChronicleEntry
+            {
+                RowId = 2, CodeIndex = "AM0002", TimeSpan = "2024-04-01 09:10 ~ 2024-04-01 09:20",
+                Summary = "R0002", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0002 剧情。", 8))
+            });
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+
+            // fork 回平行 R0003（锚点是 R0002 末，下一回合即 R0003）。
+            await saveSystem.ForkRestoreAsync(anchor.SaveId, "R0003");
+            context.ChangeTracker.Clear();
+
+            var remaining = await context.Chronicle.AsNoTracking().ToListAsync();
+            Assert.Equal(2, remaining.Count);
+            Assert.Contains(remaining, c => c.CodeIndex == "AM0000");
+            Assert.Contains(remaining, c => c.CodeIndex == "AM0001");
+            Assert.DoesNotContain(remaining, c => c.CodeIndex == "AM0002");
+
+            // 关键断言：序章在场时编号仍精确落回 R0003（count+1=3），不再差一。
+            Assert.Equal(3, await context.Chronicle.CountAsync() + 1);
         }
         finally
         {

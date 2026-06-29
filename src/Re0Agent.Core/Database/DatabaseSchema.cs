@@ -188,6 +188,8 @@ public static class DatabaseSchema
           inventory_snapshot TEXT NOT NULL,
           equipment_snapshot TEXT NOT NULL,
           quest_snapshot TEXT NOT NULL,
+          chronicle_snapshot TEXT,
+          character_memory_snapshot TEXT,
           created_at TEXT NOT NULL
         );
         """,
@@ -264,6 +266,8 @@ public static class DatabaseSchema
     [
         ("world_map_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
         ("map_elements_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
-        ("factions_snapshot", "TEXT NOT NULL DEFAULT '[]'")
+        ("factions_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
+        ("chronicle_snapshot", "TEXT"),
+        ("character_memory_snapshot", "TEXT")
     ];
 }

@@ -75,6 +75,11 @@ public sealed class SaveSystem(
             InventorySnapshot = Serialize(await dbContext.Inventory.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
             EquipmentSnapshot = Serialize(await dbContext.Equipment.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
             QuestSnapshot = Serialize(await dbContext.Quests.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
+            // chronicle / character_memory 也快照：fork 与重 roll restore 时按平行时间线精确回滚，
+            // 这样新回合编号（=Chronicle.Count()+1）回到平行 R{N} 而非顺延，且不依赖任何计数启发式。
+            // 死亡回归不回滚这两张表（见 RestoreGameStateAsync 的 restoreChronicleAndMemory 开关）。
+            ChronicleSnapshot = Serialize(await dbContext.Chronicle.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
+            CharacterMemorySnapshot = Serialize(await dbContext.CharacterMemory.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken)),
             CreatedAt = await ReadCreatedAtAsync(cancellationToken)
         };
     }
@@ -176,7 +181,8 @@ public sealed class SaveSystem(
         dbContext.DeathReturnLog.Add(log);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await RestoreGameStateAsync(savePoint, cancellationToken);
+        // 死亡回归：只回滚 9 张状态表，chronicle（append-only 元历史）与非主角记忆另行处理 —— 不回滚 chronicle。
+        await RestoreGameStateAsync(savePoint, restoreChronicleAndMemory: false, cancellationToken);
         await DeleteNonProtagonistMemoryAsync(cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
@@ -187,6 +193,9 @@ public sealed class SaveSystem(
     /// fork「引入叙事」：从指定存档锚点 restore 世界状态（复用死亡回归的 restore 路径），
     /// 但<strong>不</strong>写 DeathReturnLog、<strong>不</strong>滚瘴气、<strong>不</strong>计入循环次数。
     /// 用于「类死亡回归但不计死亡」的分歧点回溯。
+    /// <para>新存档锚点含 chronicle/character_memory 快照时直接精确回滚（平行时间线就位，
+    /// 新回合编号自然回到平行 R{N}）；旧存档无快照时降级到按 <paramref name="forkRoundIndex"/>
+    /// 截断 chronicle/记忆的启发式。</para>
     /// </summary>
     public async Task ForkRestoreAsync(int saveId, string forkRoundIndex, CancellationToken cancellationToken = default)
     {
@@ -196,13 +205,22 @@ public sealed class SaveSystem(
             ?? throw new InvalidOperationException($"找不到用于 fork 的存档锚点 #{saveId}。");
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        await RestoreGameStateAsync(savePoint, cancellationToken);
-        await DeleteNonProtagonistMemoryAsync(cancellationToken);
-        // 存档快照不含 chronicle/character_memory，须在此显式回滚被 fork 回合写入的内容，
-        // 否则：① 新回合编号会顺延到 R{N+1} 而非平行 R{N}（CreateRoundIndexAsync=Chronicle.Count()+1）；
-        //       ② 被 fork 时间线的编年史/记忆会漏进新回合的 GM 与角色上下文。
-        await TrimChronicleForForkAsync(forkRoundIndex, cancellationToken);
-        await DeleteMemoryFromRoundAsync(forkRoundIndex, cancellationToken);
+
+        if (savePoint.ChronicleSnapshot is not null)
+        {
+            // 新存档：chronicle/记忆随快照精确回滚到锚点时刻，平行时间线就位。
+            await RestoreGameStateAsync(savePoint, restoreChronicleAndMemory: true, cancellationToken);
+            await DeleteNonProtagonistMemoryAsync(cancellationToken);
+        }
+        else
+        {
+            // 旧存档（fork 列加列前创建）：无 chronicle 快照，沿用按回合号截断的启发式兜底。
+            await RestoreGameStateAsync(savePoint, restoreChronicleAndMemory: false, cancellationToken);
+            await DeleteNonProtagonistMemoryAsync(cancellationToken);
+            await TrimChronicleForForkAsync(forkRoundIndex, cancellationToken);
+            await DeleteMemoryFromRoundAsync(forkRoundIndex, cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -274,6 +292,18 @@ public sealed class SaveSystem(
     public async Task RestoreGameStateAsync(
         SavePoint savePoint,
         CancellationToken cancellationToken)
+        => await RestoreGameStateAsync(savePoint, restoreChronicleAndMemory: true, cancellationToken);
+
+    /// <summary>
+    /// 用给定快照覆盖状态表。<paramref name="restoreChronicleAndMemory"/> 为 true 时（fork / 重 roll /
+    /// 变体切换）额外按快照精确回滚 chronicle 与 character_memory，构成平行时间线；为 false 时
+    /// （死亡回归）保留 chronicle（append-only 元历史）与记忆，交由调用方另行处理。
+    /// 快照不含这两张表的数据（旧存档）时即便开关为 true 也跳过，避免误清空。
+    /// </summary>
+    public async Task RestoreGameStateAsync(
+        SavePoint savePoint,
+        bool restoreChronicleAndMemory,
+        CancellationToken cancellationToken)
     {
         dbContext.ChangeTracker.Clear();
 
@@ -286,6 +316,12 @@ public sealed class SaveSystem(
         await ReplaceRowsAsync(dbContext.Inventory, DeserializeRows<InventoryItem>(savePoint.InventorySnapshot), cancellationToken);
         await ReplaceRowsAsync(dbContext.Equipment, DeserializeRows<EquipmentItem>(savePoint.EquipmentSnapshot), cancellationToken);
         await ReplaceRowsAsync(dbContext.Quests, DeserializeRows<Quest>(savePoint.QuestSnapshot), cancellationToken);
+
+        if (restoreChronicleAndMemory && savePoint.ChronicleSnapshot is not null)
+        {
+            await ReplaceRowsAsync(dbContext.Chronicle, DeserializeRows<ChronicleEntry>(savePoint.ChronicleSnapshot), cancellationToken);
+            await ReplaceRowsAsync(dbContext.CharacterMemory, DeserializeRows<CharacterMemory>(savePoint.CharacterMemorySnapshot ?? "[]"), cancellationToken);
+        }
     }
 
     private async Task DeleteNonProtagonistMemoryAsync(CancellationToken cancellationToken)

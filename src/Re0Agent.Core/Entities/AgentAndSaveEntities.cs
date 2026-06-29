@@ -66,6 +66,15 @@ public sealed class SavePoint
     [Column("quest_snapshot")]
     public required string QuestSnapshot { get; set; }
 
+    /// <summary>编年史快照。仅 fork/重 roll 的「平行时间线」存档写入并回滚；
+    /// 死亡回归/旧存档为 null —— 此时 restore 不动 chronicle（append-only 元历史）。</summary>
+    [Column("chronicle_snapshot")]
+    public string? ChronicleSnapshot { get; set; }
+
+    /// <summary>角色记忆快照。语义同 <see cref="ChronicleSnapshot"/>：仅平行时间线存档回滚。</summary>
+    [Column("character_memory_snapshot")]
+    public string? CharacterMemorySnapshot { get; set; }
+
     [Column("created_at")]
     public required string CreatedAt { get; set; }
 }
