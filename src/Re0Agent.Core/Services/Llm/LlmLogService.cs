@@ -15,6 +15,12 @@ public sealed class LlmLogEntry
     public string ReasoningContent { get; set; } = string.Empty;
     public string ErrorMessage { get; set; } = string.Empty;
     public double LatencyMs { get; set; }
+
+    /// <summary>提示词缓存命中的 token 数（DeepSeek/OpenAI/Claude 已归一化）。0 表示未命中或未统计。</summary>
+    public int CachedTokens { get; set; }
+
+    /// <summary>本次请求的提示词总 token 数（用于算缓存命中率）。</summary>
+    public int PromptTokens { get; set; }
 }
 
 public sealed class LlmLogService

@@ -53,6 +53,12 @@
                             </span>
                             <span style="color: var(--color-text-secondary); font-size: 0.85rem;">⏱️ @log.Timestamp.ToString("HH:mm:ss.fff")</span>
                             <span style="color: var(--color-text-secondary); font-size: 0.85rem;">⚡ @(log.LatencyMs > 0 ? $"{log.LatencyMs:N0} ms" : "跳过/直接返回")</span>
+                            @if (log.CachedTokens > 0)
+                            {
+                                <span style="color: #4CAF50; font-size: 0.85rem;" title="提示词缓存命中的 token 数（缓存约为常规价的 0.1 倍）">
+                                    💾 缓存命中 @log.CachedTokens.ToString("N0")@(log.PromptTokens > 0 ? $" / {log.PromptTokens:N0}" : "")
+                                </span>
+                            }
                             @if (!string.IsNullOrEmpty(log.ErrorMessage))
                             {
                                 <span style="color: var(--color-crimson-glow); font-size: 0.85rem; font-weight: bold;">❌ 失败</span>

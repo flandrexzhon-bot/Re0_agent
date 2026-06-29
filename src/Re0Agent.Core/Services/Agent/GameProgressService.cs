@@ -242,7 +242,11 @@ public sealed class GameProgressService
                     ActiveRound = lastRound;
                     if (Phase == RoundPhase.Idle)
                     {
-                        Phase = RoundPhase.AwaitingPlayer;
+                        // Phase 是单例内存态，退出游戏后丢失。重建时按持久化内容判断：
+                        // 主角已行动（有玩家控制的格）→ 该回合可「继续」恢复（Interrupted），
+                        // 而非回到「书写主角的抉择」写作面板；否则仍是等待玩家输入。
+                        bool protagonistActed = lastRound.CharacterTurns.Any(t => t.IsPlayerControlled);
+                        Phase = protagonistActed ? RoundPhase.Interrupted : RoundPhase.AwaitingPlayer;
                     }
                 }
                 else

@@ -66,7 +66,9 @@ public sealed class AgentLlmClient(
                         UserPrompt = GetUserPrompt(request),
                         ResponseContent = res.Content,
                         ReasoningContent = res.ReasoningContent ?? string.Empty,
-                        LatencyMs = sw.ElapsedMilliseconds
+                        LatencyMs = sw.ElapsedMilliseconds,
+                        CachedTokens = res.Usage?.CachedTokens ?? 0,
+                        PromptTokens = res.Usage?.PromptTokens ?? 0
                     });
                     return res;
                 }

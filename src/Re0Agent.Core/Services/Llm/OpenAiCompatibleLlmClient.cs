@@ -33,7 +33,8 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         }
 
         var (content, reasoning) = ReadAssistantContent(body);
-        return new LlmResponse(request.AgentName, content, ReasoningContent: reasoning);
+        var usage = ParseUsageFromBody(body);
+        return new LlmResponse(request.AgentName, content, ReasoningContent: reasoning, Usage: usage);
     }
 
     private async Task<LlmResponse> SendChatViaStreamAsync(
@@ -95,7 +96,7 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         var payload = new Dictionary<string, object?>
         {
             ["model"] = options.ModelName,
-            ["messages"] = request.Messages.Select(message => new { role = message.Role, content = PromptMacros.Expand(message.Content) }),
+            ["messages"] = BuildMessages(request.Messages, options),
             ["temperature"] = options.Temperature,
             ["max_tokens"] = options.MaxTokens,
             ["stream"] = stream
@@ -121,6 +122,97 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
     private static bool IsDeepSeek(LlmOptions options) =>
         (options.ApiEndpoint?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false)
         || (options.ModelName?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static bool IsClaude(LlmOptions options) =>
+        (options.ModelName?.Contains("claude", StringComparison.OrdinalIgnoreCase) ?? false)
+        || (options.ModelName?.Contains("anthropic", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    /// <summary>
+    /// 构建 messages 数组并处理提示词缓存：
+    /// - DeepSeek / OpenAI(GPT)：缓存是「全自动」的，无需任何请求参数——只要稳定前缀
+    ///   （system 提示词 + 各 Compose 里的规则/世界书部分）逐字节不变即自动命中。因此这里
+    ///   保持纯字符串 content 原样下发即可。
+    /// - Claude（经 OpenAI 兼容网关，如 OpenRouter）：缓存必须「显式」声明——在稳定的
+    ///   system 消息内容块上挂 cache_control: ephemeral 断点，否则一律不缓存。故仅对 Claude
+    ///   把 system 消息转成带 cache_control 的结构化内容块。
+    /// </summary>
+    private static IEnumerable<object> BuildMessages(IReadOnlyList<LlmMessage> messages, LlmOptions options)
+    {
+        bool claude = IsClaude(options);
+        bool systemBreakpointPlaced = false;
+
+        foreach (var message in messages)
+        {
+            var content = PromptMacros.Expand(message.Content);
+
+            // 仅对 Claude 的首个 system 消息挂缓存断点：system 渲染在 messages 之前，
+            // 是最大的稳定前缀（人设/世界书/填表规则），断点放这里能把它整段缓存。
+            if (claude && message.Role == "system" && !systemBreakpointPlaced && !string.IsNullOrEmpty(content))
+            {
+                systemBreakpointPlaced = true;
+                yield return new
+                {
+                    role = message.Role,
+                    content = new object[]
+                    {
+                        new
+                        {
+                            type = "text",
+                            text = content,
+                            cache_control = new { type = "ephemeral" }
+                        }
+                    }
+                };
+                continue;
+            }
+
+            yield return new { role = message.Role, content };
+        }
+    }
+
+    /// <summary>解析响应里的 token 用量，归一化各厂商不同的缓存命中字段名。</summary>
+    private static LlmUsage? ParseUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        int prompt = ReadInt(usage, "prompt_tokens");
+        int completion = ReadInt(usage, "completion_tokens");
+
+        // 缓存命中（读）：DeepSeek=prompt_cache_hit_tokens；
+        // OpenAI/GPT=prompt_tokens_details.cached_tokens；Claude=cache_read_input_tokens。
+        int cached = ReadInt(usage, "prompt_cache_hit_tokens")
+            + ReadInt(usage, "cache_read_input_tokens");
+        if (cached == 0
+            && usage.TryGetProperty("prompt_tokens_details", out var details)
+            && details.ValueKind == JsonValueKind.Object)
+        {
+            cached += ReadInt(details, "cached_tokens");
+        }
+
+        // 缓存写入（仅 Claude 计费区分）：cache_creation_input_tokens。
+        int cacheWrite = ReadInt(usage, "cache_creation_input_tokens");
+
+        return new LlmUsage(prompt, completion, cached, cacheWrite);
+    }
+
+    private static int ReadInt(JsonElement obj, string name) =>
+        obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+
+    private static LlmUsage? ParseUsageFromBody(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return ParseUsage(document.RootElement);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static string NormalizeChatCompletionsEndpoint(string endpoint)
     {
