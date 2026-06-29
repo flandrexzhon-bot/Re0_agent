@@ -18,7 +18,39 @@ public sealed partial class FormAgent(
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("Form", "填表Agent", cancellationToken);
+        // 数据库概览只算一次，4 个分区请求共用，避免重复查询。
+        var databaseSummary = await CreateDatabaseSummaryAsync(cancellationToken);
 
+        // 把单次大填表拆成 4 个并发子请求，各自只负责自己分区的表，互不干扰：
+        //  1. 角色记忆(character_memory)
+        //  2. AM 世界概括(chronicle)
+        //  3. important_npc 表
+        //  4. 其余所有表
+        var partitions = new[]
+        {
+            FormTablePartition.CharacterMemory,
+            FormTablePartition.Chronicle,
+            FormTablePartition.ImportantNpc,
+            FormTablePartition.Rest,
+        };
+
+        var tasks = partitions
+            .Select(partition => GeneratePartitionSqlAsync(round, databaseSummary, config, partition, cancellationToken))
+            .ToArray();
+
+        var results = await Task.WhenAll(tasks);
+
+        // 汇总 4 个分区的 SQL，统一交给执行器在同一事务内原子执行。
+        return results.SelectMany(statements => statements).ToList();
+    }
+
+    private async Task<IReadOnlyList<string>> GeneratePartitionSqlAsync(
+        GameRound round,
+        string databaseSummary,
+        Re0Agent.Core.Entities.AgentConfig? config,
+        FormTablePartition partition,
+        CancellationToken cancellationToken)
+    {
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -27,7 +59,7 @@ public sealed partial class FormAgent(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? "你是填表Agent，按 <tableEdit> 格式输出 SQL。"),
-                    LlmMessage.User(promptComposer.ComposeFormAgent(round, await CreateDatabaseSummaryAsync(cancellationToken)))
+                    LlmMessage.User(promptComposer.ComposeFormAgent(round, databaseSummary, partition))
                 ]
             },
             cancellationToken);

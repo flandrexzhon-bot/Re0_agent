@@ -4,6 +4,22 @@ using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Core.Services.Agent;
 
+/// <summary>
+/// 填表 Agent 的表分区：把单次大填表请求拆成 4 个并发子请求，各自只负责自己分区内的表，
+/// 互不干扰，最终 SQL 汇总后在同一事务内原子执行。
+/// </summary>
+public enum FormTablePartition
+{
+    /// <summary>角色记忆（character_memory）。</summary>
+    CharacterMemory,
+    /// <summary>大回合编年史 / AM 世界概括（chronicle）。</summary>
+    Chronicle,
+    /// <summary>重要 NPC（important_npc）。</summary>
+    ImportantNpc,
+    /// <summary>其余所有表（global_state / protagonist_info / world_map_points / map_elements / factions / inventory / equipment / quests）。</summary>
+    Rest,
+}
+
 public sealed class PromptComposer
 {
     /// <summary>
@@ -868,9 +884,35 @@ public sealed class PromptComposer
     public string ComposeFormAgent(
         GameRound round,
         string databaseSummary)
+        => ComposeFormAgent(round, databaseSummary, FormTablePartition.Rest, allTables: true);
+
+    /// <summary>
+    /// 为指定分区构建填表提示词。<paramref name="allTables"/> 为 true 时退回单请求模式（保留全部表 Note），
+    /// 供旧调用方（如手动重试）使用；分区模式下只下发该分区负责的表 Note 与初始化规则，缩短上下文、加速生成。
+    /// </summary>
+    public string ComposeFormAgent(
+        GameRound round,
+        string databaseSummary,
+        FormTablePartition partition,
+        bool allTables = false)
     {
         var turns = string.Join('\n', round.CharacterTurns.Select(turn =>
             $"{turn.OrderNumber}. {turn.CharacterName}: skipped={turn.Skipped}; action={turn.ActionText}; judgement={turn.GmJudgement}; dice={FormatDiceResult(turn.DiceResult)}; response={turn.ResultResponse}"));
+
+        var scopeLine = allTables
+            ? "本系统只允许操作以下表，绝对不可修改其他无关表："
+            : $"本次你【只负责】下列表，对其它表【绝对不要】输出任何 SQL（其它表由并发的同伴 Agent 负责）：";
+
+        var tableNotes = allTables
+            ? string.Join("\n\n", new[]
+            {
+                ChronicleNote, CharacterMemoryNote, GlobalStateNote, ProtagonistNote,
+                ImportantNpcNote, WorldMapPointsNote, MapElementsNote, FactionsNote,
+                InventoryNote, EquipmentNote, QuestsNote
+            })
+            : string.Join("\n\n", NotesForPartition(partition));
+
+        var initSection = BuildInitSection(partition, allTables);
 
         return $$"""
         你是【填表Agent】，负责根据用户提供的资料对表格数据执行增删改操作。
@@ -888,7 +930,6 @@ public sealed class PromptComposer
         [阅读所有填表相关规则]
         [根据填表规则确定需要修改的表格和字段]
         [逐步推理每个修改操作，说明理由]
-        针对纪要表(chronicle)的额外规则：本轮必须对其 INSERT 一条新的总结记录。
         日志与纪要语气校准：必须区分"正常恋爱互动"与"暗黑主从文风"。可以使用正常交流词汇（提议、要求、同意、拒绝、引导、配合、安抚），但【绝对禁止】把情侣间普通调情过度解读为"权力掌控"、"剥夺反抗"、"精神支配"、"屈服"等单向压迫词汇！
         </thought>
 
@@ -925,81 +966,10 @@ public sealed class PromptComposer
         - 禁止 DROP TABLE / ALTER TABLE / CREATE TABLE 等结构变更语句
 
         ## 本系统允许操作的表与各表 Note（约束优先级最高）
-        本系统只允许操作以下表，绝对不可修改其他无关表：
+        {{scopeLine}}
 
-        【表 chronicle】大回合编年史记录，本大回合必须且仅能 INSERT 一条记录，禁止 DELETE。
-        - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增）。
-        - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'。
-        - `summary` (TEXT): 概括本回合主要事件，<= 30 字符。
-        - `chronicle_text` (TEXT): 详细剧情，100~2000 字符，建议 300~600 字。
-
-        【表 character_memory】角色记忆，本回合有互动或内心活动的角色分别 INSERT 一条。
-        - `character_name`, `round_index`, `memory_text`(<=400字), `emotional_state`, `created_at`('yyyy-MM-dd HH:mm')。
-
-        【表 global_state】全局状态，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
-        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `is_lewd`('是'/'否')。
-        - 【禁止】改 `current_chapter`：章节号由章节切换 Agent 专属维护，且必须是纯整数（如 7），绝不能写成"第七章：xxx"这类文字，否则会写库失败。
-
-        【表 protagonist_info】主角状态/位置/物资，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
-        - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `armor`。
-        - 【重要·战斗禁区】`hp`/`mp`/`stamina` 三列由战斗系统自动结算并直写，填表 Agent【绝对禁止】UPDATE 这三列（避免与战斗双写冲突）。仅当剧情发生【非战斗】的长期变化（如长期休养使上限提升、训练增长属性）时才改 `max_hp`/`max_mp`/`max_stamina`。
-        - `base_attributes` 为六维属性，格式 '力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9'。
-        - `skills_json` 为技能列表 JSON 数组，元素形如 {"技能名":"疾风","manaCost":60,"staminaCost":5,"说明":"...","可用":true}。剧情解锁新技能时追加元素；技能因失去魔力/受伤而不可用时把对应元素的 `可用` 置 false（不要删除）。
-
-        【表 important_npc】重要 NPC 的引入与状态维护。
-        - 先判断角色是否已在【当前表格数据】的 NPC 列表（按全名/规范名比对）：
-          · 已在册 → UPDATE WHERE name = '全名'，禁止 INSERT。
-          · 全新 → INSERT OR IGNORE INTO important_npc (...) VALUES (...)。
-        - `name` 必须用全名/规范名。禁止同角色同一批既 INSERT 又 UPDATE。
-        - INSERT 必填: `char_id`, `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(六维, 如'力量:15; 敏捷:40; 耐力:25; 智力:58; 精神:55; 魅力:48'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `hp`, `mp`, `stamina`, `armor`。
-        - 【严格按世界书初始化】INSERT 新角色时，`char_id`、六维属性、`hp/max_hp`、`mp/max_mp`、`stamina/max_stamina`、`skills_json` 必须严格取自<背景设定>世界书该角色的 <角色属性> JSON（ID 字段→char_id；生命值→hp 与 max_hp 相等；魔法值→mp/max_mp；体力值→stamina/max_stamina；技能列表→skills_json）。世界书没有该角色的，才按属性标尺合理拟定，并把 char_id 留 0。
-        - 【重要·战斗禁区】已在册 NPC 的 `hp`/`mp`/`stamina` 由战斗系统自动直写，填表 Agent【绝对禁止】UPDATE 这三列。可 UPDATE 的是 `location_name`/`self_status`/`relations_text`/`base_attributes`/`skills_json` 等非战斗剧情字段。
-        - 属性规则同主角：六维属性 "{名称}:{数值}" 数值[5,95]；特有属性数值[0,100]。标尺: 5-14缺失 | 15-41弱项 | 42-59平均 | 60-77精英 | 78-86极限 | 87-95破格。
-
-        【表 world_map_points】世界地图点（地点目录），其他表引用地点时必须在此表存在。
-        - 按 `location_name`（详细地点 UNIQUE）判 INSERT/UPDATE。
-        - 必填: `location_name`, `minor_region`, `major_region`, `location_type`([住宅,学校,遗迹,地牢,交通,特殊,商业,医疗,行政,野外]), `environment_desc`(<=60字), `importance`([核心,重要,普通]), `exploration_status`([未探索,部分探索,已探索])。
-        - 每个地点只填该层级名称，如御苑（详细）/ 新宿区（次要）/ 东京都（主要）。
-        - 禁止 DELETE 任何地点；条数建议 <=20。
-
-        【表 map_elements】地图元素（非重要 NPC 的可交互事物），禁止 DELETE chronicle 之外的注意。
-        - 只录四类: 剧情物品、威胁、龙套、地标。按 `element_name`(UNIQUE) 判 INSERT/UPDATE。
-        - 必填: `element_name`, `element_type`([剧情物品,威胁,龙套,地标]), `location_name`, `element_desc`(<=40字), `status_text`, `interaction_options`(英文逗号分隔，不为空)。
-        - 每个地点 <=5 条，全表 <=30 条。允许 DELETE 失效元素。
-
-        【表 factions】势力/组织/阵营。
-        - 按 `faction_name`(UNIQUE) 判 INSERT/UPDATE。
-        - 必填: `faction_name`, `description`(<=60字)；可选: `leader`, `relations_text`(格式 "对象:关系词; 对象:关系词"，关系词从[同盟,敌对,中立,竞争,合作]选), `headquarters`。
-        - 准入：与主线相关、与主角互动、有多名成员或控制区域、会多次出现。一次性背景组织不录。禁止 DELETE。
-
-        【表 inventory】物品（非装备类）。
-        - 按 `item_name`(UNIQUE, <=10字) 判 INSERT/UPDATE。
-        - 必填: `item_name`, `item_type`, `quantity`(>=0), `quality`([普通,优秀,稀有,史诗,传说,神话]), `description`(<=60字)。
-        - 可堆叠物品只改 quantity，不新建行。禁止 DELETE（耗尽后 quantity=0）。
-
-        【表 equipment】装备。
-        - 按 `equipment_name`(UNIQUE) 判 INSERT/UPDATE。每件装备单独一行不合并。
-        - 必填: `equipment_name`, `equipment_type`, `quality`([普通,优秀,稀有,史诗,传说,神话]), `status_text`([已装备,闲置]), `description`(<=40字)。
-        - 卸下→status='闲置'保留；丢弃→DELETE。建议 <=15 条。
-
-        【表 quests】任务。
-        - 按 `quest_name`(UNIQUE) 判 INSERT/UPDATE。不收单轮小动作。
-        - 必填: `quest_name`, `quest_type`([主线,支线,日常]), `priority_level`([紧急,重要,普通]), `target_desc`(<=100字), `progress_text`('0%'~'100%' 必须带百分号), `status_tag`([进行中,已完成,已失败,已放弃])；可选: `source_text`, `reward_text`。
-        - 禁止 DELETE。进度与状态是两列，百分号只在 progress_text。
-
-        ## 表初始化检测（重要！）
-        拿到<当前表格数据>后，第一件事是检查各业务表的行数。
-        若某表行数为 0（空表），表示这是新游戏开局，你必须根据<正文数据>和<背景设定>为这张表生成合适的初始数据。
-        需要初始化的空表包括（global_state 和 protagonist_info 除外，它们由系统维护）：
-        - world_map_points 为空 → 为当前主要地区至少 INSERT 3 条详细地点，并包含主角所在地点。
-        - map_elements 为空 → 按四类定义为当前地点生成 1-8 条元素。
-        - factions 为空 → 插入 0-4 个与初始剧情相关的势力。
-        - important_npc 为空 → 根据故事背景插入首个场景里出场的核心角色；其 char_id/六维/hp/mp/stamina/skills_json 必须严格取自世界书 <角色属性>（见 important_npc 表 Note）。
-        - inventory 为空 → 添加主角应携带的初始物品 1-6 件。
-        - equipment 为空 → 添加主角初始装备 1-4 件。
-        - quests 为空 → 插入 1-3 个初始任务（含主线）。
-        初始化时，每条 INSERT 的 row_id 用 `(SELECT COALESCE(MAX(row_id), 0) + 1 FROM 表名)` 计算。
-
+        {{tableNotes}}
+        {{initSection}}
         <当前表格数据>
         {{databaseSummary}}
         </当前表格数据>
@@ -1014,6 +984,162 @@ public sealed class PromptComposer
         现在开始按此格式执行填表任务。
         """;
     }
+
+    /// <summary>返回某分区负责的表 Note 列表。</summary>
+    private static IEnumerable<string> NotesForPartition(FormTablePartition partition) => partition switch
+    {
+        FormTablePartition.CharacterMemory => [CharacterMemoryNote],
+        FormTablePartition.Chronicle => [ChronicleNote],
+        FormTablePartition.ImportantNpc => [ImportantNpcNote],
+        FormTablePartition.Rest =>
+        [
+            GlobalStateNote, ProtagonistNote, WorldMapPointsNote, MapElementsNote,
+            FactionsNote, InventoryNote, EquipmentNote, QuestsNote
+        ],
+        _ => []
+    };
+
+    /// <summary>按分区裁剪「空表初始化检测」段；与该分区无关的表初始化规则不下发。</summary>
+    private static string BuildInitSection(FormTablePartition partition, bool allTables)
+    {
+        // chronicle 分区的"本回合必须 INSERT 一条"硬规则。
+        if (partition == FormTablePartition.Chronicle && !allTables)
+        {
+            return """
+
+                ## 本回合硬性要求
+                必须且仅能对 chronicle 表 INSERT 一条新的总结记录（code_index 按大回合轮数序号递增）。
+
+                """;
+        }
+
+        if (partition == FormTablePartition.CharacterMemory && !allTables)
+        {
+            return """
+
+                ## 本回合要求
+                本回合有互动或内心活动的角色，分别向 character_memory INSERT 一条记忆记录。
+
+                """;
+        }
+
+        var initLines = new List<string>();
+        if (allTables || partition == FormTablePartition.ImportantNpc)
+            initLines.Add("- important_npc 为空 → 根据故事背景插入首个场景里出场的核心角色；其 char_id/六维/hp/mp/stamina/skills_json 必须严格取自世界书 <角色属性>（见 important_npc 表 Note）。");
+        if (allTables || partition == FormTablePartition.Rest)
+        {
+            initLines.Add("- world_map_points 为空 → 为当前主要地区至少 INSERT 3 条详细地点，并包含主角所在地点。");
+            initLines.Add("- map_elements 为空 → 按四类定义为当前地点生成 1-8 条元素。");
+            initLines.Add("- factions 为空 → 插入 0-4 个与初始剧情相关的势力。");
+            initLines.Add("- inventory 为空 → 添加主角应携带的初始物品 1-6 件。");
+            initLines.Add("- equipment 为空 → 添加主角初始装备 1-4 件。");
+            initLines.Add("- quests 为空 → 插入 1-3 个初始任务（含主线）。");
+        }
+
+        if (initLines.Count == 0)
+        {
+            return "\n";
+        }
+
+        var preface = allTables
+            ? "需要初始化的空表包括（global_state 和 protagonist_info 除外，它们由系统维护）："
+            : "你负责的表中若有空表（行数为 0），需为其生成合适的初始数据：";
+
+        return $"""
+
+            ## 表初始化检测（重要！）
+            拿到<当前表格数据>后，第一件事是检查各业务表的行数。
+            若某表行数为 0（空表），表示这是新游戏开局，你必须根据<正文数据>和<背景设定>为这张表生成合适的初始数据。
+            {preface}
+            {string.Join("\n", initLines)}
+            初始化时，每条 INSERT 的 row_id 用 `(SELECT COALESCE(MAX(row_id), 0) + 1 FROM 表名)` 计算。
+
+            """;
+    }
+
+    // ── 各表 Note（约束优先级最高），供分区/全量两种模式按需拼装 ──
+
+    private const string ChronicleNote = """
+        【表 chronicle】大回合编年史记录，本大回合必须且仅能 INSERT 一条记录，禁止 DELETE。
+        - `code_index` (TEXT, 唯一键): 格式 'AM[0-9][0-9][0-9][0-9]'（如 'AM0001'，按大回合轮数序号递增）。
+        - `time_span` (TEXT): 格式 'yyyy-MM-dd HH:mm ~ yyyy-MM-dd HH:mm'。
+        - `summary` (TEXT): 概括本回合主要事件，<= 30 字符。
+        - `chronicle_text` (TEXT): 详细剧情，100~2000 字符，建议 300~600 字。
+        """;
+
+    private const string CharacterMemoryNote = """
+        【表 character_memory】角色记忆，本回合有互动或内心活动的角色分别 INSERT 一条。
+        - `character_name`, `round_index`, `memory_text`(<=400字), `emotional_state`, `created_at`('yyyy-MM-dd HH:mm')。
+        """;
+
+    private const string GlobalStateNote = """
+        【表 global_state】全局状态，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
+        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `is_lewd`('是'/'否')。
+        - 【禁止】改 `current_chapter`：章节号由章节切换 Agent 专属维护，且必须是纯整数（如 7），绝不能写成"第七章：xxx"这类文字，否则会写库失败。
+        """;
+
+    private const string ProtagonistNote = """
+        【表 protagonist_info】主角状态/位置/物资，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
+        - 可更新: `name`, `gender`, `age`, `appearance`, `identity_text`, `self_status`, `location_name`, `base_attributes`, `special_attributes`, `resources_text`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `armor`。
+        - 【重要·战斗禁区】`hp`/`mp`/`stamina` 三列由战斗系统自动结算并直写，填表 Agent【绝对禁止】UPDATE 这三列（避免与战斗双写冲突）。仅当剧情发生【非战斗】的长期变化（如长期休养使上限提升、训练增长属性）时才改 `max_hp`/`max_mp`/`max_stamina`。
+        - `base_attributes` 为六维属性，格式 '力量:12; 敏捷:14; 耐力:10; 智力:11; 精神:8; 魅力:9'。
+        - `skills_json` 为技能列表 JSON 数组，元素形如 {"技能名":"疾风","manaCost":60,"staminaCost":5,"说明":"...","可用":true}。剧情解锁新技能时追加元素；技能因失去魔力/受伤而不可用时把对应元素的 `可用` 置 false（不要删除）。
+        """;
+
+    private const string ImportantNpcNote = """
+        【表 important_npc】重要 NPC 的引入与状态维护。
+        - 先判断角色是否已在【当前表格数据】的 NPC 列表（按全名/规范名比对）：
+          · 已在册 → UPDATE WHERE name = '全名'，禁止 INSERT。
+          · 全新 → INSERT OR IGNORE INTO important_npc (...) VALUES (...)。
+        - `name` 必须用全名/规范名。禁止同角色同一批既 INSERT 又 UPDATE。
+        - INSERT 必填: `char_id`, `name`, `gender`, `age`, `brief_intro`(<=30字), `appearance`(<=60字), `identity_text`(<=40字), `base_attributes`(六维, 如'力量:15; 敏捷:40; 耐力:25; 智力:58; 精神:55; 魅力:48'), `location_name`, `past_experience`(<=600字), `self_status`。可选: `special_attributes`, `relations_text`, `interaction_options`, `skills_json`, `max_hp`, `max_mp`, `max_stamina`, `hp`, `mp`, `stamina`, `armor`。
+        - 【严格按世界书初始化】INSERT 新角色时，`char_id`、六维属性、`hp/max_hp`、`mp/max_mp`、`stamina/max_stamina`、`skills_json` 必须严格取自<背景设定>世界书该角色的 <角色属性> JSON（ID 字段→char_id；生命值→hp 与 max_hp 相等；魔法值→mp/max_mp；体力值→stamina/max_stamina；技能列表→skills_json）。世界书没有该角色的，才按属性标尺合理拟定，并把 char_id 留 0。
+        - 【重要·战斗禁区】已在册 NPC 的 `hp`/`mp`/`stamina` 由战斗系统自动直写，填表 Agent【绝对禁止】UPDATE 这三列。可 UPDATE 的是 `location_name`/`self_status`/`relations_text`/`base_attributes`/`skills_json` 等非战斗剧情字段。
+        - 属性规则同主角：六维属性 "{名称}:{数值}" 数值[5,95]；特有属性数值[0,100]。标尺: 5-14缺失 | 15-41弱项 | 42-59平均 | 60-77精英 | 78-86极限 | 87-95破格。
+        """;
+
+    private const string WorldMapPointsNote = """
+        【表 world_map_points】世界地图点（地点目录），其他表引用地点时必须在此表存在。
+        - 按 `location_name`（详细地点 UNIQUE）判 INSERT/UPDATE。
+        - 必填: `location_name`, `minor_region`, `major_region`, `location_type`([住宅,学校,遗迹,地牢,交通,特殊,商业,医疗,行政,野外]), `environment_desc`(<=60字), `importance`([核心,重要,普通]), `exploration_status`([未探索,部分探索,已探索])。
+        - 每个地点只填该层级名称，如御苑（详细）/ 新宿区（次要）/ 东京都（主要）。
+        - 禁止 DELETE 任何地点；条数建议 <=20。
+        """;
+
+    private const string MapElementsNote = """
+        【表 map_elements】地图元素（非重要 NPC 的可交互事物），禁止 DELETE chronicle 之外的注意。
+        - 只录四类: 剧情物品、威胁、龙套、地标。按 `element_name`(UNIQUE) 判 INSERT/UPDATE。
+        - 必填: `element_name`, `element_type`([剧情物品,威胁,龙套,地标]), `location_name`, `element_desc`(<=40字), `status_text`, `interaction_options`(英文逗号分隔，不为空)。
+        - 每个地点 <=5 条，全表 <=30 条。允许 DELETE 失效元素。
+        """;
+
+    private const string FactionsNote = """
+        【表 factions】势力/组织/阵营。
+        - 按 `faction_name`(UNIQUE) 判 INSERT/UPDATE。
+        - 必填: `faction_name`, `description`(<=60字)；可选: `leader`, `relations_text`(格式 "对象:关系词; 对象:关系词"，关系词从[同盟,敌对,中立,竞争,合作]选), `headquarters`。
+        - 准入：与主线相关、与主角互动、有多名成员或控制区域、会多次出现。一次性背景组织不录。禁止 DELETE。
+        """;
+
+    private const string InventoryNote = """
+        【表 inventory】物品（非装备类）。
+        - 按 `item_name`(UNIQUE, <=10字) 判 INSERT/UPDATE。
+        - 必填: `item_name`, `item_type`, `quantity`(>=0), `quality`([普通,优秀,稀有,史诗,传说,神话]), `description`(<=60字)。
+        - 可堆叠物品只改 quantity，不新建行。禁止 DELETE（耗尽后 quantity=0）。
+        """;
+
+    private const string EquipmentNote = """
+        【表 equipment】装备。
+        - 按 `equipment_name`(UNIQUE) 判 INSERT/UPDATE。每件装备单独一行不合并。
+        - 必填: `equipment_name`, `equipment_type`, `quality`([普通,优秀,稀有,史诗,传说,神话]), `status_text`([已装备,闲置]), `description`(<=40字)。
+        - 卸下→status='闲置'保留；丢弃→DELETE。建议 <=15 条。
+        """;
+
+    private const string QuestsNote = """
+        【表 quests】任务。
+        - 按 `quest_name`(UNIQUE) 判 INSERT/UPDATE。不收单轮小动作。
+        - 必填: `quest_name`, `quest_type`([主线,支线,日常]), `priority_level`([紧急,重要,普通]), `target_desc`(<=100字), `progress_text`('0%'~'100%' 必须带百分号), `status_tag`([进行中,已完成,已失败,已放弃])；可选: `source_text`, `reward_text`。
+        - 禁止 DELETE。进度与状态是两列，百分号只在 progress_text。
+        """;
 
     private static string FormatRagContext(RagContext? ragContext)
     {
