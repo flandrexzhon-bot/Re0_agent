@@ -744,6 +744,13 @@ else
 
                             <div>
                                 <label class="inline-toggle" style="font-size: 0.8rem;">
+                                    <input type="checkbox" @bind="streamingEnabled" @bind:after="SaveStreamingAsync" />
+                                    <span>开启流式传输</span>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="inline-toggle" style="font-size: 0.8rem;">
                                     <input type="checkbox" @bind="autoRetryEnabled" @bind:after="SaveAutoRetryAsync" />
                                     <span>输出为空或报错时自动重复请求（最多 3 次）</span>
                                 </label>
@@ -892,6 +899,7 @@ else
     private string selectedChapterSwitchPreset = string.Empty;
     private double delaySeconds = 0.0;
     private bool autoRetryEnabled = true;
+    private bool streamingEnabled = false;
 
     private List<GameProgressService.CharacterBinding> characterBindings = new();
     private List<GameProgressService.TempNpcBinding> tempNpcBindings = new();
@@ -1010,6 +1018,7 @@ else
             selectedChapterSwitchPreset = Progress.SelectedChapterSwitchPreset;
             delaySeconds = Progress.DelaySeconds;
             autoRetryEnabled = Progress.AutoRetryEnabled;
+            streamingEnabled = Progress.StreamingEnabled;
             
             characterBindings = Progress.CharacterBindings;
             tempNpcBindings = Progress.TempNpcBindings;
@@ -1108,6 +1117,7 @@ else
         Progress.SelectedChapterSwitchPreset = selectedChapterSwitchPreset;
         Progress.DelaySeconds = delaySeconds;
         Progress.AutoRetryEnabled = autoRetryEnabled;
+        Progress.StreamingEnabled = streamingEnabled;
 
         await Progress.SaveRoutingConfigAsync();
     }
@@ -1115,6 +1125,12 @@ else
     private async Task SaveAutoRetryAsync()
     {
         Progress.AutoRetryEnabled = autoRetryEnabled;
+        await Progress.SaveRoutingConfigAsync();
+    }
+
+    private async Task SaveStreamingAsync()
+    {
+        Progress.StreamingEnabled = streamingEnabled;
         await Progress.SaveRoutingConfigAsync();
     }
 

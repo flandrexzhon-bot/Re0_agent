@@ -16,6 +16,13 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             throw new InvalidOperationException("LLM request requires a usable endpoint configuration.");
         }
 
+        // 流式开关开启时：走 SSE 流式接口拉流并在本地聚合成完整文本，
+        // 再复用 ExtractInlineThink 剥离思维链，使上层管线保持不变。
+        if (Re0Agent.Core.Services.Agent.GameProgressService.StreamingGlobal)
+        {
+            return await SendChatViaStreamAsync(request, cancellationToken);
+        }
+
         using var httpRequest = CreateHttpRequest(request, stream: false);
         using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -27,6 +34,27 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         var (content, reasoning) = ReadAssistantContent(body);
         return new LlmResponse(request.AgentName, content, ReasoningContent: reasoning);
+    }
+
+    private async Task<LlmResponse> SendChatViaStreamAsync(
+        LlmRequest request,
+        CancellationToken cancellationToken)
+    {
+        var builder = new StringBuilder();
+        await foreach (var chunk in StreamChatAsync(request, cancellationToken))
+        {
+            if (!chunk.IsDone && !string.IsNullOrEmpty(chunk.ContentDelta))
+            {
+                builder.Append(chunk.ContentDelta);
+            }
+        }
+
+        var raw = builder.ToString();
+        var (content, thought) = ExtractInlineThink(raw);
+        return new LlmResponse(
+            request.AgentName,
+            content,
+            ReasoningContent: string.IsNullOrWhiteSpace(thought) ? null : thought);
     }
 
     public async IAsyncEnumerable<LlmStreamChunk> StreamChatAsync(

@@ -103,6 +103,12 @@ public sealed class GameProgressService
     /// <summary>静态全局暴露，供 AgentLlmClient 等无需 DI 的底层读取。</summary>
     public static bool AutoRetryGlobal { get; private set; } = true;
 
+    /// <summary>全局流式传输开关：开启后底层 LLM 调用走 SSE 流式接口。</summary>
+    public bool StreamingEnabled { get; set; } = false;
+
+    /// <summary>静态全局暴露，供 AgentLlmClient 等无需 DI 的底层读取。</summary>
+    public static bool StreamingGlobal { get; private set; } = false;
+
     public List<CharacterBinding> CharacterBindings { get; private set; } = new();
     public List<TempNpcBinding> TempNpcBindings { get; private set; } = new();
 
@@ -323,6 +329,10 @@ public sealed class GameProgressService
             var autoRetryStr = routings.FirstOrDefault(r => r.RoutingKey == "AutoRetry")?.PresetName;
             AutoRetryEnabled = !string.Equals(autoRetryStr, "0", StringComparison.Ordinal);
             AutoRetryGlobal = AutoRetryEnabled;
+
+            var streamingStr = routings.FirstOrDefault(r => r.RoutingKey == "Streaming")?.PresetName;
+            StreamingEnabled = string.Equals(streamingStr, "1", StringComparison.Ordinal);
+            StreamingGlobal = StreamingEnabled;
 
             CharacterBindings = routings
                 .Where(r => r.RoutingKey.StartsWith("Character_"))
@@ -1101,6 +1111,9 @@ public sealed class GameProgressService
 
             newRoutings.Add(new ApiRouting { RoutingKey = "AutoRetry", PresetName = AutoRetryEnabled ? "1" : "0" });
             AutoRetryGlobal = AutoRetryEnabled;
+
+            newRoutings.Add(new ApiRouting { RoutingKey = "Streaming", PresetName = StreamingEnabled ? "1" : "0" });
+            StreamingGlobal = StreamingEnabled;
 
             if (!string.IsNullOrWhiteSpace(SelectedMemoryPreset))
                 newRoutings.Add(new ApiRouting { RoutingKey = "Memory", PresetName = SelectedMemoryPreset });
