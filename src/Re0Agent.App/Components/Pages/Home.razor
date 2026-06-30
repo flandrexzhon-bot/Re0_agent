@@ -846,7 +846,7 @@ else
             <h2 style="color: var(--color-crimson-glow); display: flex; align-items: center; gap: 0.5rem;">⚠️ 魔力失控 (错误)</h2>
             <p style="margin-top: 1rem; line-height: 1.5; color: var(--color-text-primary);">@errorMessage</p>
             <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid rgba(166, 36, 36, 0.3); padding-top: 1rem;">
-                <button type="button" class="btn-custom danger-action" @onclick="() => errorMessage = null">确认</button>
+                <button type="button" class="btn-custom danger-action" @onclick="DismissError">确认</button>
             </div>
         </div>
     </div>
@@ -945,6 +945,14 @@ else
     private async Task RegenerateOpening()
     {
         await Progress.RegenerateOpeningAsync();
+    }
+
+    // 关闭错误弹窗：必须同时清掉服务里的 ErrorMessage，否则下一次 SyncState（点箭头/切标签触发
+    // NotifyStateChanged）会把它重新拷回本地，弹窗反复出现。
+    private void DismissError()
+    {
+        errorMessage = null;
+        Progress.ClearErrorMessage();
     }
 
     private async Task BranchFrom(GameRound round)
