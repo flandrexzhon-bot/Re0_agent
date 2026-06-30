@@ -912,8 +912,12 @@ public sealed class GameProgressService
         ActiveRound = null;
         Phase = RoundPhase.Idle;
         InterruptedStep = 0;
-        await LoadDatabaseStateAsync();
+        // 关键顺序：先落盘、再重载。结算前 Finalizing 段的 AutoSave 落库时本回合变体集合尚为空
+        // （提交时清空、跑完才 CaptureVariant 重建），若先 Load 会用那份空集合覆盖刚抓到的
+        // 权威变体（含 NPC 回复 + 填表事件 + 末态快照），导致「一到填表重 roll 数据就没了」。
+        // 与 ReRollAsync / SelectVariant 的 Save→Load 顺序保持一致。
         await AutoSaveChatSessionAsync();
+        await LoadDatabaseStateAsync();
         NotifyStateChanged();
     }
 
