@@ -597,6 +597,12 @@ public sealed class GameProgressService
             using var scope = _scopeFactory.CreateScope();
             var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+            // AwaitingPlayer 阶段为「重 roll 开场」记录过开场专属变体（未填表/未结算）。
+            // 玩家一旦落笔，这些只含开场的旧变体不再是本回合的有效备选——清掉，
+            // 让下面 CaptureVariantAsync 打包的「完整结算版」成为唯一的 1/1，
+            // 而非沦为 2/2、把没填表的开场版留作 1/1。
+            _currentRoundVariants.Clear();
+            _activeVariantIndex = 0;
             try
             {
                 var round = await orchestrator.RunPlayerThenNpcTurnsAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
@@ -773,9 +779,33 @@ public sealed class GameProgressService
             GmOpening = round.GmOpening,
             Turns = round.CharacterTurns.ToList(),
             Events = round.Events.ToList(),
+            CompletedAt = round.CompletedAt,
             DbSnapshot = snapshot
         });
         _activeVariantIndex = _currentRoundVariants.Count - 1;
+    }
+
+    /// <summary>把当前激活变体的叙事 + DB 末态回写到会话（用于重 roll 中止/失败后回退到上一个完整版）。</summary>
+    private async Task RestoreActiveVariantAsync(SaveSystem saveSystem)
+    {
+        if (_activeVariantIndex < 0 || _activeVariantIndex >= _currentRoundVariants.Count)
+        {
+            return;
+        }
+
+        var variant = _currentRoundVariants[_activeVariantIndex];
+        await saveSystem.RestoreGameStateAsync(variant.DbSnapshot, CancellationToken.None);
+        lock (SessionRounds)
+        {
+            var last = SessionRounds.LastOrDefault();
+            if (last is not null)
+            {
+                last.GmOpening = variant.GmOpening;
+                last.CharacterTurns = variant.Turns.ToList();
+                last.Events = variant.Events.ToList();
+                last.CompletedAt = variant.CompletedAt;
+            }
+        }
     }
 
     /// <summary>
@@ -945,13 +975,36 @@ public sealed class GameProgressService
             }
             catch (OperationCanceledException)
             {
+                // 重 roll 中途停止：SessionRounds 里留的是半成品回合（CompletedAt=null），
+                // 若直接 Idle 会让 canSwipe 失效、↻ 消失。回退到当前激活变体（重 roll 前的完整版），
+                // 恢复其叙事 + DB 末态，使该回合仍是「已结算可重 roll」状态。
                 ErrorMessage = "已中止重 roll。";
+                try
+                {
+                    using var restoreScope = _scopeFactory.CreateScope();
+                    var restoreSave = restoreScope.ServiceProvider.GetRequiredService<SaveSystem>();
+                    await RestoreActiveVariantAsync(restoreSave);
+                }
+                catch { /* 回退失败不致命 */ }
                 Phase = RoundPhase.Idle;
+                ActiveRound = null;
+                await AutoSaveChatSessionAsync();
+                await LoadDatabaseStateAsync();
             }
             catch (Exception ex)
             {
                 ErrorMessage = $"重 roll 失败: {ex.Message}";
+                try
+                {
+                    using var restoreScope = _scopeFactory.CreateScope();
+                    var restoreSave = restoreScope.ServiceProvider.GetRequiredService<SaveSystem>();
+                    await RestoreActiveVariantAsync(restoreSave);
+                }
+                catch { }
                 Phase = RoundPhase.Idle;
+                ActiveRound = null;
+                await AutoSaveChatSessionAsync();
+                await LoadDatabaseStateAsync();
             }
             finally
             {
@@ -987,6 +1040,7 @@ public sealed class GameProgressService
                     last.GmOpening = variant.GmOpening;
                     last.CharacterTurns = variant.Turns.ToList();
                     last.Events = variant.Events.ToList();
+                    last.CompletedAt = variant.CompletedAt;
                 }
             }
             _activeVariantIndex = index;

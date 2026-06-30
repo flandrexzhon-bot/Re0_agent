@@ -17,6 +17,9 @@ public sealed class RoundVariant
     /// <summary>该变体的系统事件日志。</summary>
     public List<string> Events { get; init; } = new();
 
+    /// <summary>该变体回合的完成时间（null = 仅开场未结算，如 AwaitingPlayer 阶段的开场变体）。</summary>
+    public DateTimeOffset? CompletedAt { get; init; }
+
     /// <summary>该变体回合结束（结算/填表后）的数据库快照，用于切回此变体时 restore。</summary>
     public required SavePoint DbSnapshot { get; init; }
 }
