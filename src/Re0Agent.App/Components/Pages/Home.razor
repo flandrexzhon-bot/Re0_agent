@@ -251,7 +251,7 @@ else
                                     }
                                     else
                                     {
-                                        <button type="button" title="重新生成开场并整局重跑" class="swipe-btn" @onclick="() => ReRoll(-1, true)">&gt;</button>
+                                        <button type="button" title="重 roll 整个大回合（全部重来，需重新书写主角抉择）" class="swipe-btn" @onclick="RestartLatestRound">&gt;</button>
                                     }
                                 </span>
                             }
@@ -306,20 +306,40 @@ else
                 }
             }
 
-            @if (phase == RoundPhase.GmRunning)
+            @if (phase == RoundPhase.GmOpening)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>GM 思考中...</span></div>
+                    <div class="entry-header"><span>① GM 开场中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>GM 正在开场并安排行动顺序...</span>
+                        <span>GM 正在铺陈本回合的开场...</span>
                     </div>
                 </div>
             }
-            else if (phase == RoundPhase.NpcRunning)
+            else if (phase == RoundPhase.ProtagonistActing)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>角色响应中...</span></div>
+                    <div class="entry-header"><span>③ 主角行动中...</span></div>
+                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                        <span>主角正在依抉择行动，GM 裁定结果...</span>
+                    </div>
+                </div>
+            }
+            else if (phase == RoundPhase.NpcDispatching)
+            {
+                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                    <div class="entry-header"><span>④ 调度在场角色...</span></div>
+                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
+                        <span>泉此方正在安排在场角色的行动顺序...</span>
+                    </div>
+                </div>
+            }
+            else if (phase == RoundPhase.NpcResponding)
+            {
+                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
+                    <div class="entry-header"><span>⑤ 角色响应中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>在场 NPC 正在依次回应，请稍候...</span>
@@ -329,7 +349,7 @@ else
             else if (phase == RoundPhase.Finalizing)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>魔力交织中...</span></div>
+                    <div class="entry-header"><span>⑥ 填表/存档中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>GM 正在编织世界线并刻入编年史...</span>
@@ -401,7 +421,7 @@ else
                     点击「开始大回合」，GM 将先铺陈开场场景；随后由你书写主角的抉择，主角率先行动，在场角色再依次回应。
                 </p>
                 <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                    @if (phase == RoundPhase.GmRunning || phase == RoundPhase.NpcRunning || phase == RoundPhase.Finalizing)
+                    @if (phase == RoundPhase.GmOpening || phase == RoundPhase.ProtagonistActing || phase == RoundPhase.NpcDispatching || phase == RoundPhase.NpcResponding || phase == RoundPhase.Finalizing)
                     {
                         <button class="primary-action" type="button" style="background: var(--color-danger, #b03a3a); border-color: var(--color-danger, #b03a3a);" @onclick="StopRound">
                             ⏹ 停止
@@ -935,6 +955,13 @@ else
     private async Task ReRoll(int fromTurnIndex, bool regenerateOpening)
     {
         await Progress.ReRollAsync(fromTurnIndex, regenerateOpening);
+    }
+
+    // 重 roll 整个大回合：全部重来。服务端回档到回合起点、丢弃旧变体、重生成开场，
+    // 并把上次玩家输入存为草稿、回到 AwaitingPlayer。SyncState 会据草稿预填输入框。
+    private async Task RestartLatestRound()
+    {
+        await Progress.RestartLatestRoundAsync();
     }
 
     private async Task SelectVariant(int index)

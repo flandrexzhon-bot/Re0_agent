@@ -252,4 +252,12 @@ public sealed class ChatSession
     /// 长期保留每个回合的 roll 记录；前端只在最新回合显示 swipe/重 roll，fork 回到某回合即可重现。</summary>
     [Column("round_variants_snapshot")]
     public string RoundVariantsSnapshot { get; set; } = "{}";
+
+    /// <summary>当前回合状态机段位（RoundPhase.ToString()）。算法化持久，重开 App 不靠猜。</summary>
+    [Column("current_round_phase")]
+    public string CurrentRoundPhase { get; set; } = "Idle";
+
+    /// <summary>停止时所处的段编号（1–6）；用于「继续」精确从断点接着跑。0 表示无断点。</summary>
+    [Column("interrupted_step")]
+    public int InterruptedStep { get; set; } = 0;
 }

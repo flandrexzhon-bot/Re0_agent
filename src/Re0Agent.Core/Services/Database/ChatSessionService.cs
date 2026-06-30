@@ -69,13 +69,22 @@ public sealed class ChatSessionService(
     }
 
     public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, CancellationToken cancellationToken = default)
-        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson: null, cancellationToken);
+        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson: null, phase: null, interruptedStep: null, cancellationToken);
+
+    public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, string? roundVariantsJson, CancellationToken cancellationToken = default)
+        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson, phase: null, interruptedStep: null, cancellationToken);
 
     /// <summary>
-    /// 落盘当前活动会话：回合明细 + 13 表快照，并可选地带上各回合重 roll 变体集合
-    /// （<paramref name="roundVariantsJson"/> 为 null 时保留库中原值不动）。
+    /// 落盘当前活动会话：回合明细 + 13 表快照，并可选地带上各回合重 roll 变体集合、
+    /// 状态机段位与断点段（<paramref name="roundVariantsJson"/>/<paramref name="phase"/>/
+    /// <paramref name="interruptedStep"/> 为 null 时保留库中原值不动）。
     /// </summary>
-    public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, string? roundVariantsJson, CancellationToken cancellationToken = default)
+    public async Task SaveActiveSessionStateAsync(
+        string detailedRoundsJson,
+        string? roundVariantsJson,
+        string? phase,
+        int? interruptedStep,
+        CancellationToken cancellationToken = default)
     {
         var activeSession = await GetActiveSessionAsync(cancellationToken);
         if (activeSession is null)
@@ -88,16 +97,24 @@ public sealed class ChatSessionService(
         {
             activeSession.RoundVariantsSnapshot = roundVariantsJson;
         }
+        if (phase is not null)
+        {
+            activeSession.CurrentRoundPhase = phase;
+        }
+        if (interruptedStep is not null)
+        {
+            activeSession.InterruptedStep = interruptedStep.Value;
+        }
         await CaptureSnapshotsAsync(activeSession, cancellationToken);
 
         dbContext.Entry(activeSession).State = EntityState.Modified;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<(string DetailedRoundsJson, string RoundVariantsJson)> SwitchSessionAsync(int targetSessionId, string currentDetailedRoundsJson, string? currentRoundVariantsJson, CancellationToken cancellationToken = default)
+    public async Task<(string DetailedRoundsJson, string RoundVariantsJson, string Phase, int InterruptedStep)> SwitchSessionAsync(int targetSessionId, string currentDetailedRoundsJson, string? currentRoundVariantsJson, string? currentPhase, int? currentInterruptedStep, CancellationToken cancellationToken = default)
     {
         // 1. Save current active session
-        await SaveActiveSessionStateAsync(currentDetailedRoundsJson, currentRoundVariantsJson, cancellationToken);
+        await SaveActiveSessionStateAsync(currentDetailedRoundsJson, currentRoundVariantsJson, currentPhase, currentInterruptedStep, cancellationToken);
 
         // 2. Perform switch
         var transaction = dbContext.Database.CurrentTransaction is null
@@ -132,7 +149,7 @@ public sealed class ChatSessionService(
                 await transaction.CommitAsync(cancellationToken);
             }
 
-            return (targetSession.DetailedRoundsSnapshot, targetSession.RoundVariantsSnapshot);
+            return (targetSession.DetailedRoundsSnapshot, targetSession.RoundVariantsSnapshot, targetSession.CurrentRoundPhase, targetSession.InterruptedStep);
         }
         catch
         {

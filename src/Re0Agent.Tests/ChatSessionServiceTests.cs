@@ -73,7 +73,7 @@ public sealed class ChatSessionServiceTests
             currentProtagonist.SelfStatus = "略显疲惫";
             await context.SaveChangesAsync();
 
-            var (restoredRounds, _) = await sessionService.SwitchSessionAsync(sessions[1].SessionId, "[]", null);
+            var (restoredRounds, _, _, _) = await sessionService.SwitchSessionAsync(sessions[1].SessionId, "[]", null, null, null);
             Assert.Equal(mockRounds, restoredRounds);
 
             sessions = await sessionService.ListSessionsAsync();
@@ -99,6 +99,84 @@ public sealed class ChatSessionServiceTests
 
             // Verify we cannot delete the last remaining session
             await Assert.ThrowsAsync<InvalidOperationException>(() => sessionService.DeleteSessionAsync(sessions[0].SessionId));
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task SaveActiveSessionPersistsPhaseAndInterruptedStepAcrossReload()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            // 1. 第一个 context：在「段5（NPC 回应）」处停止落库（Interrupted + step=5）。
+            await using (var context = CreateContext(databasePath))
+            {
+                var diceEngine = new DiceEngine(new DiceCommandParser(), new CharacterAttributeProvider(context), new SequenceDiceRoller([50]));
+                var saveSystem = new SaveSystem(context, diceEngine);
+                var templateService = new ProtagonistTemplateService(context, saveSystem);
+                var sessionService = new ChatSessionService(context, templateService);
+
+                await sessionService.EnsureDefaultSessionAsync();
+
+                const string rounds = "[{\"RoundIndex\":\"R0001\",\"Events\":[],\"PlayerInput\":\"前进\"}]";
+                await sessionService.SaveActiveSessionStateAsync(rounds, roundVariantsJson: "{}", phase: "Interrupted", interruptedStep: 5);
+
+                var active = await sessionService.GetActiveSessionAsync();
+                Assert.NotNull(active);
+                Assert.Equal("Interrupted", active.CurrentRoundPhase);
+                Assert.Equal(5, active.InterruptedStep);
+            }
+
+            // 2. 新 context（模拟关 App 重开）：从 DB 读回，段位/断点段不靠猜、与落库一致。
+            SqliteConnection.ClearAllPools();
+            await using (var context = CreateContext(databasePath))
+            {
+                var diceEngine = new DiceEngine(new DiceCommandParser(), new CharacterAttributeProvider(context), new SequenceDiceRoller([50]));
+                var saveSystem = new SaveSystem(context, diceEngine);
+                var templateService = new ProtagonistTemplateService(context, saveSystem);
+                var sessionService = new ChatSessionService(context, templateService);
+
+                var reloaded = await sessionService.GetActiveSessionAsync();
+                Assert.NotNull(reloaded);
+                Assert.Equal("Interrupted", reloaded.CurrentRoundPhase);
+                Assert.Equal(5, reloaded.InterruptedStep);
+            }
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task SaveActiveSessionLeavesPhaseUnchangedWhenNotProvided()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var diceEngine = new DiceEngine(new DiceCommandParser(), new CharacterAttributeProvider(context), new SequenceDiceRoller([50]));
+            var saveSystem = new SaveSystem(context, diceEngine);
+            var templateService = new ProtagonistTemplateService(context, saveSystem);
+            var sessionService = new ChatSessionService(context, templateService);
+
+            await sessionService.EnsureDefaultSessionAsync();
+
+            // 先落一个明确段位。
+            await sessionService.SaveActiveSessionStateAsync("[]", roundVariantsJson: null, phase: "AwaitingPlayer", interruptedStep: 2);
+            // 再用「不带段位」的旧重载落库——段位/断点段应保留不动。
+            await sessionService.SaveActiveSessionStateAsync("[]");
+
+            var active = await sessionService.GetActiveSessionAsync();
+            Assert.NotNull(active);
+            Assert.Equal("AwaitingPlayer", active.CurrentRoundPhase);
+            Assert.Equal(2, active.InterruptedStep);
         }
         finally
         {

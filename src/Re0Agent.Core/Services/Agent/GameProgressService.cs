@@ -30,6 +30,9 @@ public sealed class GameProgressService
     public GameRound? ActiveRound { get; private set; }
     public List<GameRound> SessionRounds { get; } = new();
 
+    /// <summary>停止时所处的段编号（1–6）。仅在 Phase==Interrupted 时有意义，用于「继续」精确从断点接着跑。</summary>
+    public int InterruptedStep { get; private set; }
+
     private CancellationTokenSource? _roundCts;
 
     // ── 重 roll / 变体存储（按 RoundIndex 持久化；随会话存进 round_variants_snapshot）──
@@ -284,24 +287,34 @@ public sealed class GameProgressService
             {
                 IsPrologueStage = false;
                 var lastRound = SessionRounds.Last();
+
+                // 段位真相源 = DB 持久化列（不靠猜）。每次段切换都已落库，重开 App 即真实段位。
+                var persistedPhase = ParsePhase(active?.CurrentRoundPhase);
+                InterruptedStep = active?.InterruptedStep ?? 0;
+
                 if (lastRound.CompletedAt == null)
                 {
                     ActiveRound = lastRound;
+                    // 只在内存 Phase 为 Idle（应用刚启动/切会话）时采用持久化值；
+                    // 进程内正在跑回合时不覆盖内存的实时段位。
                     if (Phase == RoundPhase.Idle)
                     {
-                        // Phase 是单例内存态，退出游戏后丢失。重建时按持久化内容判断：
-                        // 主角已行动（有玩家控制的格）→ 该回合可「继续」恢复（Interrupted），
-                        // 而非回到「书写主角的抉择」写作面板；否则仍是等待玩家输入。
-                        bool protagonistActed = lastRound.CharacterTurns.Any(t => t.IsPlayerControlled);
-                        Phase = protagonistActed ? RoundPhase.Interrupted : RoundPhase.AwaitingPlayer;
+                        Phase = persistedPhase switch
+                        {
+                            // 未结算回合落库的合法静止态只有这两种；运行态（1/3/4/5/6）
+                            // 是进程内瞬态，重开后回合既未跑完，按持久化静止态恢复。
+                            RoundPhase.Interrupted => RoundPhase.Interrupted,
+                            RoundPhase.AwaitingPlayer => RoundPhase.AwaitingPlayer,
+                            // 老库无持久化段位（Idle）→ 一次性兜底：有主角格则可「继续」，否则等输入。
+                            _ => lastRound.CharacterTurns.Any(t => t.IsPlayerControlled)
+                                ? RoundPhase.Interrupted
+                                : RoundPhase.AwaitingPlayer
+                        };
                     }
 
-                    // 已停止（Interrupted）或等待玩家（AwaitingPlayer）的回合同样要能重 roll。
-                    // _roundStartSnapshot 只在 BeginRoundAsync（单例内存态）里抓，跨会话/重启后丢失，
-                    // 或本回合的提交发生在重启后（未走 BeginRound）时为 null，导致 CanReRoll 为 false、
-                    // ↻ 按钮消失。这里从持久化存档锚点重建最小 cache（已有有效内存 cache 时会早退不覆盖），
-                    // 使重 roll 按钮在整个回合期间始终可用。AwaitingPlayer 阶段尚无 round_end 存档，
-                    // 最新存档即回合起点基线，重建出的变体 #0 = 当前开场。
+                    // 已停止（Interrupted）或等待玩家（AwaitingPlayer）的回合同样要能重 roll；
+                    // 跨会话/重启后内存重 roll cache 为空，从持久化存档锚点重建最小 cache
+                    // （已有有效内存 cache 时会早退不覆盖），使重 roll 按钮在整个回合期间始终可用。
                     if (Phase is RoundPhase.Interrupted or RoundPhase.AwaitingPlayer)
                     {
                         await TryReconstructRerollCacheAsync(db, lastRound, cancellationToken);
@@ -311,6 +324,7 @@ public sealed class GameProgressService
                 {
                     ActiveRound = null;
                     Phase = RoundPhase.Idle;
+                    InterruptedStep = 0;
                     // 应用重启 / 切会话后内存重 roll cache 为空——为最新已结算回合
                     // 从持久化存档锚点重建最小 cache，使 swipe/↻ 按钮重新可用。
                     await TryReconstructRerollCacheAsync(db, lastRound, cancellationToken);
@@ -320,6 +334,7 @@ public sealed class GameProgressService
             {
                 ActiveRound = null;
                 Phase = RoundPhase.Idle;
+                InterruptedStep = 0;
             }
             bool isChatEmpty = SessionRounds.Count == 0 && !IsPrologueStage;
             if ((!HasProtagonist || isChatEmpty) && !IsInitializingGame && !IsStartingAdventure)
@@ -525,7 +540,9 @@ public sealed class GameProgressService
         {
             var json = JsonSerializer.Serialize(SessionRounds, JsonOptions);
             var variantsJson = SerializeVariants();
-            await sessionService.SaveActiveSessionStateAsync(json, variantsJson, cancellationToken);
+            // 状态机段位 + 断点段算法化落库，使重开 App 不靠猜（见 LoadDatabaseStateAsync）。
+            await sessionService.SaveActiveSessionStateAsync(
+                json, variantsJson, Phase.ToString(), InterruptedStep, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -536,6 +553,34 @@ public sealed class GameProgressService
     /// <summary>序列化「各回合变体」字典，供随会话持久化。</summary>
     private string SerializeVariants()
         => JsonSerializer.Serialize(_variantsByRound, JsonOptions);
+
+    /// <summary>把持久化的段位字符串解析回枚举；空/老库/无法识别一律视为 Idle。</summary>
+    private static RoundPhase ParsePhase(string? phase)
+        => Enum.TryParse<RoundPhase>(phase, out var parsed) ? parsed : RoundPhase.Idle;
+
+    /// <summary>段位 → 段编号（1–6）。非流程段（Idle/AwaitingPlayer/Interrupted）映射为该段自身或 0。</summary>
+    private static int StepOf(RoundPhase phase) => phase switch
+    {
+        RoundPhase.GmOpening => 1,
+        RoundPhase.AwaitingPlayer => 2,
+        RoundPhase.ProtagonistActing => 3,
+        RoundPhase.NpcDispatching => 4,
+        RoundPhase.NpcResponding => 5,
+        RoundPhase.Finalizing => 6,
+        _ => 0
+    };
+
+    /// <summary>
+    /// orchestrator 进入新段时的回调：实时更新内存段位 + 断点段，并落库，
+    /// 使任意时刻关 App，DB 里就是真实段位（重开不靠猜）。
+    /// </summary>
+    private async Task OnSegmentChangedAsync(RoundPhase phase)
+    {
+        Phase = phase;
+        InterruptedStep = StepOf(phase);
+        await AutoSaveChatSessionAsync();
+        NotifyStateChanged();
+    }
 
     /// <summary>从会话 JSON 还原「各回合变体」字典（替换内存内容）。失败则清空，留兜底重建。</summary>
     private void HydrateVariants(string? roundVariantsJson)
@@ -567,7 +612,8 @@ public sealed class GameProgressService
         if (IsBusy) return Task.CompletedTask;
 
         IsBusy = true;
-        Phase = RoundPhase.GmRunning;
+        Phase = RoundPhase.GmOpening;
+        InterruptedStep = 0;
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -634,18 +680,22 @@ public sealed class GameProgressService
                 // 记录开场变体（#0），使 AwaitingPlayer 阶段就能 swipe（重 roll 开场）。
                 await CaptureVariantAsync(round, saveSystem, token);
                 Phase = RoundPhase.AwaitingPlayer;
+                InterruptedStep = StepOf(RoundPhase.AwaitingPlayer);
+                await AutoSaveChatSessionAsync();
             }
             catch (OperationCanceledException)
             {
                 ErrorMessage = "已手动中止本回合。";
                 RollbackActiveRound();
                 Phase = RoundPhase.Idle;
+                InterruptedStep = 0;
             }
             catch (Exception ex)
             {
                 ErrorMessage = ex.Message;
                 RollbackActiveRound();
                 Phase = RoundPhase.Idle;
+                InterruptedStep = 0;
             }
             finally
             {
@@ -670,8 +720,10 @@ public sealed class GameProgressService
         }
 
         IsBusy = true;
-        // 主角先行动、NPC 随后响应期间显示「角色响应中」；结算阶段切到 Finalizing。
-        Phase = RoundPhase.NpcRunning;
+        // 段位由 orchestrator 的 onPhaseChanged 回调实时驱动（主角行动→调度→NPC→结算）。
+        // 先置主角行动段，落库后再跑。
+        Phase = RoundPhase.ProtagonistActing;
+        InterruptedStep = StepOf(RoundPhase.ProtagonistActing);
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -705,7 +757,7 @@ public sealed class GameProgressService
                 {
                     // 每格开始前抓快照，供逐格重 roll 回档。
                     _preTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
-                }, cancellationToken: token);
+                }, onPhaseChanged: OnSegmentChangedAsync, cancellationToken: token);
 
                 // 记录原版变体（#0）：结算后的回合内容 + 末态快照。
                 await CaptureVariantAsync(round, saveSystem, token);
@@ -714,20 +766,38 @@ public sealed class GameProgressService
             }
             catch (OperationCanceledException)
             {
-                // 手动停止：回合未结算但 GM 开场与（部分）格已生成。进入 Interrupted，
-                // 保留已生成内容 + 抓当前 DB 状态为变体 #0，使「继续」可恢复、各格可重 roll。
-                ErrorMessage = "已手动停止本回合，可点「继续」恢复或对某格重 roll。";
+                // 手动停止：分两种语义——
+                //  · 主角尚未行动（停在段3主角格完成前）→ 回到「书写主角的抉择」(AwaitingPlayer)，
+                //    把本次输入存草稿预填，玩家可重写。符合「等玩家输入处停止→重新输入」。
+                //  · 主角已行动（段4/5/6）→ Interrupted「命运暂歇」，可「继续」从断点恢复。
+                bool protagonistActed;
+                lock (SessionRounds)
+                {
+                    protagonistActed = ActiveRound?.CharacterTurns.Any(t => t.IsPlayerControlled) ?? false;
+                }
                 if (ActiveRound is not null)
                 {
                     try { await CaptureVariantAsync(ActiveRound, saveSystem, CancellationToken.None); } catch { /* 抓变体失败不致命 */ }
-                    await AutoSaveChatSessionAsync();
                 }
-                Phase = RoundPhase.Interrupted;
+                if (protagonistActed)
+                {
+                    ErrorMessage = "已手动停止本回合，可点「继续」恢复或对某格重 roll。";
+                    Phase = RoundPhase.Interrupted;
+                }
+                else
+                {
+                    ErrorMessage = "已停止，请重新书写主角的抉择。";
+                    Phase = RoundPhase.AwaitingPlayer;
+                    InterruptedStep = StepOf(RoundPhase.AwaitingPlayer);
+                    SavePlayerInputDraft(ActiveSessionId, playerInput);
+                }
+                await AutoSaveChatSessionAsync();
             }
             catch (Exception ex)
             {
                 ErrorMessage = ex.Message;
-                Phase = RoundPhase.AwaitingPlayer;
+                Phase = RoundPhase.Interrupted;
+                await AutoSaveChatSessionAsync();
             }
             finally
             {
@@ -751,7 +821,8 @@ public sealed class GameProgressService
         }
 
         IsBusy = true;
-        Phase = RoundPhase.NpcRunning;
+        // 段位由 orchestrator onPhaseChanged 实时驱动；先置为断点段对应的运行态。
+        Phase = RoundPhase.ProtagonistActing;
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -793,7 +864,7 @@ public sealed class GameProgressService
                 }, onBeforeTurn: async () =>
                 {
                     _preTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
-                }, cancellationToken: token);
+                }, onPhaseChanged: OnSegmentChangedAsync, cancellationToken: token);
 
                 await CaptureVariantAsync(round, saveSystem, token);
                 await HandleRoundCompletionAsync(round);
@@ -804,14 +875,15 @@ public sealed class GameProgressService
                 if (ActiveRound is not null)
                 {
                     try { await CaptureVariantAsync(ActiveRound, saveSystem, CancellationToken.None); } catch { }
-                    await AutoSaveChatSessionAsync();
                 }
                 Phase = RoundPhase.Interrupted;
+                await AutoSaveChatSessionAsync();
             }
             catch (Exception ex)
             {
                 ErrorMessage = ex.Message;
                 Phase = RoundPhase.Interrupted;
+                await AutoSaveChatSessionAsync();
             }
             finally
             {
@@ -839,6 +911,7 @@ public sealed class GameProgressService
 
         ActiveRound = null;
         Phase = RoundPhase.Idle;
+        InterruptedStep = 0;
         await LoadDatabaseStateAsync();
         await AutoSaveChatSessionAsync();
         NotifyStateChanged();
@@ -965,7 +1038,7 @@ public sealed class GameProgressService
         if (baseRound is null) return Task.CompletedTask;
 
         IsBusy = true;
-        Phase = RoundPhase.GmRunning;
+        Phase = RoundPhase.GmOpening;
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -1026,10 +1099,109 @@ public sealed class GameProgressService
     }
 
     /// <summary>
-    /// 级联重 roll 当前（最新已结算）回合。
-    /// <para><paramref name="fromTurnIndex"/> = -1：重 roll GM 开场并整局重跑。</para>
+    /// 重 roll <strong>整个大回合</strong>（最新回合）：所有内容全部重来，包括玩家重新输入抉择。
+    /// 流程：① 回档到本回合起点基线；② <strong>丢弃该回合旧变体</strong>（不保留 swipe 历史，与单格 ↻ 不同）；
+    /// ③ 重新生成 GM 开场；④ 回到「书写主角的抉择」（段2），输入框预填该回合上次的玩家输入（可改）。
+    /// 玩家改完提交后将跑出该回合唯一的新版本。对应前端大回合重 roll 按钮。
+    /// </summary>
+    public Task RestartLatestRoundAsync()
+    {
+        if (IsBusy) return Task.CompletedTask;
+
+        GameRound? baseRound;
+        lock (SessionRounds)
+        {
+            baseRound = SessionRounds.LastOrDefault();
+        }
+        if (baseRound is null || _roundStartSnapshot is null) return Task.CompletedTask;
+
+        IsBusy = true;
+        Phase = RoundPhase.GmOpening;
+        ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
+        var previousInput = baseRound.PlayerInput;
+        var startSnapshot = _roundStartSnapshot;
+        NotifyStateChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+
+                // 1. 回档到回合起点基线（GM 开场前 = 上一回合末态）。
+                await saveSystem.RestoreGameStateAsync(startSnapshot!, token);
+
+                // 2. 丢弃该回合旧变体（仅保留起点快照，便于这次重来仍可回档）。
+                var set = GetOrCreateSet(baseRound.RoundIndex);
+                set.Variants.Clear();
+                set.PreTurnSnapshots.Clear();
+                set.ActiveIndex = 0;
+                set.RoundStartSnapshot = startSnapshot;
+
+                // 3. 重新生成 GM 开场 —— 产出一个全新的待输入回合（PendingProtagonistProfiles 已就绪，
+                //    与 BeginRound 后的 AwaitingPlayer 状态一致），供玩家重新书写抉择。
+                var round = await orchestrator.RegenerateOpeningAsync(baseRound, onStepCompleted: async (r) =>
+                {
+                    ActiveRound = r;
+                    lock (SessionRounds)
+                    {
+                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == r.RoundIndex);
+                        if (idx >= 0) SessionRounds[idx] = r;
+                    }
+                    NotifyStateChanged();
+                    await Task.Delay(10);
+                }, cancellationToken: token);
+
+                ActiveRound = round;
+                lock (SessionRounds)
+                {
+                    var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
+                    if (idx >= 0) SessionRounds[idx] = round;
+                }
+
+                // 4. 记录开场变体 #0；回到「书写主角的抉择」，预填上次输入（可改）。
+                await CaptureVariantAsync(round, saveSystem, token);
+                Phase = RoundPhase.AwaitingPlayer;
+                InterruptedStep = StepOf(RoundPhase.AwaitingPlayer);
+                SavePlayerInputDraft(ActiveSessionId, previousInput);
+                ErrorMessage = "已重置本回合，请重新书写主角的抉择。";
+                await AutoSaveChatSessionAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已中止大回合重 roll。";
+                Phase = RoundPhase.AwaitingPlayer;
+                await AutoSaveChatSessionAsync();
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"大回合重 roll 失败: {ex.Message}";
+                Phase = RoundPhase.AwaitingPlayer;
+                await AutoSaveChatSessionAsync();
+            }
+            finally
+            {
+                _roundCts?.Dispose();
+                _roundCts = null;
+                IsBusy = false;
+                NotifyStateChanged();
+                await LoadDatabaseStateAsync();
+                NotifyStateChanged();
+            }
+        });
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 单格 ↻ 级联重 roll 当前（最新已结算）回合。<strong>沿用本回合已提交的玩家抉择，不重新输入</strong>，
+    /// 结果保留为新变体（swipe 可切回旧版）。大回合「全部重来」请用 <see cref="RestartLatestRoundAsync"/>。
     /// <para><paramref name="fromTurnIndex"/> = 0：保留开场，从主角格起重跑（重抽判定/骰子 + 级联 NPC）。</para>
     /// <para><paramref name="fromTurnIndex"/> ≥ 1：保留开场 + 前 fromTurnIndex 格，从该 NPC 格起级联重跑。</para>
+    /// <para><paramref name="fromTurnIndex"/> = -1（兜底兼容）：保留开场整局重跑主角+NPC。</para>
     /// </summary>
     public Task ReRollAsync(int fromTurnIndex, bool regenerateOpening)
     {
@@ -1043,7 +1215,8 @@ public sealed class GameProgressService
         if (baseRound is null) return Task.CompletedTask;
 
         IsBusy = true;
-        Phase = fromTurnIndex < 0 ? RoundPhase.GmRunning : RoundPhase.NpcRunning;
+        // 单格重 roll 是「角色重跑」，从主角行动段开始；段位随后由 onPhaseChanged 实时驱动。
+        Phase = RoundPhase.ProtagonistActing;
         ErrorMessage = null;
         _roundCts = new CancellationTokenSource();
         var token = _roundCts.Token;
@@ -1095,6 +1268,7 @@ public sealed class GameProgressService
                     {
                         newPreTurnSnapshots.Add(await saveSystem.CaptureInMemorySnapshotAsync(token));
                     },
+                    onPhaseChanged: OnSegmentChangedAsync,
                     cancellationToken: token);
 
                 // 3. 更新 cache + 记录新变体。
@@ -1319,7 +1493,8 @@ public sealed class GameProgressService
 
             var currentJson = JsonSerializer.Serialize(SessionRounds, JsonOptions);
             var currentVariantsJson = SerializeVariants();
-            var (targetJson, targetVariantsJson) = await sessionService.SwitchSessionAsync(targetSessionId, currentJson, currentVariantsJson);
+            var (targetJson, targetVariantsJson, _, _) = await sessionService.SwitchSessionAsync(
+                targetSessionId, currentJson, currentVariantsJson, Phase.ToString(), InterruptedStep);
 
             SessionRounds.Clear();
             var rounds = JsonSerializer.Deserialize<List<GameRound>>(targetJson, JsonOptions);
@@ -1331,6 +1506,7 @@ public sealed class GameProgressService
             HydrateVariants(targetVariantsJson);
             ActiveRound = null;
             Phase = RoundPhase.Idle;
+            InterruptedStep = 0;
             IsPrologueStage = false;
 
             await LoadDatabaseStateAsync();

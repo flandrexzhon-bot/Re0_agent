@@ -41,9 +41,15 @@ public sealed class AgentOrchestrator(
     public async Task<GameRound> BeginRoundAsync(
         Func<GameRound, Task>? onStepCompleted = null,
         IReadOnlyList<GameRound>? previousRounds = null,
+        Func<RoundPhase, Task>? onPhaseChanged = null,
         CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
+
+        if (onPhaseChanged is not null)
+        {
+            await onPhaseChanged(RoundPhase.GmOpening);
+        }
 
         var round = new GameRound
         {
@@ -225,13 +231,18 @@ public sealed class AgentOrchestrator(
         bool directOutput = true,
         Func<GameRound, Task>? onStepCompleted = null,
         Func<Task>? onBeforeTurn = null,
+        Func<RoundPhase, Task>? onPhaseChanged = null,
         CancellationToken cancellationToken = default)
     {
         round.PlayerInput = playerInput;
 
-        // 1. 主角先行动。
+        // 1. 主角先行动。（段3）
         if (round.DeathReturnCause is null)
         {
+            if (onPhaseChanged is not null)
+            {
+                await onPhaseChanged(RoundPhase.ProtagonistActing);
+            }
             foreach (var profile in round.PendingProtagonistProfiles)
             {
                 if (onBeforeTurn is not null)
@@ -258,7 +269,11 @@ public sealed class AgentOrchestrator(
         // 2. 主角已触发死亡回归则跳过调度与 NPC，直接结算。
         if (round.DeathReturnCause is null)
         {
-            // 泉此方依据 GM 开场 + 主角已完成的行动调度本回合 NPC 阵容（不涉及主角）。
+            // 泉此方依据 GM 开场 + 主角已完成的行动调度本回合 NPC 阵容（不涉及主角）。（段4）
+            if (onPhaseChanged is not null)
+            {
+                await onPhaseChanged(RoundPhase.NpcDispatching);
+            }
             var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
             round.CharacterSubSlots = await characterSubAgent.RunAsync(round, profiles, cancellationToken);
 
@@ -268,10 +283,19 @@ public sealed class AgentOrchestrator(
             }
             await ApplyDelayAsync(cancellationToken);
 
+            // NPC 依位号回应。（段5）
+            if (onPhaseChanged is not null)
+            {
+                await onPhaseChanged(RoundPhase.NpcResponding);
+            }
             await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, cancellationToken: cancellationToken);
         }
 
-        // 3. 结算。
+        // 3. 结算。（段6）
+        if (onPhaseChanged is not null)
+        {
+            await onPhaseChanged(RoundPhase.Finalizing);
+        }
         await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }
@@ -284,6 +308,7 @@ public sealed class AgentOrchestrator(
         GameRound round,
         Func<GameRound, Task>? onStepCompleted = null,
         Func<Task>? onBeforeTurn = null,
+        Func<RoundPhase, Task>? onPhaseChanged = null,
         CancellationToken cancellationToken = default)
     {
         // RunCharacterTurnAsync 在所有 await 之后才把格加入列表，故被取消的「进行中」格不会留半成品：
@@ -296,12 +321,16 @@ public sealed class AgentOrchestrator(
             // 直接走完整第二阶段：主角 → 调度 → NPC → 结算。
             return await RunPlayerThenNpcTurnsAsync(
                 round, round.PlayerInput, skipPlayerTurn: false, directOutput: true,
-                onStepCompleted, onBeforeTurn, cancellationToken);
+                onStepCompleted, onBeforeTurn, onPhaseChanged, cancellationToken);
         }
 
-        // 主角已完成。若调度尚未产出位号（停在主角与首个 NPC 之间），补跑泉此方调度。
+        // 主角已完成。若调度尚未产出位号（停在主角与首个 NPC 之间），补跑泉此方调度。（段4）
         if (string.IsNullOrWhiteSpace(round.CharacterSubSlots) && round.DeathReturnCause is null)
         {
+            if (onPhaseChanged is not null)
+            {
+                await onPhaseChanged(RoundPhase.NpcDispatching);
+            }
             var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
             round.CharacterSubSlots = await characterSubAgent.RunAsync(round, profiles, cancellationToken);
             if (onStepCompleted is not null)
@@ -311,13 +340,22 @@ public sealed class AgentOrchestrator(
             await ApplyDelayAsync(cancellationToken);
         }
 
-        // 从已完成的 NPC 之后继续。已完成 NPC 数 = 非主角格数；据此 skip。
+        // 从已完成的 NPC 之后继续。已完成 NPC 数 = 非主角格数；据此 skip。（段5）
         if (round.DeathReturnCause is null)
         {
+            if (onPhaseChanged is not null)
+            {
+                await onPhaseChanged(RoundPhase.NpcResponding);
+            }
             int npcsDone = round.CharacterTurns.Count(t => !t.IsPlayerControlled);
             await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, skipNpcCount: npcsDone, cancellationToken: cancellationToken);
         }
 
+        // 结算。（段6）
+        if (onPhaseChanged is not null)
+        {
+            await onPhaseChanged(RoundPhase.Finalizing);
+        }
         await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }
@@ -367,6 +405,7 @@ public sealed class AgentOrchestrator(
         bool regenerateOpening,
         Func<GameRound, Task>? onStepCompleted = null,
         Func<Task>? onBeforeTurn = null,
+        Func<RoundPhase, Task>? onPhaseChanged = null,
         CancellationToken cancellationToken = default)
     {
         var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
@@ -398,7 +437,7 @@ public sealed class AgentOrchestrator(
             // 整局重跑：主角 → 泉此方调度 → NPC → 结算。
             return await RunPlayerThenNpcTurnsAsync(
                 round, baseRound.PlayerInput, skipPlayerTurn: false, directOutput: true,
-                onStepCompleted, onBeforeTurn, cancellationToken);
+                onStepCompleted, onBeforeTurn, onPhaseChanged, cancellationToken);
         }
 
         // 保留前 keepTurnCount 格（含主角），沿用原位号安排，从其后的 NPC 级联重跑。
@@ -409,8 +448,16 @@ public sealed class AgentOrchestrator(
         round.CharacterSubSlots = baseRound.CharacterSubSlots;
         round.PendingProtagonistProfiles = [];
 
-        // turns[0] 为主角，NPC 从 turns[1] 起；保留 keepTurnCount 格意味着已保留 keepTurnCount-1 个 NPC。
+        // turns[0] 为主角，NPC 从 turns[1] 起；保留 keepTurnCount 格意味着已保留 keepTurnCount-1 个 NPC。（段5→6）
+        if (onPhaseChanged is not null)
+        {
+            await onPhaseChanged(RoundPhase.NpcResponding);
+        }
         await RunNpcTurnsAsync(round, onStepCompleted, onBeforeTurn, skipNpcCount: keepTurnCount - 1, cancellationToken: cancellationToken);
+        if (onPhaseChanged is not null)
+        {
+            await onPhaseChanged(RoundPhase.Finalizing);
+        }
         await FinalizeRoundAsync(round, onStepCompleted, cancellationToken);
         return round;
     }

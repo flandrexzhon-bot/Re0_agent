@@ -87,6 +87,73 @@ public sealed class DatabaseSchemaTests
     }
 
     [Fact]
+    public async Task InitializeAsyncUpgradesExistingChatSessionsTableWithRoundVariantsColumn()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    CREATE TABLE chat_sessions (
+                      session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      session_name TEXT NOT NULL,
+                      is_active INTEGER DEFAULT 0 CHECK(is_active IN (0, 1)),
+                      created_at TEXT NOT NULL,
+                      global_state_snapshot TEXT NOT NULL DEFAULT '{}',
+                      protagonist_snapshot TEXT NOT NULL DEFAULT '{}',
+                      world_map_snapshot TEXT NOT NULL DEFAULT '[]',
+                      map_elements_snapshot TEXT NOT NULL DEFAULT '[]',
+                      factions_snapshot TEXT NOT NULL DEFAULT '[]',
+                      npc_snapshot TEXT NOT NULL DEFAULT '[]',
+                      inventory_snapshot TEXT NOT NULL DEFAULT '[]',
+                      equipment_snapshot TEXT NOT NULL DEFAULT '[]',
+                      quest_snapshot TEXT NOT NULL DEFAULT '[]',
+                      chronicle_snapshot TEXT NOT NULL DEFAULT '[]',
+                      character_memory_snapshot TEXT NOT NULL DEFAULT '[]',
+                      death_return_log_snapshot TEXT NOT NULL DEFAULT '[]',
+                      save_points_snapshot TEXT NOT NULL DEFAULT '[]',
+                      detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]'
+                    );
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+
+            await using var upgradedConnection = new SqliteConnection($"Data Source={databasePath}");
+            await upgradedConnection.OpenAsync();
+            var chatSessionColumns = await ReadStringsAsync(upgradedConnection, "PRAGMA table_info(chat_sessions);", 1);
+
+            Assert.Contains("parent_session_id", chatSessionColumns);
+            Assert.Contains("round_variants_snapshot", chatSessionColumns);
+            Assert.Contains("current_round_phase", chatSessionColumns);
+            Assert.Contains("interrupted_step", chatSessionColumns);
+
+            await using var insert = upgradedConnection.CreateCommand();
+            insert.CommandText = "INSERT INTO chat_sessions (session_name, created_at) VALUES ('旧会话', '2024-04-01 09:00');";
+            await insert.ExecuteNonQueryAsync();
+
+            var defaults = await ReadStringsAsync(upgradedConnection, "SELECT round_variants_snapshot FROM chat_sessions;");
+            Assert.Equal(["{}"], defaults);
+
+            var phaseDefaults = await ReadStringsAsync(upgradedConnection, "SELECT current_round_phase FROM chat_sessions;");
+            Assert.Equal(["Idle"], phaseDefaults);
+
+            var stepDefaults = await ReadStringsAsync(upgradedConnection, "SELECT CAST(interrupted_step AS TEXT) FROM chat_sessions;");
+            Assert.Equal(["0"], stepDefaults);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task EntityMappingsAllowCorePhaseOneRows()
     {
         var databasePath = CreateTempDatabasePath();

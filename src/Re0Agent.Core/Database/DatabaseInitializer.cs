@@ -131,7 +131,22 @@ public static class DatabaseInitializer
         if (!existingColumns.Contains("round_variants_snapshot"))
         {
             await context.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE chat_sessions ADD COLUMN round_variants_snapshot TEXT NOT NULL DEFAULT '{}';",
+                "ALTER TABLE chat_sessions ADD COLUMN round_variants_snapshot TEXT NOT NULL DEFAULT '{{}}';",
+                cancellationToken);
+        }
+
+        // 状态机段位 + 断点段：老库无此列时补加（默认 Idle / 0）。
+        if (!existingColumns.Contains("current_round_phase"))
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE chat_sessions ADD COLUMN current_round_phase TEXT NOT NULL DEFAULT 'Idle';",
+                cancellationToken);
+        }
+
+        if (!existingColumns.Contains("interrupted_step"))
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE chat_sessions ADD COLUMN interrupted_step INTEGER NOT NULL DEFAULT 0;",
                 cancellationToken);
         }
     }

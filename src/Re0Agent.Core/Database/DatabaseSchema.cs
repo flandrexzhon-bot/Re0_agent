@@ -259,7 +259,9 @@ public static class DatabaseSchema
           death_return_log_snapshot TEXT NOT NULL DEFAULT '[]',
           save_points_snapshot TEXT NOT NULL DEFAULT '[]',
           detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]',
-          round_variants_snapshot TEXT NOT NULL DEFAULT '{{}}'
+          round_variants_snapshot TEXT NOT NULL DEFAULT '{{}}',
+          current_round_phase TEXT NOT NULL DEFAULT 'Idle',
+          interrupted_step INTEGER NOT NULL DEFAULT 0
         );
         """
     ];

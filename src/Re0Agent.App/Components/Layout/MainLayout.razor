@@ -73,21 +73,33 @@
             <span>Re:Zero 命运全书 · 起始于零的异世界编年史</span>
             <div style="display: flex; align-items: center; gap: 0.5rem; user-select: none;">
                 <span style="font-size: 0.8rem; color: var(--color-text-secondary); font-family: var(--font-sans);">后台命运线:</span>
-                @if (Progress.Phase == RoundPhase.GmRunning)
+                @if (Progress.Phase == RoundPhase.GmOpening)
                 {
-                    <span class="status-badge pulse-gold">🔮 GM行动中...</span>
+                    <span class="status-badge pulse-gold">🔮 ①GM开场中...</span>
                 }
-                else if (Progress.Phase == RoundPhase.NpcRunning)
+                else if (Progress.Phase == RoundPhase.ProtagonistActing)
                 {
-                    <span class="status-badge pulse-purple">👥 NPC响应中...</span>
+                    <span class="status-badge pulse-gold">⚔️ ③主角行动中...</span>
+                }
+                else if (Progress.Phase == RoundPhase.NpcDispatching)
+                {
+                    <span class="status-badge pulse-purple">🎭 ④调度角色中...</span>
+                }
+                else if (Progress.Phase == RoundPhase.NpcResponding)
+                {
+                    <span class="status-badge pulse-purple">👥 ⑤NPC响应中...</span>
                 }
                 else if (Progress.Phase == RoundPhase.AwaitingPlayer)
                 {
-                    <span class="status-badge badge-green">✍️ 等待抉择</span>
+                    <span class="status-badge badge-green">✍️ ②等待抉择</span>
                 }
                 else if (Progress.Phase == RoundPhase.Finalizing)
                 {
-                    <span class="status-badge pulse-purple">✨ 命运编制中...</span>
+                    <span class="status-badge pulse-purple">✨ ⑥填表存档中...</span>
+                }
+                else if (Progress.Phase == RoundPhase.Interrupted)
+                {
+                    <span class="status-badge badge-idle">⏸️ 命运暂歇</span>
                 }
                 else
                 {
