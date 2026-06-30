@@ -939,8 +939,9 @@ public sealed class GameProgressService
                 await CaptureVariantAsync(round, saveSystem, token);
 
                 Phase = RoundPhase.Idle;
-                await LoadDatabaseStateAsync();
+                // 先落盘新变体回合，再重载——否则 LoadDatabaseStateAsync 会用旧持久化内容覆盖。
                 await AutoSaveChatSessionAsync();
+                await LoadDatabaseStateAsync();
             }
             catch (OperationCanceledException)
             {
@@ -989,8 +990,10 @@ public sealed class GameProgressService
                 }
             }
             _activeVariantIndex = index;
-            await LoadDatabaseStateAsync();
+            // 先落盘变体内容，再重载——LoadDatabaseStateAsync 会从持久化 JSON 重建 SessionRounds，
+            // 若顺序反了会用上一次 AutoSave 的旧内容覆盖掉刚切过去的变体，导致各变体显示成同一份。
             await AutoSaveChatSessionAsync();
+            await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
         {
