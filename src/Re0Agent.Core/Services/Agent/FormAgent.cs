@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
+using Re0Agent.Core.Services.Database;
 using Re0Agent.Core.Services.Llm;
 using Re0Agent.Core.Services.Settings;
 
@@ -13,16 +14,51 @@ public sealed partial class FormAgent(
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
     ILlmClient llmClient,
-    IRagService ragService)
+    IRagService ragService,
+    FormAgentSqlExecutor sqlExecutor)
 {
-    /// <summary>单个分区请求的最大重试次数（仅重试报错/空输出的那个分区，不波及其余分区）。</summary>
+    /// <summary>单个分区请求的最大重试次数（生成报错/空输出，或<strong>执行失败</strong>，均重试该分区，不波及其余分区）。</summary>
     private const int MaxPartitionRetries = 3;
+
+    /// <summary>四个分区的固定顺序（执行需串行，因共用同一个 DbContext/连接）。</summary>
+    private static readonly FormTablePartition[] AllPartitions =
+    [
+        FormTablePartition.CharacterMemory,
+        FormTablePartition.Chronicle,
+        FormTablePartition.ImportantNpc,
+        FormTablePartition.Rest,
+    ];
 
     /// <summary>一个分区填表请求的结果：成功则带 SQL，失败则带最终错误信息。</summary>
     public sealed record PartitionResult(
         FormTablePartition Partition,
         IReadOnlyList<string> Sql,
         string? ErrorMessage);
+
+    /// <summary>
+    /// 一个分区<strong>从生成到执行落库</strong>的最终结果：
+    /// <paramref name="StatementsExecuted"/> 为该分区已提交的语句数；
+    /// <paramref name="ErrorMessage"/> 非空表示该分区（生成或执行）重试用尽仍失败、未落库。
+    /// </summary>
+    public sealed record PartitionExecution(
+        FormTablePartition Partition,
+        int StatementsExecuted,
+        string? ErrorMessage);
+
+    /// <summary>四个分区生成共用的上下文（只算一次）。</summary>
+    private sealed record SharedInputs(
+        Re0Agent.Core.Entities.AgentConfig? Config,
+        string DatabaseSummary,
+        RagContext RagContext);
+
+    public static string DescribePartition(FormTablePartition partition) => partition switch
+    {
+        FormTablePartition.CharacterMemory => "角色记忆",
+        FormTablePartition.Chronicle => "AM世界概括",
+        FormTablePartition.ImportantNpc => "重要NPC",
+        FormTablePartition.Rest => "其余表",
+        _ => partition.ToString()
+    };
 
     public async Task<IReadOnlyList<string>> GenerateSqlAsync(
         GameRound round,
@@ -43,26 +79,104 @@ public sealed partial class FormAgent(
         GameRound round,
         CancellationToken cancellationToken = default)
     {
+        var shared = await BuildSharedInputsAsync(round, cancellationToken);
+
+        var tasks = AllPartitions
+            .Select(partition => GeneratePartitionSqlAsync(round, shared.DatabaseSummary, shared.RagContext, shared.Config, partition, cancellationToken))
+            .ToArray();
+
+        return await Task.WhenAll(tasks);
+    }
+
+    /// <summary>
+    /// 完整填表：4 个分区<strong>并发生成</strong> → <strong>逐分区独立执行落库</strong>。
+    /// <para>每个分区在<em>自己的事务</em>里提交：成功的分区直接写入；执行失败（如 SQL 校验拒绝、
+    /// 类型不符）的分区<strong>重新生成并重试</strong>（最多 <see cref="MaxPartitionRetries"/> 次），
+    /// 全程<strong>不回滚、不波及其余分区</strong>。某分区彻底失败只丢该分区，其余照常落库。</para>
+    /// 因 4 个分区共用同一个 DbContext/SQLite 连接，执行阶段必须<strong>串行</strong>。
+    /// </summary>
+    public async Task<IReadOnlyList<PartitionExecution>> FillAndExecuteAsync(
+        GameRound round,
+        CancellationToken cancellationToken = default)
+    {
+        var shared = await BuildSharedInputsAsync(round, cancellationToken);
+
+        // 1. 并发生成各分区 SQL（生成阶段只调 LLM，不碰 DbContext，可并行）。
+        var generated = await Task.WhenAll(AllPartitions
+            .Select(partition => GeneratePartitionSqlAsync(round, shared.DatabaseSummary, shared.RagContext, shared.Config, partition, cancellationToken)));
+
+        // 2. 逐分区独立执行（共用连接 → 串行）；失败分区重新生成 + 重试，各自独立提交。
+        var results = new List<PartitionExecution>(generated.Length);
+        foreach (var gen in generated)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await ExecutePartitionWithRetryAsync(round, shared, gen, cancellationToken));
+        }
+        return results;
+    }
+
+    private async Task<SharedInputs> BuildSharedInputsAsync(GameRound round, CancellationToken cancellationToken)
+    {
         var config = await configResolver.FindConfigAsync("Form", "填表Agent", cancellationToken);
         // 数据库概览只算一次，4 个分区请求共用，避免重复查询。
         var databaseSummary = await CreateDatabaseSummaryAsync(cancellationToken);
         // 世界书检索也只算一次：用本回合正文（开场+各角色行动+玩家输入）作关键词，
         // 命中如「爱蜜莉雅」等设定条目，喂给填表 Agent 作 <背景设定>，避免它凭空臆造人物/地点设定。
         var ragContext = await QueryWorldBookAsync(round, cancellationToken);
+        return new SharedInputs(config, databaseSummary, ragContext);
+    }
 
-        var partitions = new[]
+    /// <summary>
+    /// 单分区「执行落库」循环：用已生成的 SQL 尝试执行；执行失败则<strong>重新生成该分区</strong>后重试，
+    /// 直到成功或 <see cref="MaxPartitionRetries"/> 次用尽。空 SQL 且无错误视为「模型判断无需更新」=成功。
+    /// </summary>
+    private async Task<PartitionExecution> ExecutePartitionWithRetryAsync(
+        GameRound round,
+        SharedInputs shared,
+        PartitionResult generated,
+        CancellationToken cancellationToken)
+    {
+        var partition = generated.Partition;
+        var sql = generated.Sql;
+        var lastError = generated.ErrorMessage;
+
+        for (var attempt = 1; attempt <= MaxPartitionRetries; attempt++)
         {
-            FormTablePartition.CharacterMemory,
-            FormTablePartition.Chronicle,
-            FormTablePartition.ImportantNpc,
-            FormTablePartition.Rest,
-        };
+            cancellationToken.ThrowIfCancellationRequested();
 
-        var tasks = partitions
-            .Select(partition => GeneratePartitionSqlAsync(round, databaseSummary, ragContext, config, partition, cancellationToken))
-            .ToArray();
+            if (sql.Count > 0)
+            {
+                try
+                {
+                    var exec = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
+                    return new PartitionExecution(partition, exec.StatementsExecuted, ErrorMessage: null);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // 该分区整批执行失败（已自动回滚其事务，未污染其余分区）。
+                    lastError = ex.Message;
+                }
+            }
+            else if (lastError is null)
+            {
+                // 模型判断该分区无需更新：无 SQL 即成功。
+                return new PartitionExecution(partition, 0, ErrorMessage: null);
+            }
 
-        return await Task.WhenAll(tasks);
+            // 执行失败，或生成阶段就失败（空+错误）。还有重试机会则重新生成该分区。
+            if (attempt < MaxPartitionRetries)
+            {
+                var regen = await GeneratePartitionSqlAsync(round, shared.DatabaseSummary, shared.RagContext, shared.Config, partition, cancellationToken);
+                sql = regen.Sql;
+                lastError = regen.ErrorMessage;
+            }
+        }
+
+        return new PartitionExecution(partition, 0, lastError ?? "未知错误");
     }
 
     /// <summary>

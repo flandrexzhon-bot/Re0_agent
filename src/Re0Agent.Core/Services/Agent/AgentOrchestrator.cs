@@ -14,7 +14,6 @@ public sealed class AgentOrchestrator(
     ChapterSwitchAgent chapterSwitchAgent,
     CharacterAgentService characterAgentService,
     FormAgent formAgent,
-    FormAgentSqlExecutor sqlExecutor,
     DiceEngine diceEngine,
     CombatResolver combatResolver,
     CharacterNameResolver nameResolver,
@@ -501,22 +500,29 @@ public sealed class AgentOrchestrator(
         // 章节切换：启动但不等待 —— 填表 SQL 不依赖章节切换结果。
         var chapterSwitchTask = chapterSwitchAgent.RunAsync(round, cancellationToken);
 
-        // 4 个分区各自独立重试（见 FormAgent.GeneratePartitionedAsync）：某分区报错只重发该分区，
-        // 不波及其余分区。这里汇总所有成功分区的 SQL 一次性原子执行，并逐条记录失败分区。
-        SqlExecutionResult? formExecution = null;
+        // 4 个分区各自独立生成 + 独立执行落库（见 FormAgent.FillAndExecuteAsync）：
+        // 成功的分区直接提交；执行失败（SQL 校验/类型不符等）的分区重新生成并重试，
+        // 不回滚、不波及其余分区。逐条记录各分区成功语句数与失败原因。
         try
         {
-            var partitions = await formAgent.GeneratePartitionedAsync(round, cancellationToken);
+            var executions = await formAgent.FillAndExecuteAsync(round, cancellationToken);
 
-            foreach (var failed in partitions.Where(p => p.ErrorMessage is not null))
+            var totalExecuted = 0;
+            foreach (var exec in executions)
             {
-                round.Events.Add($"填表Agent[{DescribePartition(failed.Partition)}]分区填表失败（已重试），原因：{failed.ErrorMessage}");
+                if (exec.ErrorMessage is not null)
+                {
+                    round.Events.Add($"填表Agent[{FormAgent.DescribePartition(exec.Partition)}]分区填表失败（已重试），原因：{exec.ErrorMessage}。可稍后在【现世处境】手动重试。");
+                }
+                else
+                {
+                    totalExecuted += exec.StatementsExecuted;
+                }
             }
 
-            var sql = partitions.SelectMany(p => p.Sql).ToList();
-            if (sql.Count > 0)
+            if (totalExecuted > 0)
             {
-                formExecution = await sqlExecutor.ExecuteAsync(sql, cancellationToken);
+                round.Events.Add($"填表Agent执行SQL：{totalExecuted}条。");
             }
         }
         catch (OperationCanceledException)
@@ -525,13 +531,8 @@ public sealed class AgentOrchestrator(
         }
         catch (Exception ex)
         {
-            // 汇总执行阶段（SQL 校验/事务）失败：整批未落库。
+            // 兜底：FillAndExecuteAsync 本身（如共享上下文构造）异常，整批未落库。
             round.Events.Add($"填表Agent执行SQL失败，原因：{ex.Message}。可稍后在【现世处境】手动重试。");
-        }
-
-        if (formExecution is not null)
-        {
-            round.Events.Add($"填表Agent执行SQL：{formExecution.StatementsExecuted}条。");
         }
 
         // 等待章节切换完成并应用结果。
@@ -617,15 +618,6 @@ public sealed class AgentOrchestrator(
         var next = await dbContext.Chronicle.CountAsync(cancellationToken) + 1;
         return $"R{next:0000}";
     }
-
-    private static string DescribePartition(FormTablePartition partition) => partition switch
-    {
-        FormTablePartition.CharacterMemory => "角色记忆",
-        FormTablePartition.Chronicle => "AM世界概括",
-        FormTablePartition.ImportantNpc => "重要NPC",
-        FormTablePartition.Rest => "其余表",
-        _ => partition.ToString()
-    };
 
     private async Task<int> ReadCurrentChapterAsync(CancellationToken cancellationToken)
     {

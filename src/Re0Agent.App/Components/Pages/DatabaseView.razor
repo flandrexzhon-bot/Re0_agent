@@ -10,7 +10,6 @@
 @inject Re0AgentDbContext DbContext
 @inject ProtagonistTemplateService TemplateService
 @inject FormAgent FormAgent
-@inject FormAgentSqlExecutor SqlExecutor
 @inject GameProgressService Progress
 @inject LlmLogService LogService
 
@@ -808,46 +807,36 @@
 
         try
         {
-            int maxFormRetries = 3;
-            int formAttempt = 0;
-            bool formSuccess = false;
-            SqlExecutionResult? formExecution = null;
+            LogService.ManualFormFillingStatus = "正在请求填表Agent分析当前剧情并生成SQL指令...";
+            if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
+            SafeStateHasChanged();
 
-            while (formAttempt < maxFormRetries && !formSuccess)
+            // 四块独立填表：每个分区各自生成 → 各自执行落库，失败的分区自动重新生成并重试
+            // （最多 3 次），成功的分区直接写入、不被其它分区拖累。
+            var executions = await FormAgent.FillAndExecuteAsync(latestRound, CancellationToken.None);
+
+            var totalExecuted = executions.Where(e => e.ErrorMessage is null).Sum(e => e.StatementsExecuted);
+            var failed = executions.Where(e => e.ErrorMessage is not null).ToList();
+
+            if (failed.Count == 0)
             {
-                formAttempt++;
-                try
+                LogService.ManualFormFillingStatus = $"手动填表更新成功！四个分区共执行 {totalExecuted} 条SQL指令。";
+            }
+            else
+            {
+                var detail = string.Join("；", failed.Select(e => $"{FormAgent.DescribePartition(e.Partition)}：{e.ErrorMessage}"));
+                LogService.ManualFormFillingStatus = $"部分分区已更新（共 {totalExecuted} 条SQL）。以下分区填表失败（已重试），可稍后再次手动重试：{detail}";
+                // 全部分区失败时，向上抛出以走错误提示样式。
+                if (totalExecuted == 0)
                 {
-                    LogService.ManualFormFillingStatus = $"正在请求填表Agent分析当前剧情并生成SQL指令... (第 {formAttempt}/{maxFormRetries} 次尝试)";
-                    if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
-                    SafeStateHasChanged();
-
-                    var sql = await FormAgent.GenerateSqlAsync(latestRound, CancellationToken.None);
-
-                    LogService.ManualFormFillingStatus = $"已生成 {sql.Count} 条SQL指令，正在执行数据库写入... (第 {formAttempt}/{maxFormRetries} 次尝试)";
-                    if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
-                    SafeStateHasChanged();
-
-                    formExecution = await SqlExecutor.ExecuteAsync(sql, CancellationToken.None);
-                    formSuccess = true;
-                }
-                catch (Exception ex)
-                {
-                    if (formAttempt >= maxFormRetries)
-                    {
-                        throw new InvalidOperationException($"填表失败（已尝试 {maxFormRetries} 次）：{ex.Message}", ex);
-                    }
+                    throw new InvalidOperationException(LogService.ManualFormFillingStatus);
                 }
             }
 
-            if (formSuccess && formExecution is not null)
+            if (!_isDisposed)
             {
-                LogService.ManualFormFillingStatus = $"手动填表更新成功！已生成并执行 {formExecution.StatementsExecuted} 条SQL指令。";
-                if (!_isDisposed)
-                {
-                    statusMessage = LogService.ManualFormFillingStatus;
-                    await RefreshDataAsync();
-                }
+                statusMessage = LogService.ManualFormFillingStatus;
+                await RefreshDataAsync();
             }
         }
         catch (Exception ex)
