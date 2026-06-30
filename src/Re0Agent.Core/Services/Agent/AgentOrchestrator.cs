@@ -329,6 +329,39 @@ public sealed class AgentOrchestrator(
     /// <para><paramref name="keepTurnCount"/>≥1 → 保留前 N 格（主角 + N-1 个 NPC），从第 N 格 NPC 起级联重跑。</para>
     /// 调用方（GameProgressService）负责先 restore 快照、并在重跑前后管理变体 cache。
     /// </summary>
+    /// <summary>
+    /// 仅重新生成 GM 开场，用于 AwaitingPlayer 阶段（主角尚未行动，只换开场叙事）。
+    /// 沿用原回合的编号/章节/起点存档/前序上下文，不跑任何角色格、不结算。
+    /// </summary>
+    public async Task<GameRound> RegenerateOpeningAsync(
+        GameRound baseRound,
+        Func<GameRound, Task>? onStepCompleted = null,
+        CancellationToken cancellationToken = default)
+    {
+        var profiles = await characterAgentService.LoadActiveProfilesAsync(cancellationToken);
+
+        var round = new GameRound
+        {
+            RoundIndex = baseRound.RoundIndex,
+            Chapter = baseRound.Chapter,
+            PlayerInput = baseRound.PlayerInput,
+            BaseSavePointId = baseRound.BaseSavePointId,
+            PreviousRounds = baseRound.PreviousRounds,
+            PendingProtagonistProfiles = profiles.Where(p => p.IsPlayerControlled).ToList()
+        };
+
+        round.GmOpening = await gmAgent.CreateOpeningAsync(round, profiles, slotList: "", cancellationToken);
+        round.Events.Add(round.GmOpening);
+
+        if (onStepCompleted is not null)
+        {
+            await onStepCompleted(round);
+        }
+        await ApplyDelayAsync(cancellationToken);
+
+        return round;
+    }
+
     public async Task<GameRound> ReRunRoundAsync(
         GameRound baseRound,
         int keepTurnCount,

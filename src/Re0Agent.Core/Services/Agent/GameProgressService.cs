@@ -249,11 +249,13 @@ public sealed class GameProgressService
                         Phase = protagonistActed ? RoundPhase.Interrupted : RoundPhase.AwaitingPlayer;
                     }
 
-                    // 已停止（Interrupted）的回合同样要能重 roll。_roundStartSnapshot 只在 BeginRoundAsync
-                    // （单例内存态）里抓，跨会话/重启后丢失，或本回合的提交发生在重启后（未走 BeginRound）时为 null，
-                    // 导致 CanReRoll 为 false、↻ 按钮消失。这里从持久化存档锚点重建最小 cache（已有有效内存
-                    // cache 时会早退不覆盖），使停止后 ↻ 重新可用。
-                    if (Phase == RoundPhase.Interrupted)
+                    // 已停止（Interrupted）或等待玩家（AwaitingPlayer）的回合同样要能重 roll。
+                    // _roundStartSnapshot 只在 BeginRoundAsync（单例内存态）里抓，跨会话/重启后丢失，
+                    // 或本回合的提交发生在重启后（未走 BeginRound）时为 null，导致 CanReRoll 为 false、
+                    // ↻ 按钮消失。这里从持久化存档锚点重建最小 cache（已有有效内存 cache 时会早退不覆盖），
+                    // 使重 roll 按钮在整个回合期间始终可用。AwaitingPlayer 阶段尚无 round_end 存档，
+                    // 最新存档即回合起点基线，重建出的变体 #0 = 当前开场。
+                    if (Phase is RoundPhase.Interrupted or RoundPhase.AwaitingPlayer)
                     {
                         await TryReconstructRerollCacheAsync(db, lastRound, cancellationToken);
                     }
@@ -544,6 +546,8 @@ public sealed class GameProgressService
                 }
 
                 // 2. 等待玩家输入 —— 主角将先行动，NPC 随后在提交阶段响应。
+                // 记录开场变体（#0），使 AwaitingPlayer 阶段就能 swipe（重 roll 开场）。
+                await CaptureVariantAsync(round, saveSystem, token);
                 Phase = RoundPhase.AwaitingPlayer;
             }
             catch (OperationCanceledException)
@@ -772,6 +776,82 @@ public sealed class GameProgressService
             DbSnapshot = snapshot
         });
         _activeVariantIndex = _currentRoundVariants.Count - 1;
+    }
+
+    /// <summary>
+    /// AwaitingPlayer 阶段重 roll：主角尚未行动，仅重新生成 GM 开场（不跑角色格、不结算）。
+    /// 先回档到回合起点快照清掉上一版开场写入，再重生成，并追加为新变体。
+    /// </summary>
+    public Task RegenerateOpeningAsync()
+    {
+        if (IsBusy || _roundStartSnapshot is null || Phase != RoundPhase.AwaitingPlayer) return Task.CompletedTask;
+
+        GameRound? baseRound;
+        lock (SessionRounds)
+        {
+            baseRound = SessionRounds.LastOrDefault();
+        }
+        if (baseRound is null) return Task.CompletedTask;
+
+        IsBusy = true;
+        Phase = RoundPhase.GmRunning;
+        ErrorMessage = null;
+        _roundCts = new CancellationTokenSource();
+        var token = _roundCts.Token;
+        NotifyStateChanged();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
+                var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+
+                // 回档到回合起点（开场前），避免重复叠加开场阶段对库的写入。
+                await saveSystem.RestoreGameStateAsync(_roundStartSnapshot!, token);
+
+                var round = await orchestrator.RegenerateOpeningAsync(baseRound, onStepCompleted: async (r) =>
+                {
+                    ActiveRound = r;
+                    lock (SessionRounds)
+                    {
+                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == r.RoundIndex);
+                        if (idx >= 0) SessionRounds[idx] = r;
+                    }
+                    NotifyStateChanged();
+                    await Task.Delay(10);
+                }, cancellationToken: token);
+
+                ActiveRound = round;
+                lock (SessionRounds)
+                {
+                    var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
+                    if (idx >= 0) SessionRounds[idx] = round;
+                }
+                await CaptureVariantAsync(round, saveSystem, token);
+                Phase = RoundPhase.AwaitingPlayer;
+                await AutoSaveChatSessionAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                ErrorMessage = "已中止重 roll。";
+                Phase = RoundPhase.AwaitingPlayer;
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = $"重 roll 开场失败: {ex.Message}";
+                Phase = RoundPhase.AwaitingPlayer;
+            }
+            finally
+            {
+                _roundCts?.Dispose();
+                _roundCts = null;
+                IsBusy = false;
+                NotifyStateChanged();
+            }
+        });
+        return Task.CompletedTask;
     }
 
     /// <summary>

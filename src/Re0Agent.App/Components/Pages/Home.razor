@@ -218,7 +218,7 @@ else
             @foreach (var round in visibleRounds)
             {
                 var isLatest = ReferenceEquals(round, latestRound);
-                var canSwipe = isLatest && Progress.CanReRoll && (round.CompletedAt is not null || phase == RoundPhase.Interrupted);
+                var canSwipe = isLatest && Progress.CanReRoll && (round.CompletedAt is not null || phase == RoundPhase.Interrupted || phase == RoundPhase.AwaitingPlayer);
 
                 <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
                     <span>─── 命运分歧点：@round.RoundIndex ───</span>
@@ -244,6 +244,10 @@ else
                                     @if (Progress.ActiveVariantIndex < Progress.CurrentVariantCount - 1)
                                     {
                                         <button type="button" title="下一个版本" class="swipe-btn" @onclick="() => SelectVariant(Progress.ActiveVariantIndex + 1)">&gt;</button>
+                                    }
+                                    else if (phase == RoundPhase.AwaitingPlayer)
+                                    {
+                                        <button type="button" title="重新生成开场" class="swipe-btn" @onclick="RegenerateOpening">&gt;</button>
                                     }
                                     else
                                     {
@@ -936,6 +940,11 @@ else
     private async Task SelectVariant(int index)
     {
         await Progress.SelectVariant(index);
+    }
+
+    private async Task RegenerateOpening()
+    {
+        await Progress.RegenerateOpeningAsync();
     }
 
     private async Task BranchFrom(GameRound round)
