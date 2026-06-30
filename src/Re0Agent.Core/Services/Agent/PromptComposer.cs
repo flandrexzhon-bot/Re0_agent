@@ -918,12 +918,15 @@ public sealed class PromptComposer
     /// <summary>
     /// 为指定分区构建填表提示词。<paramref name="allTables"/> 为 true 时退回单请求模式（保留全部表 Note），
     /// 供旧调用方（如手动重试）使用；分区模式下只下发该分区负责的表 Note 与初始化规则，缩短上下文、加速生成。
+    /// <paramref name="ragContext"/> 为按本回合正文检索到的世界书设定，填入 &lt;背景设定&gt;，
+    /// 让填表 Agent 依据「爱蜜莉雅」等已命中设定写表，而非凭空臆造。
     /// </summary>
     public string ComposeFormAgent(
         GameRound round,
         string databaseSummary,
         FormTablePartition partition,
-        bool allTables = false)
+        bool allTables = false,
+        RagContext? ragContext = null)
     {
         var turns = string.Join('\n', round.CharacterTurns.Select(turn =>
             $"{turn.OrderNumber}. {turn.CharacterName}: skipped={turn.Skipped}; action={turn.ActionText}; judgement={turn.GmJudgement}; dice={FormatDiceResult(turn.DiceResult)}; response={turn.ResultResponse}"));
@@ -942,6 +945,10 @@ public sealed class PromptComposer
             : string.Join("\n\n", NotesForPartition(partition));
 
         var initSection = BuildInitSection(partition, allTables);
+
+        var backgroundSection = ragContext is null || string.IsNullOrWhiteSpace(ragContext.Content)
+            ? "（本回合正文未命中额外世界书设定，按已有数据与正文如实填表，禁止臆造未提及的人物/地点/势力设定。）"
+            : ragContext.Content;
 
         return $$"""
         你是【填表Agent】，负责根据用户提供的资料对表格数据执行增删改操作。
@@ -999,6 +1006,10 @@ public sealed class PromptComposer
 
         {{tableNotes}}
         {{initSection}}
+        <背景设定>
+        {{backgroundSection}}
+        </背景设定>
+
         <当前表格数据>
         {{databaseSummary}}
         </当前表格数据>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Llm;
+using Re0Agent.Core.Services.Settings;
 
 namespace Re0Agent.Core.Services.Agent;
 
@@ -11,7 +12,8 @@ public sealed partial class FormAgent(
     Re0AgentDbContext dbContext,
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
-    ILlmClient llmClient)
+    ILlmClient llmClient,
+    IRagService ragService)
 {
     /// <summary>单个分区请求的最大重试次数（仅重试报错/空输出的那个分区，不波及其余分区）。</summary>
     private const int MaxPartitionRetries = 3;
@@ -44,6 +46,9 @@ public sealed partial class FormAgent(
         var config = await configResolver.FindConfigAsync("Form", "填表Agent", cancellationToken);
         // 数据库概览只算一次，4 个分区请求共用，避免重复查询。
         var databaseSummary = await CreateDatabaseSummaryAsync(cancellationToken);
+        // 世界书检索也只算一次：用本回合正文（开场+各角色行动+玩家输入）作关键词，
+        // 命中如「爱蜜莉雅」等设定条目，喂给填表 Agent 作 <背景设定>，避免它凭空臆造人物/地点设定。
+        var ragContext = await QueryWorldBookAsync(round, cancellationToken);
 
         var partitions = new[]
         {
@@ -54,15 +59,47 @@ public sealed partial class FormAgent(
         };
 
         var tasks = partitions
-            .Select(partition => GeneratePartitionSqlAsync(round, databaseSummary, config, partition, cancellationToken))
+            .Select(partition => GeneratePartitionSqlAsync(round, databaseSummary, ragContext, config, partition, cancellationToken))
             .ToArray();
 
         return await Task.WhenAll(tasks);
     }
 
+    /// <summary>
+    /// 用本回合正文构造关键词检索世界书。不限制分类（AllowedCategories=null），
+    /// 让人物/地点/势力等条目都能按关键词命中——正文里提到「爱蜜莉雅」就会拉到她的设定。
+    /// </summary>
+    private async Task<RagContext> QueryWorldBookAsync(GameRound round, CancellationToken cancellationToken)
+    {
+        var turnText = string.Join('\n', round.CharacterTurns.Select(turn =>
+            $"{turn.CharacterName} {turn.ActionText} {turn.GmJudgement} {turn.ResultResponse}"));
+
+        var queryText = string.Join('\n', new[]
+        {
+            round.PlayerInput,
+            round.GmOpening,
+            turnText
+        }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+        if (string.IsNullOrWhiteSpace(queryText))
+        {
+            return new RagContext();
+        }
+
+        return await ragService.QueryAsync(
+            new RagQuery
+            {
+                Text = queryText,
+                Chapter = round.Chapter,
+                MaxNonConstantEntries = 12
+            },
+            cancellationToken);
+    }
+
     private async Task<PartitionResult> GeneratePartitionSqlAsync(
         GameRound round,
         string databaseSummary,
+        RagContext ragContext,
         Re0Agent.Core.Entities.AgentConfig? config,
         FormTablePartition partition,
         CancellationToken cancellationToken)
@@ -82,7 +119,7 @@ public sealed partial class FormAgent(
                         Messages =
                         [
                             LlmMessage.System(config?.SystemPrompt ?? "你是填表Agent，按 <tableEdit> 格式输出 SQL。"),
-                            LlmMessage.User(promptComposer.ComposeFormAgent(round, databaseSummary, partition))
+                            LlmMessage.User(promptComposer.ComposeFormAgent(round, databaseSummary, partition, ragContext: ragContext))
                         ]
                     },
                     cancellationToken);
