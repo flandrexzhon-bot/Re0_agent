@@ -813,7 +813,9 @@
 
             // 四块独立填表：每个分区各自生成 → 各自执行落库，失败的分区自动重新生成并重试
             // （最多 3 次），成功的分区直接写入、不被其它分区拖累。
-            var executions = await FormAgent.FillAndExecuteAsync(latestRound, CancellationToken.None);
+            // 注意：内部会先把状态表回档到本回合起点基线（上一回合末态）再填，
+            // 避免在本回合已填好的表上再叠加一次本回合的变化。
+            var executions = await Progress.ManualRefillLatestRoundAsync(CancellationToken.None);
 
             var totalExecuted = executions.Where(e => e.ErrorMessage is null).Sum(e => e.StatementsExecuted);
             var failed = executions.Where(e => e.ErrorMessage is not null).ToList();

@@ -896,6 +896,60 @@ public sealed class GameProgressService
     }
 
     /// <summary>
+    /// 手动重新填表（【现世处境】里的「填表更新」）。
+    /// <para><strong>关键：必须先把状态表回档到本回合的起点基线（= 上一回合结束时的状态），再跑填表。</strong>
+    /// 否则会在本回合<em>已填好</em>的表上再叠加一次本回合的变化（数值翻倍、记录重复）。</para>
+    /// 基线来源：本回合内存起点快照（BeginRound 抓的 _roundStartSnapshot）优先；
+    /// 跨会话/重启后内存丢失时回退到本回合 BaseSavePointId 指向的存档（上一回合末）。
+    /// 二者都拿不到（如首回合无上一回合基线）时不回档，退化为「就地填表」并提示。
+    /// 填完后刷新当前激活变体的末态快照，使 swipe 切回此版时数据一致。
+    /// </summary>
+    public async Task<IReadOnlyList<FormAgent.PartitionExecution>> ManualRefillLatestRoundAsync(CancellationToken cancellationToken = default)
+    {
+        GameRound? latest;
+        lock (SessionRounds)
+        {
+            latest = SessionRounds.LastOrDefault();
+        }
+        if (latest is null)
+        {
+            throw new InvalidOperationException("当前会话暂无任何回合，请先开启冒险并完成首轮。");
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var formAgent = scope.ServiceProvider.GetRequiredService<FormAgent>();
+        var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
+        var db = scope.ServiceProvider.GetRequiredService<Re0AgentDbContext>();
+
+        // 1. 求本回合起点基线（上一回合末态），并回档到它——这是修复「在已填好的表上再填一次」的核心。
+        var baseline = _roundStartSnapshot;
+        if (baseline is null && latest.BaseSavePointId is int baseId)
+        {
+            baseline = await db.SavePoints.AsNoTracking()
+                .FirstOrDefaultAsync(sp => sp.SaveId == baseId, cancellationToken);
+        }
+        if (baseline is not null)
+        {
+            await saveSystem.RestoreGameStateAsync(baseline, cancellationToken);
+        }
+
+        // 2. 在干净的起点基线上跑填表（4 分区独立生成+执行+重试）。
+        var executions = await formAgent.FillAndExecuteAsync(latest, cancellationToken);
+
+        // 3. 刷新当前激活变体的末态快照，使 swipe 切回此版时与库一致。
+        var set = GetOrCreateSet(latest.RoundIndex);
+        if (set.ActiveIndex >= 0 && set.ActiveIndex < set.Variants.Count)
+        {
+            set.Variants[set.ActiveIndex].DbSnapshot = await saveSystem.CaptureInMemorySnapshotAsync(cancellationToken);
+        }
+
+        await LoadDatabaseStateAsync(cancellationToken);
+        await AutoSaveChatSessionAsync(cancellationToken);
+        NotifyStateChanged();
+        return executions;
+    }
+
+    /// <summary>
     /// AwaitingPlayer 阶段重 roll：主角尚未行动，仅重新生成 GM 开场（不跑角色格、不结算）。
     /// 先回档到回合起点快照清掉上一版开场写入，再重生成，并追加为新变体。
     /// </summary>
