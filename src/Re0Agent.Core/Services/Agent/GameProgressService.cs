@@ -979,26 +979,52 @@ public sealed class GameProgressService
                 // 重 roll 中途停止：把已生成的部分内容存为<strong>新变体</strong>（如 2/2），
                 // 原版变体（1/1）仍在 _currentRoundVariants 里，用户可左右 swipe 切换；
                 // 二者均为纯内存变体，开下一大回合时由 BeginRoundAsync 整批清除。
-                // 不再像旧逻辑那样回退丢弃——那会让停止前生成的内容凭空消失。
-                ErrorMessage = "已中止重 roll，已生成内容已存为新变体。";
+                //
+                // 关键：先把部分内容打包成新变体（含其独立 DB 末态快照），**成功之后**才让它成为
+                // 持久化的当前回合。顺序若反了——先把半成品写进 SessionRounds、再抓变体——
+                // 一旦抓变体抛错（停止瞬间 DB 正在回滚），异常被吞，却已留下孤立半成品回合，
+                // LoadDatabaseState 据此判成 Interrupted，于是出现「1/1 + 命运暂歇」错配：
+                // 既没生成 2/2，下方却挂着「继续」。
                 var partial = ActiveRound;
+                bool capturedAsVariant = false;
                 if (partial is not null)
                 {
-                    lock (SessionRounds)
-                    {
-                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == partial.RoundIndex);
-                        if (idx >= 0) SessionRounds[idx] = partial;
-                    }
                     try
                     {
                         using var captureScope = _scopeFactory.CreateScope();
                         var captureSave = captureScope.ServiceProvider.GetRequiredService<SaveSystem>();
                         await CaptureVariantAsync(partial, captureSave, CancellationToken.None);
+                        capturedAsVariant = true;
                     }
-                    catch { /* 抓变体失败不致命 */ }
+                    catch { /* 抓变体失败 → 走下面回退，绝不留孤立半成品回合 */ }
                 }
-                // Phase 交给 LoadDatabaseStateAsync 按持久化内容的完成度重新判定
-                // （半成品+主角已行动→Interrupted 可「继续」；仅开场→AwaitingPlayer；已结算→Idle）。
+
+                if (capturedAsVariant && partial is not null)
+                {
+                    // 成功存为新变体：持久化该半成品回合，Phase 交给 LoadDatabaseStateAsync 按完成度判定
+                    // （主角已行动→Interrupted 可「继续」；仅开场→AwaitingPlayer）。
+                    lock (SessionRounds)
+                    {
+                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == partial.RoundIndex);
+                        if (idx >= 0) SessionRounds[idx] = partial;
+                    }
+                    ErrorMessage = "已中止重 roll，已生成内容已存为新变体。";
+                }
+                else
+                {
+                    // 没有可保存的部分内容（停止得太早）或抓变体失败：回退到当前激活变体
+                    // （重 roll 前的完整版 1/1），恢复其叙事 + DB 末态 + CompletedAt，
+                    // 避免 SessionRounds 留下孤立半成品回合导致「1/1 + 命运暂歇」错配。
+                    try
+                    {
+                        using var restoreScope = _scopeFactory.CreateScope();
+                        var restoreSave = restoreScope.ServiceProvider.GetRequiredService<SaveSystem>();
+                        await RestoreActiveVariantAsync(restoreSave);
+                    }
+                    catch { /* 回退失败不致命 */ }
+                    ErrorMessage = "已中止重 roll。";
+                }
+
                 Phase = RoundPhase.Idle;
                 ActiveRound = null;
                 await AutoSaveChatSessionAsync();
