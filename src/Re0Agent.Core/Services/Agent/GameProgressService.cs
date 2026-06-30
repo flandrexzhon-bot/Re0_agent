@@ -424,6 +424,7 @@ public sealed class GameProgressService
                 GmOpening = lastRound.GmOpening,
                 Turns = lastRound.CharacterTurns.ToList(),
                 Events = lastRound.Events.ToList(),
+                CompletedAt = lastRound.CompletedAt,
                 DbSnapshot = endSnapshot
             });
             _activeVariantIndex = 0;
@@ -975,17 +976,29 @@ public sealed class GameProgressService
             }
             catch (OperationCanceledException)
             {
-                // 重 roll 中途停止：SessionRounds 里留的是半成品回合（CompletedAt=null），
-                // 若直接 Idle 会让 canSwipe 失效、↻ 消失。回退到当前激活变体（重 roll 前的完整版），
-                // 恢复其叙事 + DB 末态，使该回合仍是「已结算可重 roll」状态。
-                ErrorMessage = "已中止重 roll。";
-                try
+                // 重 roll 中途停止：把已生成的部分内容存为<strong>新变体</strong>（如 2/2），
+                // 原版变体（1/1）仍在 _currentRoundVariants 里，用户可左右 swipe 切换；
+                // 二者均为纯内存变体，开下一大回合时由 BeginRoundAsync 整批清除。
+                // 不再像旧逻辑那样回退丢弃——那会让停止前生成的内容凭空消失。
+                ErrorMessage = "已中止重 roll，已生成内容已存为新变体。";
+                var partial = ActiveRound;
+                if (partial is not null)
                 {
-                    using var restoreScope = _scopeFactory.CreateScope();
-                    var restoreSave = restoreScope.ServiceProvider.GetRequiredService<SaveSystem>();
-                    await RestoreActiveVariantAsync(restoreSave);
+                    lock (SessionRounds)
+                    {
+                        var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == partial.RoundIndex);
+                        if (idx >= 0) SessionRounds[idx] = partial;
+                    }
+                    try
+                    {
+                        using var captureScope = _scopeFactory.CreateScope();
+                        var captureSave = captureScope.ServiceProvider.GetRequiredService<SaveSystem>();
+                        await CaptureVariantAsync(partial, captureSave, CancellationToken.None);
+                    }
+                    catch { /* 抓变体失败不致命 */ }
                 }
-                catch { /* 回退失败不致命 */ }
+                // Phase 交给 LoadDatabaseStateAsync 按持久化内容的完成度重新判定
+                // （半成品+主角已行动→Interrupted 可「继续」；仅开场→AwaitingPlayer；已结算→Idle）。
                 Phase = RoundPhase.Idle;
                 ActiveRound = null;
                 await AutoSaveChatSessionAsync();
