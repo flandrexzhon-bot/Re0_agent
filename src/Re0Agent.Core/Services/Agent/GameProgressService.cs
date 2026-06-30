@@ -248,6 +248,15 @@ public sealed class GameProgressService
                         bool protagonistActed = lastRound.CharacterTurns.Any(t => t.IsPlayerControlled);
                         Phase = protagonistActed ? RoundPhase.Interrupted : RoundPhase.AwaitingPlayer;
                     }
+
+                    // 已停止（Interrupted）的回合同样要能重 roll。_roundStartSnapshot 只在 BeginRoundAsync
+                    // （单例内存态）里抓，跨会话/重启后丢失，或本回合的提交发生在重启后（未走 BeginRound）时为 null，
+                    // 导致 CanReRoll 为 false、↻ 按钮消失。这里从持久化存档锚点重建最小 cache（已有有效内存
+                    // cache 时会早退不覆盖），使停止后 ↻ 重新可用。
+                    if (Phase == RoundPhase.Interrupted)
+                    {
+                        await TryReconstructRerollCacheAsync(db, lastRound, cancellationToken);
+                    }
                 }
                 else
                 {
