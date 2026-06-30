@@ -126,6 +126,14 @@ public static class DatabaseInitializer
                 "ALTER TABLE chat_sessions ADD COLUMN parent_session_id INTEGER;",
                 cancellationToken);
         }
+
+        // 各回合重 roll 变体集合：老库无此列时补加（默认空字典）。
+        if (!existingColumns.Contains("round_variants_snapshot"))
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE chat_sessions ADD COLUMN round_variants_snapshot TEXT NOT NULL DEFAULT '{}';",
+                cancellationToken);
+        }
     }
 
     private static async Task EnsureCharacterStatColumnsAsync(

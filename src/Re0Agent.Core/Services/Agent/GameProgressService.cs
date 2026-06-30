@@ -32,14 +32,56 @@ public sealed class GameProgressService
 
     private CancellationTokenSource? _roundCts;
 
-    // ── 重 roll / 变体 cache（纯内存，仅当前回合存活；开新大回合时整批释放）──
-    /// <summary>当前回合起点（GM 开场前）的 DB 快照。整局重跑 restore 到此。</summary>
-    private SavePoint? _roundStartSnapshot;
-    /// <summary>当前回合「每格开始前」的 DB 快照列表（含主角格）。逐格重 roll restore 到对应项。</summary>
-    private readonly List<SavePoint> _preTurnSnapshots = new();
-    /// <summary>当前回合的整回合变体列表（#0 为原版）。</summary>
-    private readonly List<RoundVariant> _currentRoundVariants = new();
-    private int _activeVariantIndex;
+    // ── 重 roll / 变体存储（按 RoundIndex 持久化；随会话存进 round_variants_snapshot）──
+    // 每个回合一份 RoundVariantSet，长期保留——开新大回合不再清除旧回合的 roll 记录。
+    // 前端只对「最新回合」显示 swipe/重 roll（见 Home.razor 的 isLatest gating），
+    // fork 回到某回合后该回合成为最新回合，其变体随之重现。
+    private readonly Dictionary<string, RoundVariantSet> _variantsByRound = new();
+
+    /// <summary>最新回合的 RoundIndex（变体 UI 与重 roll 操作都作用在它上面）。空会话时为 null。</summary>
+    private string? LatestRoundKey
+    {
+        get
+        {
+            lock (SessionRounds)
+            {
+                return SessionRounds.Count > 0 ? SessionRounds[^1].RoundIndex : null;
+            }
+        }
+    }
+
+    /// <summary>取（必要时新建）某回合的变体集合。key 为 null 时返回一个游离集合（不入字典）。</summary>
+    private RoundVariantSet GetOrCreateSet(string? roundKey)
+    {
+        if (roundKey is null)
+        {
+            return new RoundVariantSet();
+        }
+        if (!_variantsByRound.TryGetValue(roundKey, out var set))
+        {
+            set = new RoundVariantSet();
+            _variantsByRound[roundKey] = set;
+        }
+        return set;
+    }
+
+    /// <summary>最新回合的变体集合（重 roll / swipe 的工作对象）。</summary>
+    private RoundVariantSet CurrentSet => GetOrCreateSet(LatestRoundKey);
+
+    // 以下 4 个「工作字段」都映射到最新回合的 RoundVariantSet，使旧有读写逻辑无需大改，
+    // 且全部经由 _variantsByRound 自动随会话持久化。
+    private List<RoundVariant> _currentRoundVariants => CurrentSet.Variants;
+    private List<SavePoint> _preTurnSnapshots => CurrentSet.PreTurnSnapshots;
+    private SavePoint? _roundStartSnapshot
+    {
+        get => CurrentSet.RoundStartSnapshot;
+        set => CurrentSet.RoundStartSnapshot = value;
+    }
+    private int _activeVariantIndex
+    {
+        get => CurrentSet.ActiveIndex;
+        set => CurrentSet.ActiveIndex = value;
+    }
 
     /// <summary>当前回合已记录的变体数量（含原版）。</summary>
     public int CurrentVariantCount => _currentRoundVariants.Count;
@@ -228,6 +270,11 @@ public sealed class GameProgressService
                 {
                     // ignore
                 }
+
+                // 还原各回合的重 roll 变体（持久化的 round_variants_snapshot）。
+                // 有持久化数据时，下面的 TryReconstructRerollCacheAsync 会因「最新回合已有变体」早退，
+                // 不再用存档锚点猜测；仅在持久化缺失（老库/空）时才走重建兜底。
+                HydrateVariants(active.RoundVariantsSnapshot);
             }
 
             HasProtagonist = await db.ProtagonistInfo.AsNoTracking().AnyAsync(cancellationToken);
@@ -382,7 +429,7 @@ public sealed class GameProgressService
     /// </summary>
     private async Task TryReconstructRerollCacheAsync(Re0AgentDbContext db, GameRound lastRound, CancellationToken cancellationToken)
     {
-        // 已有内存 cache（本会话内刚跑过）则不覆盖。
+        // 最新回合已有变体（本会话内刚跑过，或已从持久化 round_variants_snapshot 还原）则不覆盖。
         if (_currentRoundVariants.Count > 0 && _roundStartSnapshot is not null)
         {
             return;
@@ -477,11 +524,41 @@ public sealed class GameProgressService
         try
         {
             var json = JsonSerializer.Serialize(SessionRounds, JsonOptions);
-            await sessionService.SaveActiveSessionStateAsync(json, cancellationToken);
+            var variantsJson = SerializeVariants();
+            await sessionService.SaveActiveSessionStateAsync(json, variantsJson, cancellationToken);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Autosave error: {ex.Message}");
+        }
+    }
+
+    /// <summary>序列化「各回合变体」字典，供随会话持久化。</summary>
+    private string SerializeVariants()
+        => JsonSerializer.Serialize(_variantsByRound, JsonOptions);
+
+    /// <summary>从会话 JSON 还原「各回合变体」字典（替换内存内容）。失败则清空，留兜底重建。</summary>
+    private void HydrateVariants(string? roundVariantsJson)
+    {
+        _variantsByRound.Clear();
+        if (string.IsNullOrWhiteSpace(roundVariantsJson) || roundVariantsJson == "{}")
+        {
+            return;
+        }
+        try
+        {
+            var loaded = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(roundVariantsJson, JsonOptions);
+            if (loaded is not null)
+            {
+                foreach (var (key, set) in loaded)
+                {
+                    _variantsByRound[key] = set;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            _variantsByRound.Clear();
         }
     }
 
@@ -504,11 +581,10 @@ public sealed class GameProgressService
                 var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
                 var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
 
-                // 释放上一回合的重 roll cache，并抓本回合起点快照（GM 开场前）。
-                _currentRoundVariants.Clear();
-                _preTurnSnapshots.Clear();
-                _activeVariantIndex = 0;
-                _roundStartSnapshot = await saveSystem.CaptureInMemorySnapshotAsync(token);
+                // 抓本回合起点快照（GM 开场前）。注意：此刻新回合尚未加入 SessionRounds，
+                // 故先存进局部变量，待 round 创建出来（拿到 RoundIndex）后再写入它自己的变体集合，
+                // 避免误写到上一回合的集合（旧逻辑那时只有一份全局 cache，现已按回合存）。
+                var startSnapshot = await saveSystem.CaptureInMemorySnapshotAsync(token);
 
                 // 1. GM Opening
                 IReadOnlyList<GameRound> prevRounds;
@@ -536,6 +612,14 @@ public sealed class GameProgressService
                     if (idx >= 0) SessionRounds[idx] = round;
                     else SessionRounds.Add(round);
                 }
+
+                // 为新回合建立独立的变体集合并填入起点快照（旧回合集合原样保留，不再清空）。
+                var newSet = GetOrCreateSet(round.RoundIndex);
+                newSet.Variants.Clear();
+                newSet.PreTurnSnapshots.Clear();
+                newSet.ActiveIndex = 0;
+                newSet.RoundStartSnapshot = startSnapshot;
+
                 await AutoSaveChatSessionAsync();
                 IsPrologueStage = false;
                 NotifyStateChanged();
@@ -599,9 +683,9 @@ public sealed class GameProgressService
             var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
             // AwaitingPlayer 阶段为「重 roll 开场」记录过开场专属变体（未填表/未结算）。
-            // 玩家一旦落笔，这些只含开场的旧变体不再是本回合的有效备选——清掉，
-            // 让下面 CaptureVariantAsync 打包的「完整结算版」成为唯一的 1/1，
-            // 而非沦为 2/2、把没填表的开场版留作 1/1。
+            // 玩家一旦落笔，这些只含开场、无主角行动的旧变体不再是本回合的有效 swipe 备选——
+            // 清掉（仅清「本最新回合」那一份集合，旧回合的 roll 记录在 _variantsByRound 里原样保留），
+            // 让下面 CaptureVariantAsync 打包的完整结算版成为本回合权威的 1/1。
             _currentRoundVariants.Clear();
             _activeVariantIndex = 0;
             try
@@ -681,7 +765,8 @@ public sealed class GameProgressService
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
             try
             {
-                // 停止时已抓过变体 #0；恢复要继续写库，先丢弃它，跑完后重新打包为权威 #0。
+                // 停止时已抓过变体 #0；恢复要继续写库，先丢弃本回合这一份（仅清最新回合的集合，
+                // 旧回合 roll 记录不受影响），跑完后重新打包为权威 #0。
                 _currentRoundVariants.Clear();
                 _activeVariantIndex = 0;
 
@@ -771,11 +856,12 @@ public sealed class GameProgressService
         }
     }
 
-    /// <summary>把一个已结算回合的内容 + 当前 DB 末态快照打包成变体，追加到当前回合变体列表并设为激活。</summary>
+    /// <summary>把一个已结算回合的内容 + 当前 DB 末态快照打包成变体，追加到<strong>该回合</strong>的变体列表并设为激活。</summary>
     private async Task CaptureVariantAsync(GameRound round, SaveSystem saveSystem, CancellationToken token)
     {
         var snapshot = await saveSystem.CaptureInMemorySnapshotAsync(token);
-        _currentRoundVariants.Add(new RoundVariant
+        var set = GetOrCreateSet(round.RoundIndex);
+        set.Variants.Add(new RoundVariant
         {
             GmOpening = round.GmOpening,
             Turns = round.CharacterTurns.ToList(),
@@ -783,7 +869,7 @@ public sealed class GameProgressService
             CompletedAt = round.CompletedAt,
             DbSnapshot = snapshot
         });
-        _activeVariantIndex = _currentRoundVariants.Count - 1;
+        set.ActiveIndex = set.Variants.Count - 1;
     }
 
     /// <summary>把当前激活变体的叙事 + DB 末态回写到会话（用于重 roll 中止/失败后回退到上一个完整版）。</summary>
@@ -1144,19 +1230,16 @@ public sealed class GameProgressService
             // 2. 先把当前会话落盘，保证分支读到的源快照是最新的。
             await AutoSaveChatSessionAsync();
 
-            // 3. 克隆为新分支会话。
+            // 3. 克隆为新分支会话；只复制保留回合（≤ fork 回合）的变体集合到分支。
             var sourceName = ChatSessions.FirstOrDefault(s => s.SessionId == ActiveSessionId)?.SessionName ?? "会话";
             var truncatedJson = JsonSerializer.Serialize(truncated, JsonOptions);
+            var keptRoundIndices = truncated.Select(r => r.RoundIndex).ToList();
             var newId = await sessionService.BranchSessionAsync(
-                ActiveSessionId, truncatedJson, endSavePointId, $"{sourceName} · 分支@{round.RoundIndex}");
+                ActiveSessionId, truncatedJson, endSavePointId, $"{sourceName} · 分支@{round.RoundIndex}", keptRoundIndices);
 
-            // 4. fork 切走后当前会话的 swipe/reroll cache 失效。
-            _currentRoundVariants.Clear();
-            _preTurnSnapshots.Clear();
-            _roundStartSnapshot = null;
-            _activeVariantIndex = 0;
-
-            // 5. 切入新分支会话（整库换血 + 载入截断后的回合）。
+            // 4. 切入新分支会话（整库换血 + 载入截断后的回合 + 还原分支的变体）。
+            //    不在此清空内存变体——SwitchSessionAsync 会先把<strong>源会话</strong>连同其全部变体落盘，
+            //    清了会导致父会话丢失 roll 记录；切换后会用分支自己的持久化变体覆盖内存。
             await SwitchSessionAsync(newId);
         }
         catch (Exception ex)
@@ -1181,7 +1264,8 @@ public sealed class GameProgressService
             var sessionService = scope.ServiceProvider.GetRequiredService<ChatSessionService>();
 
             var currentJson = JsonSerializer.Serialize(SessionRounds, JsonOptions);
-            var targetJson = await sessionService.SwitchSessionAsync(targetSessionId, currentJson);
+            var currentVariantsJson = SerializeVariants();
+            var (targetJson, targetVariantsJson) = await sessionService.SwitchSessionAsync(targetSessionId, currentJson, currentVariantsJson);
 
             SessionRounds.Clear();
             var rounds = JsonSerializer.Deserialize<List<GameRound>>(targetJson, JsonOptions);
@@ -1189,6 +1273,8 @@ public sealed class GameProgressService
             {
                 SessionRounds.AddRange(rounds);
             }
+            // 换入目标会话的变体（LoadDatabaseStateAsync 还会再 hydrate 一次，这里先放好以防其早退路径）。
+            HydrateVariants(targetVariantsJson);
             ActiveRound = null;
             Phase = RoundPhase.Idle;
             IsPrologueStage = false;

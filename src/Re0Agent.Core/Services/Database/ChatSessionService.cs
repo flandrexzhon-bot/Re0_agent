@@ -69,6 +69,13 @@ public sealed class ChatSessionService(
     }
 
     public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, CancellationToken cancellationToken = default)
+        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson: null, cancellationToken);
+
+    /// <summary>
+    /// 落盘当前活动会话：回合明细 + 13 表快照，并可选地带上各回合重 roll 变体集合
+    /// （<paramref name="roundVariantsJson"/> 为 null 时保留库中原值不动）。
+    /// </summary>
+    public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, string? roundVariantsJson, CancellationToken cancellationToken = default)
     {
         var activeSession = await GetActiveSessionAsync(cancellationToken);
         if (activeSession is null)
@@ -77,16 +84,20 @@ public sealed class ChatSessionService(
         }
 
         activeSession.DetailedRoundsSnapshot = detailedRoundsJson;
+        if (roundVariantsJson is not null)
+        {
+            activeSession.RoundVariantsSnapshot = roundVariantsJson;
+        }
         await CaptureSnapshotsAsync(activeSession, cancellationToken);
 
         dbContext.Entry(activeSession).State = EntityState.Modified;
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<string> SwitchSessionAsync(int targetSessionId, string currentDetailedRoundsJson, CancellationToken cancellationToken = default)
+    public async Task<(string DetailedRoundsJson, string RoundVariantsJson)> SwitchSessionAsync(int targetSessionId, string currentDetailedRoundsJson, string? currentRoundVariantsJson, CancellationToken cancellationToken = default)
     {
         // 1. Save current active session
-        await SaveActiveSessionStateAsync(currentDetailedRoundsJson, cancellationToken);
+        await SaveActiveSessionStateAsync(currentDetailedRoundsJson, currentRoundVariantsJson, cancellationToken);
 
         // 2. Perform switch
         var transaction = dbContext.Database.CurrentTransaction is null
@@ -121,7 +132,7 @@ public sealed class ChatSessionService(
                 await transaction.CommitAsync(cancellationToken);
             }
 
-            return targetSession.DetailedRoundsSnapshot;
+            return (targetSession.DetailedRoundsSnapshot, targetSession.RoundVariantsSnapshot);
         }
         catch
         {
@@ -210,6 +221,7 @@ public sealed class ChatSessionService(
         string truncatedRoundsJson,
         int? endSavePointId,
         string newName,
+        IReadOnlyCollection<string>? keptRoundIndices,
         CancellationToken cancellationToken = default)
     {
         await EnsureDefaultSessionAsync(cancellationToken);
@@ -226,7 +238,10 @@ public sealed class ChatSessionService(
             CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm"),
             DetailedRoundsSnapshot = string.IsNullOrWhiteSpace(truncatedRoundsJson) ? "[]" : truncatedRoundsJson,
             // death_return_log 原样复制（循环纪事是跨分支的元历史）。
-            DeathReturnLogSnapshot = source.DeathReturnLogSnapshot
+            DeathReturnLogSnapshot = source.DeathReturnLogSnapshot,
+            // 重 roll 变体：仅复制保留回合（RoundIndex ≤ fork 回合）的变体集合，
+            // 使分支保留这些回合的历史 roll；fork 回合成为分支最新回合后其变体自动重现。
+            RoundVariantsSnapshot = FilterRoundVariants(source.RoundVariantsSnapshot, keptRoundIndices)
         };
 
         // 选定 fork 回合结束时的存档：决定 9 表 + chronicle + 记忆的截断状态。
@@ -280,6 +295,40 @@ public sealed class ChatSessionService(
         => string.IsNullOrWhiteSpace(json)
             ? []
             : JsonSerializer.Deserialize<List<T>>(json, JsonOptions) ?? [];
+
+    /// <summary>
+    /// 从源会话的「各回合变体」JSON（Dictionary&lt;RoundIndex, RoundVariantSet&gt;）里，
+    /// 只保留 <paramref name="keptRoundIndices"/> 指定的回合条目。null 表示全部保留。
+    /// 解析失败或为空时回退到 "{}"。
+    /// </summary>
+    private static string FilterRoundVariants(string sourceJson, IReadOnlyCollection<string>? keptRoundIndices)
+    {
+        if (string.IsNullOrWhiteSpace(sourceJson) || sourceJson == "{}")
+        {
+            return "{}";
+        }
+        if (keptRoundIndices is null)
+        {
+            return sourceJson;
+        }
+
+        try
+        {
+            var all = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(sourceJson, JsonOptions);
+            if (all is null || all.Count == 0)
+            {
+                return "{}";
+            }
+            var keep = new HashSet<string>(keptRoundIndices, StringComparer.Ordinal);
+            var filtered = all.Where(kvp => keep.Contains(kvp.Key))
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            return JsonSerializer.Serialize(filtered, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return "{}";
+        }
+    }
 
     public async Task DeleteSessionAsync(int sessionId, CancellationToken cancellationToken = default)
     {

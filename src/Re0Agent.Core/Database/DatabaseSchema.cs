@@ -258,7 +258,8 @@ public static class DatabaseSchema
           character_memory_snapshot TEXT NOT NULL DEFAULT '[]',
           death_return_log_snapshot TEXT NOT NULL DEFAULT '[]',
           save_points_snapshot TEXT NOT NULL DEFAULT '[]',
-          detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]'
+          detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]',
+          round_variants_snapshot TEXT NOT NULL DEFAULT '{{}}'
         );
         """
     ];

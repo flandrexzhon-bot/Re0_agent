@@ -326,7 +326,7 @@ public sealed class Phase4SaveAndTemplateTests
             var endSaveId = rounds[2].BaseSavePointId; // R0003.Base = R0002 末存档
             var truncatedJson = JsonSerializer.Serialize(truncated, WebJson);
 
-            var newId = await sessionService.BranchSessionAsync(source.SessionId, truncatedJson, endSaveId, "分支@R0002");
+            var newId = await sessionService.BranchSessionAsync(source.SessionId, truncatedJson, endSaveId, "分支@R0002", keptRoundIndices: null);
             context.ChangeTracker.Clear();
 
             var branch = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.SessionId == newId);
@@ -362,6 +362,133 @@ public sealed class Phase4SaveAndTemplateTests
     {
         return new ChatSessionService(context, CreateTemplateService(context, [50]));
     }
+
+    [Fact]
+    public async Task SaveActiveSessionPersistsRoundVariantsAcrossReload()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await SeedGameStateAsync(context);
+            var sessionService = CreateSessionService(context);
+            await sessionService.EnsureDefaultSessionAsync();
+
+            // R0001 有 2 个变体（模拟重 roll 出 1/2、2/2）。
+            var variants = new Dictionary<string, RoundVariantSet>
+            {
+                ["R0001"] = new RoundVariantSet
+                {
+                    ActiveIndex = 1,
+                    RoundStartSnapshot = MakeSavePoint(1),
+                    Variants =
+                    [
+                        new RoundVariant { GmOpening = "开场A", CompletedAt = DateTimeOffset.UtcNow, DbSnapshot = MakeSavePoint(2) },
+                        new RoundVariant { GmOpening = "开场B", CompletedAt = DateTimeOffset.UtcNow, DbSnapshot = MakeSavePoint(3) }
+                    ]
+                }
+            };
+            var roundsJson = JsonSerializer.Serialize(new List<GameRound> { new() { RoundIndex = "R0001" } }, WebJson);
+            var variantsJson = JsonSerializer.Serialize(variants, WebJson);
+
+            await sessionService.SaveActiveSessionStateAsync(roundsJson, variantsJson);
+            context.ChangeTracker.Clear();
+
+            // 重新读会话 → 变体列仍在，反序列化后内容对得上。
+            var reloaded = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.IsActive == 1);
+            var loaded = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(reloaded.RoundVariantsSnapshot, WebJson)!;
+            Assert.True(loaded.ContainsKey("R0001"));
+            Assert.Equal(2, loaded["R0001"].Variants.Count);
+            Assert.Equal(1, loaded["R0001"].ActiveIndex);
+            Assert.Equal("开场B", loaded["R0001"].Variants[1].GmOpening);
+            Assert.NotNull(loaded["R0001"].RoundStartSnapshot);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task BranchCopiesVariantsUpToForkRound()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await SeedGameStateAsync(context);
+            var saveSystem = CreateSaveSystem(context, [50, 50, 50]);
+            var sessionService = CreateSessionService(context);
+            await sessionService.EnsureDefaultSessionAsync();
+            var source = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.IsActive == 1);
+
+            // 3 回合，每回合一个 round_end 存档；每回合各有变体。
+            var rounds = new List<GameRound>();
+            for (var n = 1; n <= 3; n++)
+            {
+                var sp = await saveSystem.CreateSavePointAsync("round_end");
+                rounds.Add(new GameRound { RoundIndex = $"R{n:0000}", BaseSavePointId = n == 1 ? null : sp.SaveId - 1 });
+            }
+            var variants = new Dictionary<string, RoundVariantSet>
+            {
+                ["R0001"] = MakeVariantSet(),
+                ["R0002"] = MakeVariantSet(),
+                ["R0003"] = MakeVariantSet()
+            };
+            await sessionService.SaveActiveSessionStateAsync(
+                JsonSerializer.Serialize(rounds, WebJson), JsonSerializer.Serialize(variants, WebJson));
+
+            // 在 R0002 fork：仅保留 R0001、R0002 的变体。
+            var truncated = rounds.Take(2).ToList();
+            var keptIndices = truncated.Select(r => r.RoundIndex).ToList();
+            var newId = await sessionService.BranchSessionAsync(
+                source.SessionId,
+                JsonSerializer.Serialize(truncated, WebJson),
+                rounds[2].BaseSavePointId,
+                "分支@R0002",
+                keptIndices);
+            context.ChangeTracker.Clear();
+
+            var branch = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.SessionId == newId);
+            var branchVariants = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(branch.RoundVariantsSnapshot, WebJson)!;
+            Assert.True(branchVariants.ContainsKey("R0001"));
+            Assert.True(branchVariants.ContainsKey("R0002"));
+            Assert.False(branchVariants.ContainsKey("R0003"));
+
+            // 源会话变体不变（仍含 3 回合）。
+            var sourceAfter = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.SessionId == source.SessionId);
+            var sourceVariants = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(sourceAfter.RoundVariantsSnapshot, WebJson)!;
+            Assert.Equal(3, sourceVariants.Count);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    private static RoundVariantSet MakeVariantSet() => new()
+    {
+        ActiveIndex = 0,
+        RoundStartSnapshot = MakeSavePoint(1),
+        Variants = [new RoundVariant { GmOpening = "x", CompletedAt = DateTimeOffset.UtcNow, DbSnapshot = MakeSavePoint(2) }]
+    };
+
+    private static SavePoint MakeSavePoint(int id) => new()
+    {
+        SaveId = id,
+        Chapter = 1,
+        TriggerReason = "test",
+        GlobalStateSnapshot = "{}",
+        ProtagonistSnapshot = "{}",
+        WorldMapSnapshot = "[]",
+        MapElementsSnapshot = "[]",
+        FactionsSnapshot = "[]",
+        NpcSnapshot = "[]",
+        InventorySnapshot = "[]",
+        EquipmentSnapshot = "[]",
+        QuestSnapshot = "[]",
+        CreatedAt = "2024-04-01 09:00"
+    };
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 

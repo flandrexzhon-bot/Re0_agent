@@ -73,7 +73,7 @@ public sealed class ChatSessionServiceTests
             currentProtagonist.SelfStatus = "略显疲惫";
             await context.SaveChangesAsync();
 
-            var restoredRounds = await sessionService.SwitchSessionAsync(sessions[1].SessionId, "[]");
+            var (restoredRounds, _) = await sessionService.SwitchSessionAsync(sessions[1].SessionId, "[]", null);
             Assert.Equal(mockRounds, restoredRounds);
 
             sessions = await sessionService.ListSessionsAsync();

@@ -247,4 +247,9 @@ public sealed class ChatSession
 
     [Column("detailed_rounds_snapshot")]
     public string DetailedRoundsSnapshot { get; set; } = "[]";
+
+    /// <summary>各回合的重 roll 变体集合（JSON：Dictionary&lt;RoundIndex, RoundVariantSet&gt;）。
+    /// 长期保留每个回合的 roll 记录；前端只在最新回合显示 swipe/重 roll，fork 回到某回合即可重现。</summary>
+    [Column("round_variants_snapshot")]
+    public string RoundVariantsSnapshot { get; set; } = "{}";
 }
