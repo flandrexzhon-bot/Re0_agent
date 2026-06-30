@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
+using Re0Agent.Core.Models;
 
 namespace Re0Agent.Core.Services.Database;
 
@@ -194,6 +195,91 @@ public sealed class ChatSessionService(
             throw;
         }
     }
+
+    /// <summary>
+    /// SillyTavern 式 branch：把源会话克隆为一个新会话，回合历史与世界快照截断到 fork 回合
+    /// （含该回合）。<strong>不</strong>触碰当前 live sandbox、<strong>不</strong>改源会话——纯快照→快照拼装。
+    /// </summary>
+    /// <param name="sourceSessionId">分支来源会话。</param>
+    /// <param name="truncatedRoundsJson">已截断到 fork 回合（含）的 DetailedRounds JSON。</param>
+    /// <param name="endSavePointId">fork 回合结束时的存档 ID（决定世界状态截断点）；null 则整盘复制源快照。</param>
+    /// <param name="newName">新分支会话名。</param>
+    /// <returns>新会话 SessionId。</returns>
+    public async Task<int> BranchSessionAsync(
+        int sourceSessionId,
+        string truncatedRoundsJson,
+        int? endSavePointId,
+        string newName,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureDefaultSessionAsync(cancellationToken);
+
+        var source = await dbContext.ChatSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SessionId == sourceSessionId, cancellationToken)
+            ?? throw new InvalidOperationException("找不到分支来源会话。");
+
+        var branch = new ChatSession
+        {
+            SessionName = string.IsNullOrWhiteSpace(newName) ? "未命名分支" : newName,
+            IsActive = 0,
+            ParentSessionId = sourceSessionId,
+            CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm"),
+            DetailedRoundsSnapshot = string.IsNullOrWhiteSpace(truncatedRoundsJson) ? "[]" : truncatedRoundsJson,
+            // death_return_log 原样复制（循环纪事是跨分支的元历史）。
+            DeathReturnLogSnapshot = source.DeathReturnLogSnapshot
+        };
+
+        // 选定 fork 回合结束时的存档：决定 9 表 + chronicle + 记忆的截断状态。
+        var savePoints = DeserializeList<SavePoint>(source.SavePointsSnapshot);
+        var anchor = endSavePointId is int endId
+            ? savePoints.FirstOrDefault(sp => sp.SaveId == endId)
+            : savePoints.OrderByDescending(sp => sp.SaveId).FirstOrDefault();
+
+        if (anchor is null)
+        {
+            // 无可用存档锚点：整盘复制源会话快照兜底（至少世界状态与源一致，回合已截断）。
+            branch.GlobalStateSnapshot = source.GlobalStateSnapshot;
+            branch.ProtagonistSnapshot = source.ProtagonistSnapshot;
+            branch.WorldMapSnapshot = source.WorldMapSnapshot;
+            branch.MapElementsSnapshot = source.MapElementsSnapshot;
+            branch.FactionsSnapshot = source.FactionsSnapshot;
+            branch.NpcSnapshot = source.NpcSnapshot;
+            branch.InventorySnapshot = source.InventorySnapshot;
+            branch.EquipmentSnapshot = source.EquipmentSnapshot;
+            branch.QuestSnapshot = source.QuestSnapshot;
+            branch.ChronicleSnapshot = source.ChronicleSnapshot;
+            branch.CharacterMemorySnapshot = source.CharacterMemorySnapshot;
+            branch.SavePointsSnapshot = source.SavePointsSnapshot;
+        }
+        else
+        {
+            // 用锚点存档覆盖各表快照（存档本身就是 9 表 + chronicle + 记忆的整盘快照）。
+            branch.GlobalStateSnapshot = anchor.GlobalStateSnapshot;
+            branch.ProtagonistSnapshot = anchor.ProtagonistSnapshot;
+            branch.WorldMapSnapshot = anchor.WorldMapSnapshot;
+            branch.MapElementsSnapshot = anchor.MapElementsSnapshot;
+            branch.FactionsSnapshot = anchor.FactionsSnapshot;
+            branch.NpcSnapshot = anchor.NpcSnapshot;
+            branch.InventorySnapshot = anchor.InventorySnapshot;
+            branch.EquipmentSnapshot = anchor.EquipmentSnapshot;
+            branch.QuestSnapshot = anchor.QuestSnapshot;
+            // 锚点存档的 chronicle/memory 快照在加列前可能为 null，回退到源会话快照。
+            branch.ChronicleSnapshot = anchor.ChronicleSnapshot ?? source.ChronicleSnapshot;
+            branch.CharacterMemorySnapshot = anchor.CharacterMemorySnapshot ?? source.CharacterMemorySnapshot;
+            // save_points 截断到锚点（含）为止——分支不该看到 fork 点之后的存档。
+            var keptSavePoints = savePoints.Where(sp => sp.SaveId <= anchor.SaveId).ToList();
+            branch.SavePointsSnapshot = JsonSerializer.Serialize(keptSavePoints, JsonOptions);
+        }
+
+        dbContext.ChatSessions.Add(branch);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return branch.SessionId;
+    }
+
+    private static List<T> DeserializeList<T>(string json)
+        => string.IsNullOrWhiteSpace(json)
+            ? []
+            : JsonSerializer.Deserialize<List<T>>(json, JsonOptions) ?? [];
 
     public async Task DeleteSessionAsync(int sessionId, CancellationToken cancellationToken = default)
     {

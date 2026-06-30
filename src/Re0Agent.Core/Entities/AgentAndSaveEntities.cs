@@ -199,6 +199,10 @@ public sealed class ChatSession
     [Column("is_active")]
     public int IsActive { get; set; } = 0;
 
+    /// <summary>分支来源会话 ID（SillyTavern 式 branch）。null 表示根会话（非分支而来）。</summary>
+    [Column("parent_session_id")]
+    public int? ParentSessionId { get; set; }
+
     [Column("created_at")]
     public required string CreatedAt { get; set; }
 

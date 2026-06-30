@@ -222,11 +222,11 @@ else
 
                 <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
                     <span>─── 命运分歧点：@round.RoundIndex ───</span>
-                    @if (round.BaseSavePointId is not null && !isBusy)
+                    @if (!isBusy)
                     {
-                        <button type="button" title="Fork：从此处引入新叙事分支（回溯世界状态，不计入死亡）" disabled="@isBusy"
+                        <button type="button" title="分支：从此处复制一条独立故事线（新会话，父会话保留）" disabled="@isBusy"
                                 style="background: none; border: none; cursor: pointer; color: var(--color-purple-glow); font-size: 1rem; padding: 0 0.2rem;"
-                                @onclick="() => ForkAt(round)">⑂</button>
+                                @onclick="() => BranchFrom(round)">⑂</button>
                     }
                 </div>
 
@@ -444,7 +444,10 @@ else
                             <select class="form-select parchment-input" @bind="activeSessionId" @bind:after="OnSessionChangedAsync" style="flex: 1; font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
                                 @foreach (var s in chatSessions)
                                 {
-                                    <option value="@s.SessionId">@(s.IsActive == 1 ? "★ " : "")@s.SessionName (@s.CreatedAt)</option>
+                                    var parentName = s.ParentSessionId is int pid
+                                        ? chatSessions.FirstOrDefault(p => p.SessionId == pid)?.SessionName
+                                        : null;
+                                    <option value="@s.SessionId" title="@(parentName is null ? null : $"分支自：{parentName}")">@(s.IsActive == 1 ? "★ " : "")@(parentName is null ? "" : "↰ ")@s.SessionName (@s.CreatedAt)</option>
                                 }
                             </select>
                             <button type="button" class="btn btn-sm danger-action p-0" style="width: 24px; height: 24px; line-height: 22px; cursor: pointer; border-radius: 4px;" title="删除此会话" @onclick="DeleteCurrentSessionAsync" disabled="@(chatSessions.Count <= 1)">
@@ -935,9 +938,9 @@ else
         await Progress.SelectVariant(index);
     }
 
-    private async Task ForkAt(GameRound round)
+    private async Task BranchFrom(GameRound round)
     {
-        await Progress.ForkAtAsync(round);
+        await Progress.BranchFromAsync(round);
     }
 
     protected override async Task OnInitializedAsync()

@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
+using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Database;
 using Re0Agent.Core.Services.Dice;
 
@@ -278,57 +279,78 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
-    public async Task ForkRestoreTrimsChronicleAndMemoryToParallelRound()
+    public async Task BranchSessionClonesAndTruncatesAtForkRound()
     {
         var databasePath = CreateTempDatabasePath();
         try
         {
             await using var context = CreateContext(databasePath);
             await SeedGameStateAsync(context);
-            var saveSystem = CreateSaveSystem(context, [50]);
+            var saveSystem = CreateSaveSystem(context, [50, 50, 50]);
+            var sessionService = CreateSessionService(context);
 
-            // 模拟回合 R0002 结束时的存档锚点（此刻 chronicle 仅有 AM0001=R0001 的总结）。
-            var anchor = await saveSystem.CreateSavePointAsync("round_end");
+            // 建一个源会话（捕获当前 sandbox 为其快照）。
+            await sessionService.EnsureDefaultSessionAsync();
+            var source = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.IsActive == 1);
 
-            // R0002、R0003 各写入一条编年史与一条记忆（被 fork 的时间线）。
-            context.Chronicle.Add(new ChronicleEntry
+            // 模拟 3 个大回合，每回合结束各写一条 AM + 建一个 round_end 存档。
+            var rounds = new List<GameRound>();
+            for (var n = 1; n <= 3; n++)
             {
-                RowId = 2, CodeIndex = "AM0002", TimeSpan = "2024-04-01 09:10 ~ 2024-04-01 09:20",
-                Summary = "R0002", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0002 剧情。", 8))
-            });
-            context.Chronicle.Add(new ChronicleEntry
-            {
-                RowId = 3, CodeIndex = "AM0003", TimeSpan = "2024-04-01 09:20 ~ 2024-04-01 09:30",
-                Summary = "R0003", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0003 剧情。", 8))
-            });
-            context.CharacterMemory.Add(new CharacterMemory
-            {
-                RowId = 1, CharacterName = "爱蜜莉雅", RoundIndex = "R0002",
-                MemoryText = "R0002 记忆", CreatedAt = "2024-04-01 09:20"
-            });
-            context.CharacterMemory.Add(new CharacterMemory
-            {
-                RowId = 2, CharacterName = "爱蜜莉雅", RoundIndex = "R0003",
-                MemoryText = "R0003 记忆", CreatedAt = "2024-04-01 09:30"
-            });
-            await context.SaveChangesAsync();
+                context.Chronicle.Add(new ChronicleEntry
+                {
+                    RowId = n,
+                    CodeIndex = $"AM{n:0000}",
+                    TimeSpan = "2024-04-01 09:00 ~ 2024-04-01 09:10",
+                    Summary = $"R{n}",
+                    ChronicleText = string.Concat(Enumerable.Repeat($"第 {n} 回合的详细剧情记录。", 12))
+                });
+                await context.SaveChangesAsync();
+                context.ChangeTracker.Clear();
+
+                var sp = await saveSystem.CreateSavePointAsync("round_end");
+                rounds.Add(new GameRound
+                {
+                    RoundIndex = $"R{n:0000}",
+                    // BaseSavePointId = 上一回合末存档；R0003 的 base = R0002 的 round_end 存档。
+                    BaseSavePointId = n == 1 ? null : sp.SaveId - 1
+                });
+            }
+
+            // 把 3 回合存进源会话，并刷新其 13 表快照（此刻含 3 条 AM、3 个存档）。
+            var allRoundsJson = JsonSerializer.Serialize(rounds, WebJson);
+            await sessionService.SaveActiveSessionStateAsync(allRoundsJson);
+
+            // 在第 2 回合 fork：截断到 R0002（含），结束存档 = R0003 的 BaseSavePointId（=R0002 round_end）。
+            var truncated = rounds.Take(2).ToList();
+            var endSaveId = rounds[2].BaseSavePointId; // R0003.Base = R0002 末存档
+            var truncatedJson = JsonSerializer.Serialize(truncated, WebJson);
+
+            var newId = await sessionService.BranchSessionAsync(source.SessionId, truncatedJson, endSaveId, "分支@R0002");
             context.ChangeTracker.Clear();
 
-            // 在 R0002 的分歧点 fork：anchor 快照含 chronicle=[AM0001]/记忆=[]（创建锚点时的状态），
-            // 走「精确快照回滚」路径——chronicle 还原成 [AM0001]，记忆还原成空，AM0002/AM0003 与
-            // R0002/R0003 记忆被快照覆盖清除。新回合编号 = Chronicle.Count()+1 = 2 → 平行 R0002。
-            await saveSystem.ForkRestoreAsync(anchor.SaveId, "R0002");
-            context.ChangeTracker.Clear();
+            var branch = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.SessionId == newId);
+            var sourceAfter = await context.ChatSessions.AsNoTracking().FirstAsync(s => s.SessionId == source.SessionId);
 
-            var remainingChronicle = await context.Chronicle.AsNoTracking().OrderBy(c => c.RowId).ToListAsync();
-            Assert.Single(remainingChronicle);
-            Assert.Equal("AM0001", remainingChronicle[0].CodeIndex);
+            // ① 父链指向源会话。
+            Assert.Equal(source.SessionId, branch.ParentSessionId);
 
-            // 编号回到平行 R0002，而非顺延到 R0004。
-            Assert.Equal(2, await context.Chronicle.CountAsync() + 1);
+            // ② 分支只含前 2 回合。
+            var branchRounds = JsonSerializer.Deserialize<List<GameRound>>(branch.DetailedRoundsSnapshot, WebJson)!;
+            Assert.Equal(2, branchRounds.Count);
+            Assert.Equal("R0002", branchRounds[^1].RoundIndex);
 
-            // R0002/R0003 的记忆被快照覆盖清除。
-            Assert.Empty(await context.CharacterMemory.AsNoTracking().ToListAsync());
+            // ③ 分支 chronicle 快照截到 fork 点（2 条），save_points 截到锚点（save_id <= endSaveId）。
+            var branchChronicle = JsonSerializer.Deserialize<List<ChronicleEntry>>(branch.ChronicleSnapshot, WebJson)!;
+            Assert.Equal(2, branchChronicle.Count);
+            var branchSaves = JsonSerializer.Deserialize<List<SavePoint>>(branch.SavePointsSnapshot, WebJson)!;
+            Assert.All(branchSaves, sp => Assert.True(sp.SaveId <= endSaveId!.Value));
+
+            // ④ 源会话完全不变（仍是 3 回合、3 条 AM）。
+            var sourceRounds = JsonSerializer.Deserialize<List<GameRound>>(sourceAfter.DetailedRoundsSnapshot, WebJson)!;
+            Assert.Equal(3, sourceRounds.Count);
+            var sourceChronicle = JsonSerializer.Deserialize<List<ChronicleEntry>>(sourceAfter.ChronicleSnapshot, WebJson)!;
+            Assert.Equal(3, sourceChronicle.Count);
         }
         finally
         {
@@ -336,59 +358,12 @@ public sealed class Phase4SaveAndTemplateTests
         }
     }
 
-    [Fact]
-    public async Task ForkRestoreWithPrologueKeepsRoundNumberExact()
+    private static ChatSessionService CreateSessionService(Re0AgentDbContext context)
     {
-        // 复现「截止 N-1 仍有 BUG」：存在序章 AM0000 时，回合号 R{N} 不再等于 AM 序号，
-        // 旧的「保留前 N-1 条 chronicle」启发式会差一。精确快照回滚不依赖任何计数，故正确。
-        var databasePath = CreateTempDatabasePath();
-        try
-        {
-            await using var context = CreateContext(databasePath);
-            await SeedGameStateAsync(context);
-
-            // 序章 AM0000 + R0001 的 AM0001（SeedGameStateAsync 已加 AM0001 于 RowId=1）。
-            // 注：RowId=0 会被 EF 当作「未设值」自动改写，故序章用 RowId=10 占位，仅需保证唯一。
-            context.Chronicle.Add(new ChronicleEntry
-            {
-                RowId = 10, CodeIndex = "AM0000", TimeSpan = "2024-04-01 08:50 ~ 2024-04-01 09:00",
-                Summary = "序章", ChronicleText = string.Concat(Enumerable.Repeat("前序故事。", 30))
-            });
-            await context.SaveChangesAsync();
-            context.ChangeTracker.Clear();
-
-            var saveSystem = CreateSaveSystem(context, [50]);
-
-            // R0002 结束锚点：此刻 chronicle = [AM0000, AM0001]，count=2，下一回合应是 R0003。
-            var anchor = await saveSystem.CreateSavePointAsync("round_end");
-
-            // 被 fork 的 R0002 写入 AM0002（注意：R0002 对应 AM0002，因为序章占了 AM0000）。
-            context.Chronicle.Add(new ChronicleEntry
-            {
-                RowId = 2, CodeIndex = "AM0002", TimeSpan = "2024-04-01 09:10 ~ 2024-04-01 09:20",
-                Summary = "R0002", ChronicleText = string.Concat(Enumerable.Repeat("被 fork 的 R0002 剧情。", 8))
-            });
-            await context.SaveChangesAsync();
-            context.ChangeTracker.Clear();
-
-            // fork 回平行 R0003（锚点是 R0002 末，下一回合即 R0003）。
-            await saveSystem.ForkRestoreAsync(anchor.SaveId, "R0003");
-            context.ChangeTracker.Clear();
-
-            var remaining = await context.Chronicle.AsNoTracking().ToListAsync();
-            Assert.Equal(2, remaining.Count);
-            Assert.Contains(remaining, c => c.CodeIndex == "AM0000");
-            Assert.Contains(remaining, c => c.CodeIndex == "AM0001");
-            Assert.DoesNotContain(remaining, c => c.CodeIndex == "AM0002");
-
-            // 关键断言：序章在场时编号仍精确落回 R0003（count+1=3），不再差一。
-            Assert.Equal(3, await context.Chronicle.CountAsync() + 1);
-        }
-        finally
-        {
-            DeleteIfExists(databasePath);
-        }
+        return new ChatSessionService(context, CreateTemplateService(context, [50]));
     }
+
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
     private static SaveSystem CreateSaveSystem(Re0AgentDbContext context, IEnumerable<int> rolls)
     {

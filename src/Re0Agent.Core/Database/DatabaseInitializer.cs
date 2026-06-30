@@ -25,6 +25,7 @@ public static class DatabaseInitializer
             await EnsureImportantNpcDropPresenceStatusAsync(context, cancellationToken);
             await EnsureChronicleUpgradeConstraintsAsync(context, cancellationToken);
             await EnsureCharacterStatColumnsAsync(context, cancellationToken);
+            await EnsureChatSessionsUpgradeColumnsAsync(context, cancellationToken);
         }
         finally
         {
@@ -100,6 +101,30 @@ public static class DatabaseInitializer
                 + column.Definition
                 + ";";
             await context.Database.ExecuteSqlRawAsync(alterStatement, cancellationToken);
+        }
+    }
+
+    private static async Task EnsureChatSessionsUpgradeColumnsAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(chat_sessions);";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        // 分支会话父链：老库无此列时补加（SillyTavern 式 branch）。
+        if (!existingColumns.Contains("parent_session_id"))
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE chat_sessions ADD COLUMN parent_session_id INTEGER;",
+                cancellationToken);
         }
     }
 

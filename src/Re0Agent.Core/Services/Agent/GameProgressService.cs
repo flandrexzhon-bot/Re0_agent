@@ -914,16 +914,12 @@ public sealed class GameProgressService
     }
 
     /// <summary>
-    /// fork「引入叙事」：把世界回溯到某回合的分歧点（不计死亡/瘴气），并将该回合做成「变体锚点」——
-    /// 原版留作变体 #0、起点快照就位，用户随后手动点 ↻ 生成平行版本（变体 #1…）。
-    /// <para>编号保持为该回合自身（如 fork R0003 仍是 R0003）：ForkRestoreAsync 已按快照把 chronicle
-    /// 精确回滚到该回合起点之前，重跑/开新回合时 <c>Chronicle.Count()+1</c> 自然落回平行 R{N}。</para>
-    /// <para>该回合之后的所有回合（R{N+1}…）连同其编年史一并丢弃。变体 cache 在「开始下一个大回合」
-    /// （BeginRoundAsync）时整批释放。</para>
+    /// SillyTavern 式 branch：从某回合的分歧点把当前会话<strong>克隆为一个新的独立会话</strong>，
+    /// 新会话回合历史与世界状态截断到该回合（含），随后切入新会话。父会话原封不动，可随时切回。
     /// </summary>
-    public async Task ForkAtAsync(GameRound round)
+    public async Task BranchFromAsync(GameRound round)
     {
-        if (IsBusy || round.BaseSavePointId is null)
+        if (IsBusy)
         {
             return;
         }
@@ -933,65 +929,54 @@ public sealed class GameProgressService
         NotifyStateChanged();
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
-            var db = scope.ServiceProvider.GetRequiredService<Re0AgentDbContext>();
-
-            // 1. 取「原版该回合末态」存档：= 紧随其后回合的 BaseSavePointId（即该回合 round_end 存档）；
-            //    若该回合本就是最后回合，则取最新存档。供变体 #0 回填世界状态用。
-            int? endSaveId;
+            // 1. 截断回合列表到 fork 回合（含），并求其结束存档 id。
+            List<GameRound> truncated;
+            int? endSavePointId;
             lock (SessionRounds)
             {
                 var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
-                var next = idx >= 0 && idx + 1 < SessionRounds.Count ? SessionRounds[idx + 1] : null;
-                endSaveId = next?.BaseSavePointId;
-            }
-            var endSnapshot = endSaveId is int endId
-                ? await db.SavePoints.AsNoTracking().FirstOrDefaultAsync(sp => sp.SaveId == endId)
-                : await db.SavePoints.AsNoTracking().OrderByDescending(sp => sp.SaveId).FirstOrDefaultAsync();
-
-            // 2. fork restore：DB + chronicle + 记忆回滚到本回合起点（平行时间线就位）。
-            await saveSystem.ForkRestoreAsync(round.BaseSavePointId.Value, round.RoundIndex);
-
-            // 3. 起点快照（此刻 DB 正处于本回合起点）——重 roll 的回档基线。
-            _roundStartSnapshot = await saveSystem.CaptureInMemorySnapshotAsync();
-            _preTurnSnapshots.Clear();
-
-            // 4. 丢弃本回合之后的所有回合；保留本回合作为变体锚点。
-            lock (SessionRounds)
-            {
-                var idx = SessionRounds.FindIndex(sr => sr.RoundIndex == round.RoundIndex);
-                if (idx >= 0 && idx + 1 < SessionRounds.Count)
+                if (idx < 0)
                 {
-                    SessionRounds.RemoveRange(idx + 1, SessionRounds.Count - idx - 1);
+                    truncated = SessionRounds.ToList();
+                    endSavePointId = null;
+                }
+                else
+                {
+                    truncated = SessionRounds.Take(idx + 1).ToList();
+                    // fork 回合结束存档 = 下一回合的起点存档；末回合时下面回退到最新存档。
+                    endSavePointId = idx + 1 < SessionRounds.Count ? SessionRounds[idx + 1].BaseSavePointId : null;
                 }
             }
 
-            // 5. 变体 #0 = 原版该回合叙事 + 末态快照。
+            using var scope = _scopeFactory.CreateScope();
+            var sessionService = scope.ServiceProvider.GetRequiredService<ChatSessionService>();
+            var db = scope.ServiceProvider.GetRequiredService<Re0AgentDbContext>();
+
+            // 末回合（拿不到下一回合的起点存档）时，用当前会话最新存档作为结束锚点。
+            endSavePointId ??= await db.SavePoints.AsNoTracking()
+                .MaxAsync(sp => (int?)sp.SaveId);
+
+            // 2. 先把当前会话落盘，保证分支读到的源快照是最新的。
+            await AutoSaveChatSessionAsync();
+
+            // 3. 克隆为新分支会话。
+            var sourceName = ChatSessions.FirstOrDefault(s => s.SessionId == ActiveSessionId)?.SessionName ?? "会话";
+            var truncatedJson = JsonSerializer.Serialize(truncated, JsonOptions);
+            var newId = await sessionService.BranchSessionAsync(
+                ActiveSessionId, truncatedJson, endSavePointId, $"{sourceName} · 分支@{round.RoundIndex}");
+
+            // 4. fork 切走后当前会话的 swipe/reroll cache 失效。
             _currentRoundVariants.Clear();
-            _currentRoundVariants.Add(new RoundVariant
-            {
-                GmOpening = round.GmOpening,
-                Turns = round.CharacterTurns.ToList(),
-                Events = round.Events.ToList(),
-                DbSnapshot = endSnapshot ?? _roundStartSnapshot
-            });
+            _preTurnSnapshots.Clear();
+            _roundStartSnapshot = null;
             _activeVariantIndex = 0;
 
-            // 6. 把世界恢复到变体 #0 末态（画面显示原版结果），等用户手动点 ↻ 重跑平行版本。
-            await saveSystem.RestoreGameStateAsync(_currentRoundVariants[0].DbSnapshot, CancellationToken.None);
-
-            ActiveRound = null;
-            Phase = RoundPhase.Idle;
-            // 先把裁剪后的会话落盘，再刷新数据库面板——否则 LoadDatabaseStateAsync 会用旧快照覆盖
-            // SessionRounds，裁剪被撤销。注意 LoadDatabaseStateAsync 的 cache 重建有 guard，
-            // 不会覆盖上面刚建好的变体锚点。
-            await AutoSaveChatSessionAsync();
-            await LoadDatabaseStateAsync();
+            // 5. 切入新分支会话（整库换血 + 载入截断后的回合）。
+            await SwitchSessionAsync(newId);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"fork 引入叙事失败: {ex.Message}";
+            ErrorMessage = $"分支故事线失败: {ex.Message}";
         }
         finally
         {

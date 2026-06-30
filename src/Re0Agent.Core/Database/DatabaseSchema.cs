@@ -243,6 +243,7 @@ public static class DatabaseSchema
           session_id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_name TEXT NOT NULL,
           is_active INTEGER DEFAULT 0 CHECK(is_active IN (0, 1)),
+          parent_session_id INTEGER,
           created_at TEXT NOT NULL,
           global_state_snapshot TEXT NOT NULL DEFAULT '{{}}',
           protagonist_snapshot TEXT NOT NULL DEFAULT '{{}}',
