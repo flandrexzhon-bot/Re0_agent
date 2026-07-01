@@ -15,6 +15,9 @@
         <!-- Display name -->
         <ApplicationTitle>Re0Agent</ApplicationTitle>
 
+        <!-- Win32 exe icon (RE:0 art). Generated from repo-root icon.png by build/pack.ps1. -->
+        <ApplicationIcon>Resources\icon.ico</ApplicationIcon>
+
         <!-- App Identifier -->
         <ApplicationId>com.companyname.re0agent.app</ApplicationId>
 
