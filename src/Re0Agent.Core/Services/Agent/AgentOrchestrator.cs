@@ -35,9 +35,6 @@ public sealed class AgentOrchestrator(
         return await RunPlayerThenNpcTurnsAsync(round, playerInput, skipPlayerTurn, directOutput: true, onStepCompleted: null, onBeforeTurn: null, cancellationToken: cancellationToken);
     }
 
-    /// <summary>
-    /// 第一阶段：初始化、GM开场、泉此方调度（主角排第一）。主角和NPC回合尚未执行。
-    /// </summary>
     public async Task<GameRound> BeginRoundAsync(
         Func<GameRound, Task>? onStepCompleted = null,
         IReadOnlyList<GameRound>? previousRounds = null,

@@ -218,7 +218,13 @@ else
             @foreach (var round in visibleRounds)
             {
                 var isLatest = ReferenceEquals(round, latestRound);
-                var canSwipe = isLatest && Progress.CanReRoll && (round.CompletedAt is not null || phase == RoundPhase.Interrupted || phase == RoundPhase.AwaitingPlayer);
+                // 仅在「非运行段」显示 swipe/重 roll（运行中 1/3/4/5/6 不显示）。
+                // 用段位判定而非 round.CompletedAt——否则 swipe 到「只含开场」的历史变体（CompletedAt=null）
+                // 会让 canSwipe 变 false，swipe 按钮消失、用户被困在裸开场无法切回。
+                var isRunningPhase = phase == RoundPhase.GmOpening || phase == RoundPhase.ProtagonistActing
+                    || phase == RoundPhase.NpcDispatching || phase == RoundPhase.NpcResponding
+                    || phase == RoundPhase.Finalizing;
+                var canSwipe = isLatest && Progress.CanReRoll && !isRunningPhase;
 
                 <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
                     <span>─── 命运分歧点：@round.RoundIndex ───</span>
@@ -309,7 +315,7 @@ else
             @if (phase == RoundPhase.GmOpening)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>① GM 开场中...</span></div>
+                    <div class="entry-header"><span>GM 开场中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>GM 正在铺陈本回合的开场...</span>
@@ -319,7 +325,7 @@ else
             else if (phase == RoundPhase.ProtagonistActing)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>③ 主角行动中...</span></div>
+                    <div class="entry-header"><span>主角行动中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>主角正在依抉择行动，GM 裁定结果...</span>
@@ -329,7 +335,7 @@ else
             else if (phase == RoundPhase.NpcDispatching)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>④ 调度在场角色...</span></div>
+                    <div class="entry-header"><span>调度在场角色...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>泉此方正在安排在场角色的行动顺序...</span>
@@ -339,7 +345,7 @@ else
             else if (phase == RoundPhase.NpcResponding)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>⑤ 角色响应中...</span></div>
+                    <div class="entry-header"><span>角色响应中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>在场 NPC 正在依次回应，请稍候...</span>
@@ -349,7 +355,7 @@ else
             else if (phase == RoundPhase.Finalizing)
             {
                 <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>⑥ 填表/存档中...</span></div>
+                    <div class="entry-header"><span>填表/存档中...</span></div>
                     <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
                         <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
                         <span>GM 正在编织世界线并刻入编年史...</span>

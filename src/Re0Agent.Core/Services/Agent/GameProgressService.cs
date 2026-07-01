@@ -520,7 +520,7 @@ public sealed class GameProgressService
                     var json = JsonSerializer.Serialize(SessionRounds, JsonOptions);
                     await sessionService.SaveActiveSessionStateAsync(json, cancellationToken);
                 }
-                
+                await AutoSaveChatSessionAsync(cancellationToken);
                 await LoadDatabaseStateAsync(cancellationToken);
                 NotifyStateChanged();
             }
@@ -703,6 +703,7 @@ public sealed class GameProgressService
                 _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
+                await AutoSaveChatSessionAsync();
                 await LoadDatabaseStateAsync();
                 NotifyStateChanged();
             }
@@ -734,12 +735,19 @@ public sealed class GameProgressService
             using var scope = _scopeFactory.CreateScope();
             var orchestrator = scope.ServiceProvider.GetRequiredService<AgentOrchestrator>();
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
-            // AwaitingPlayer 阶段为「重 roll 开场」记录过开场专属变体（未填表/未结算）。
-            // 玩家一旦落笔，这些只含开场、无主角行动的旧变体不再是本回合的有效 swipe 备选——
-            // 清掉（仅清「本最新回合」那一份集合，旧回合的 roll 记录在 _variantsByRound 里原样保留），
-            // 让下面 CaptureVariantAsync 打包的完整结算版成为本回合权威的 1/1。
-            _currentRoundVariants.Clear();
-            _activeVariantIndex = 0;
+            // AwaitingPlayer 阶段「重 roll 开场」记录过若干开场变体（未填表/未结算）。
+            // 玩家落笔时【不再整批清空】——用户要求保留本回合全部 roll 记录（开场 + NPC 回复 + 填表）。
+            // 只把玩家实际选用的那一版（当前激活的开场变体）从列表里摘掉：它即将被跑到结算，
+            // 稍后 CaptureVariantAsync 会把它的<strong>完整版</strong>（含主角行动/NPC 回复/填表事件/末态快照）
+            // 追加进来，避免同一版本既留半成品开场、又留完整版的重复。其余未选用的开场版本原样保留，
+            // swipe 仍可切回查看。
+            if (_currentRoundVariants.Count > 0
+                && _activeVariantIndex >= 0
+                && _activeVariantIndex < _currentRoundVariants.Count)
+            {
+                _currentRoundVariants.RemoveAt(_activeVariantIndex);
+            }
+            _activeVariantIndex = _currentRoundVariants.Count; // 结算版将追加到末尾并成为激活项。
             try
             {
                 var round = await orchestrator.RunPlayerThenNpcTurnsAsync(ActiveRound, playerInput, skipPlayerTurn, directOutput, onStepCompleted: async (r) =>
@@ -805,6 +813,7 @@ public sealed class GameProgressService
                 _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
+                await AutoSaveChatSessionAsync();
                 await LoadDatabaseStateAsync();
                 NotifyStateChanged();
             }
@@ -836,10 +845,14 @@ public sealed class GameProgressService
             var saveSystem = scope.ServiceProvider.GetRequiredService<SaveSystem>();
             try
             {
-                // 停止时已抓过变体 #0；恢复要继续写库，先丢弃本回合这一份（仅清最新回合的集合，
-                // 旧回合 roll 记录不受影响），跑完后重新打包为权威 #0。
-                _currentRoundVariants.Clear();
-                _activeVariantIndex = 0;
+                // 停止时把中断的半成品抓成了「本回合最后一份变体」；恢复要继续写库、跑到结算后
+                // 重新打包为完整版，故先摘掉这一份中断态即可——【不整批清空】，保留本回合其余 roll
+                // 记录（开场重 roll / 之前的完整变体），与 SubmitPlayerTurnAsync 的保留策略一致。
+                if (_currentRoundVariants.Count > 0)
+                {
+                    _currentRoundVariants.RemoveAt(_currentRoundVariants.Count - 1);
+                }
+                _activeVariantIndex = _currentRoundVariants.Count; // 结算版将追加到末尾并成为激活项。
 
                 // 把「每格前快照」对齐到已完成的格数——丢弃停止时为半成品格抓的多余快照，
                 // 否则恢复后续格 onBeforeTurn 追加的快照会与 CharacterTurns 错位，逐格重 roll 索引偏移。
@@ -891,6 +904,7 @@ public sealed class GameProgressService
                 _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
+                await AutoSaveChatSessionAsync();
                 await LoadDatabaseStateAsync();
                 NotifyStateChanged();
             }
@@ -1019,9 +1033,8 @@ public sealed class GameProgressService
         {
             set.Variants[set.ActiveIndex].DbSnapshot = await saveSystem.CaptureInMemorySnapshotAsync(cancellationToken);
         }
-
-        await LoadDatabaseStateAsync(cancellationToken);
         await AutoSaveChatSessionAsync(cancellationToken);
+        await LoadDatabaseStateAsync(cancellationToken);
         NotifyStateChanged();
         return executions;
     }
@@ -1193,6 +1206,7 @@ public sealed class GameProgressService
                 _roundCts = null;
                 IsBusy = false;
                 NotifyStateChanged();
+                await AutoSaveChatSessionAsync();
                 await LoadDatabaseStateAsync();
                 NotifyStateChanged();
             }
@@ -1347,6 +1361,7 @@ public sealed class GameProgressService
                 ActiveRound = null;
                 await AutoSaveChatSessionAsync();
                 await LoadDatabaseStateAsync();
+
             }
             catch (Exception ex)
             {
@@ -1512,7 +1527,7 @@ public sealed class GameProgressService
             Phase = RoundPhase.Idle;
             InterruptedStep = 0;
             IsPrologueStage = false;
-
+            await AutoSaveChatSessionAsync();
             await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
@@ -1541,7 +1556,7 @@ public sealed class GameProgressService
             ActiveRound = null;
             Phase = RoundPhase.Idle;
             IsPrologueStage = false;
-
+            await AutoSaveChatSessionAsync();
             await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
@@ -1570,7 +1585,7 @@ public sealed class GameProgressService
             ActiveRound = null;
             Phase = RoundPhase.Idle;
             IsPrologueStage = false;
-
+            await AutoSaveChatSessionAsync();
             await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
@@ -1599,9 +1614,9 @@ public sealed class GameProgressService
             ActiveRound = null;
             Phase = RoundPhase.Idle;
             IsPrologueStage = false;
-
-            await LoadDatabaseStateAsync();
             await AutoSaveChatSessionAsync();
+            await LoadDatabaseStateAsync();
+            
         }
         catch (Exception ex)
         {
@@ -1670,7 +1685,7 @@ public sealed class GameProgressService
 
             db.ApiRoutings.AddRange(newRoutings);
             await db.SaveChangesAsync();
-
+            await AutoSaveChatSessionAsync();
             await LoadDatabaseStateAsync();
         }
         catch (Exception ex)
@@ -1772,8 +1787,9 @@ public sealed class GameProgressService
             IsStartingAdventure = false;
             IsPrologueStage = true;
 
-            await LoadDatabaseStateAsync();
             await AutoSaveChatSessionAsync();
+            await LoadDatabaseStateAsync();
+            
         }
         catch (Exception ex)
         {
