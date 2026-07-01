@@ -777,11 +777,14 @@ public sealed class PromptComposer
         GameRound round,
         IReadOnlyList<CharacterMemory> recentMemories,
         string? playerInstruction,
-        RagContext? ragContext = null)
+        RagContext? ragContext = null,
+        string? dbSummary = null)
     {
         var memories = recentMemories.Count == 0
             ? "无近期私有记忆。"
             : string.Join('\n', recentMemories.Select(memory => $"- {memory.RoundIndex}记忆: {memory.MemoryText} (情绪: {memory.EmotionalState})"));
+
+        var dbSummaryText = string.IsNullOrWhiteSpace(dbSummary) ? "（暂无现世处境数据。）" : dbSummary;
 
         var previousTurns = round.CharacterTurns.Count == 0
             ? "本大轮中，目前尚无其他角色在之前行动。"
@@ -887,6 +890,9 @@ public sealed class PromptComposer
 
         【角色可见世界书（仅作背景参考，行动以历史上下文与本回合实况为准）】
         {{FormatRagContext(ragContext)}}
+
+        【现世处境（你能感知到的数据库状态：全局状态栏、当前世界地图点、地图元素，以及你自己的状态栏）】
+        {{dbSummaryText}}
 
         【个人记忆 (Character Memory)】
         这是你独有的私有记忆（其他角色可能对这些信息毫不知情）：

@@ -83,6 +83,11 @@ public sealed class CharacterAgentService(
         var selectedChronicle = await ChronicleSelector.SelectAsync(dbContext, chronicleKeywords, cancellationToken);
         var history = RoundContextBuilder.BuildHistory(round, selectedChronicle);
 
+        // 角色 Agent 只能看【受限视角】的数据库：全局状态栏 + 世界地图点 + 地图元素 + 自己的那一栏。
+        // 其余表（在册NPC全表、势力、物品、装备、任务、他人记忆等）对角色不可见。
+        var dbSummary = await DbSummaryBuilder.BuildForCharacterAsync(
+            dbContext, profile.CharacterName, profile.IsPlayerControlled, cancellationToken);
+
         var response = await llmClient.SendChatAsync(
             new LlmRequest
             {
@@ -91,7 +96,7 @@ public sealed class CharacterAgentService(
                 Messages =
                 [
                     LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的专属角色Agent。"),
-                    LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext)),
+                    LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext, dbSummary)),
                     LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
                     LlmMessage.User(promptComposer.ComposeCharacterTurnThoughtGuide()),
                     LlmMessage.Assistant(PromptComposer.ThoughtPrefill)

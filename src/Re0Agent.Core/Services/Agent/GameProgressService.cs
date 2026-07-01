@@ -130,6 +130,9 @@ public sealed class GameProgressService
     public string? LocationDescription { get; private set; }
     public string? LocationRegion { get; private set; }
 
+    /// <summary>当前游戏内时间（来自 global_state.cur_time），显示在冒险者状态栏。</summary>
+    public string? CurrentGameTime { get; private set; }
+
     public List<ImportantNpc> AllNpcs { get; private set; } = new();
     public List<string> AllCharacterNames { get; private set; } = new();
     public List<Re0Agent.Core.Entities.AgentConfig> AgentConfigs { get; private set; } = new();
@@ -253,6 +256,7 @@ public sealed class GameProgressService
 
             var state = await db.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
             CurrentChapter = state?.CurrentChapter ?? 1;
+            CurrentGameTime = state?.CurTime;
 
             ChatSessions = (await sessionService.ListSessionsAsync(cancellationToken)).ToList();
             var active = ChatSessions.FirstOrDefault(s => s.IsActive == 1);

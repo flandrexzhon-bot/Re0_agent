@@ -55,7 +55,8 @@ public sealed class ChapterSwitchAgent(
 
         var lastChronicle = recentChronicle.LastOrDefault()?.ChronicleText;
 
-        var dbSummary = await BuildDbSummaryAsync(state, cancellationToken);
+        // 帕秋莉属于非角色 Agent，能看到整个数据库（全量摘要）。
+        var dbSummary = await DbSummaryBuilder.BuildFullAsync(dbContext, cancellationToken);
 
         // 设定背景：当前章节及当前地点相关的世界书条目。
         var ragContext = await ragService.QueryAsync(
@@ -86,16 +87,6 @@ public sealed class ChapterSwitchAgent(
             cancellationToken);
 
         return ParseChapterSwitch(response.Content, chapter);
-    }
-
-    private async Task<string> BuildDbSummaryAsync(GlobalState? state, CancellationToken cancellationToken)
-    {
-        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var stateStr = state is null ? "无" :
-            $"位置:{state.CurrentLocation}/{state.CurrentMinorRegion}/{state.CurrentMajorRegion}，时间:{state.CurTime}，章节:{state.CurrentChapter}";
-        var protagonistStr = protagonist is null ? "无" :
-            $"{protagonist.Name}，位于{protagonist.LocationName}，状态:{protagonist.SelfStatus}";
-        return $"[全局状态] {stateStr}\n[主角] {protagonistStr}";
     }
 
     private static int? ParseChapterSwitch(string content, int currentChapter)

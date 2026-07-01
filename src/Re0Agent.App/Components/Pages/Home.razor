@@ -516,6 +516,10 @@ else
                             }
                             <div><span class="attr-label">身份:</span> @protagonistInfo.IdentityText</div>
                             <div><span class="attr-label">当前状态:</span> <span class="badge bg-dark-vintage text-gold border-vintage">@protagonistInfo.SelfStatus</span></div>
+                            @if (!string.IsNullOrEmpty(currentGameTime))
+                            {
+                                <div><span class="attr-label">当前时间:</span> <span style="color: var(--color-gold);">🕐 @currentGameTime</span></div>
+                            }
 
                             <!-- 生命/魔法/体力 三条资源条 -->
                             <div class="stat-bars">
@@ -917,6 +921,7 @@ else
     private List<EquipmentItem> equipments = new();
     private string? locationDescription;
     private string? locationRegion;
+    private string? currentGameTime;
 
     // Model configuration parameters
     private List<ImportantNpc> allNpcs = new();
@@ -1052,6 +1057,7 @@ else
             
             locationDescription = Progress.LocationDescription;
             locationRegion = Progress.LocationRegion;
+            currentGameTime = Progress.CurrentGameTime;
             allNpcs = Progress.AllNpcs;
             quests = Progress.Quests;
             allCharacterNames = Progress.AllCharacterNames;
