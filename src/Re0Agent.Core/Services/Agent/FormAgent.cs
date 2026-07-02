@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
@@ -263,33 +264,83 @@ public sealed partial class FormAgent(
 
     private async Task<string> CreateDatabaseSummaryAsync(CancellationToken cancellationToken)
     {
+        // 填表 Agent 必须看到【每一行的全部业务字段】才能正确 UPDATE（按 UNIQUE 键定位、只改变化列）
+        // 以及正确判空初始化。故这里逐表 dump 全字段，并在每张表标注行数。
+        var sb = new StringBuilder();
+
         var global = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        sb.AppendLine(global is null
+            ? "【global_state】0行 —— 空表，需要初始化。"
+            : "【global_state】1行：\n" + $"  row_id={global.RowId}; current_location={global.CurrentLocation}; current_minor_region={global.CurrentMinorRegion}; current_major_region={global.CurrentMajorRegion}; prev_scene_time={global.PrevSceneTime ?? "NULL"}; elapsed_time={global.ElapsedTime}; cur_time={global.CurTime}; current_chapter={global.CurrentChapter}; is_lewd={global.IsLewd}");
+
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        sb.AppendLine(protagonist is null
+            ? "【protagonist_info】0行 —— 空表，需要初始化。"
+            : "【protagonist_info】1行：\n" + $"  row_id={protagonist.RowId}; char_id={protagonist.CharId}; name={protagonist.Name}; gender={protagonist.Gender}; age={protagonist.Age}; location_name={protagonist.LocationName}; self_status={protagonist.SelfStatus}; base_attributes={protagonist.BaseAttributes}; special_attributes={protagonist.SpecialAttributes ?? "NULL"}; resources_text={protagonist.ResourcesText ?? "NULL"}; hp={protagonist.Hp}/{protagonist.MaxHp}; mp={protagonist.Mp}/{protagonist.MaxMp}; stamina={protagonist.Stamina}/{protagonist.MaxStamina}; armor={protagonist.Armor}; identity_text={protagonist.IdentityText}; appearance={protagonist.Appearance}; skills_json={protagonist.SkillsJson ?? "NULL"}");
 
-        // 查询每张业务表的行数，让模型能判断哪些表为空需要初始化。
-        var npcCount = await dbContext.ImportantNpcs.CountAsync(cancellationToken);
-        var mapPointCount = await dbContext.WorldMapPoints.CountAsync(cancellationToken);
-        var mapElementCount = await dbContext.MapElements.CountAsync(cancellationToken);
-        var factionCount = await dbContext.Factions.CountAsync(cancellationToken);
-        var inventoryCount = await dbContext.Inventory.CountAsync(cancellationToken);
-        var equipmentCount = await dbContext.Equipment.CountAsync(cancellationToken);
-        var questCount = await dbContext.Quests.CountAsync(cancellationToken);
+        var npcs = await dbContext.ImportantNpcs.AsNoTracking().OrderBy(n => n.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "important_npc", npcs, n =>
+            $"row_id={n.RowId}; char_id={n.CharId}; name={n.Name}; gender={n.Gender}; age={n.Age}; location_name={n.LocationName}; self_status={n.SelfStatus}; base_attributes={n.BaseAttributes}; special_attributes={n.SpecialAttributes ?? "NULL"}; hp={n.Hp}/{n.MaxHp}; mp={n.Mp}/{n.MaxMp}; stamina={n.Stamina}/{n.MaxStamina}; armor={n.Armor}; brief_intro={n.BriefIntro}; identity_text={n.IdentityText}; relations_text={n.RelationsText ?? "NULL"}; interaction_options={n.InteractionOptions ?? "NULL"}; skills_json={n.SkillsJson ?? "NULL"}");
+
+        var mapPoints = await dbContext.WorldMapPoints.AsNoTracking().OrderBy(p => p.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "world_map_points", mapPoints, p =>
+            $"row_id={p.RowId}; location_name={p.LocationName}; minor_region={p.MinorRegion}; major_region={p.MajorRegion}; location_type={p.LocationType}; importance={p.Importance}; exploration_status={p.ExplorationStatus}; environment_desc={p.EnvironmentDesc}");
+
+        var mapElements = await dbContext.MapElements.AsNoTracking().OrderBy(e => e.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "map_elements", mapElements, e =>
+            $"row_id={e.RowId}; element_name={e.ElementName}; element_type={e.ElementType}; location_name={e.LocationName}; status_text={e.StatusText}; interaction_options={e.InteractionOptions}; element_desc={e.ElementDesc}");
+
+        var factions = await dbContext.Factions.AsNoTracking().OrderBy(f => f.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "factions", factions, f =>
+            $"row_id={f.RowId}; faction_name={f.FactionName}; leader={f.Leader ?? "NULL"}; headquarters={f.Headquarters ?? "NULL"}; relations_text={f.RelationsText ?? "NULL"}; description={f.Description}");
+
+        var inventory = await dbContext.Inventory.AsNoTracking().OrderBy(i => i.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "inventory", inventory, i =>
+            $"row_id={i.RowId}; item_name={i.ItemName}; item_type={i.ItemType}; quantity={i.Quantity}; quality={i.Quality}; description={i.Description}");
+
+        var equipment = await dbContext.Equipment.AsNoTracking().OrderBy(e => e.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "equipment", equipment, e =>
+            $"row_id={e.RowId}; equipment_name={e.EquipmentName}; equipment_type={e.EquipmentType}; quality={e.Quality}; status_text={e.StatusText}; description={e.Description}");
+
+        var quests = await dbContext.Quests.AsNoTracking().OrderBy(q => q.RowId).ToListAsync(cancellationToken);
+        AppendTable(sb, "quests", quests, q =>
+            $"row_id={q.RowId}; quest_name={q.QuestName}; quest_type={q.QuestType}; priority_level={q.PriorityLevel}; status_tag={q.StatusTag}; progress_text={q.ProgressText}; target_desc={q.TargetDesc}; source_text={q.SourceText ?? "NULL"}; reward_text={q.RewardText ?? "NULL"}");
+
+        // chronicle / character_memory 为追加式历史，条数可能很多：给行数 + 最近数条摘要即可，
+        // 全文历史由「历史上下文深度注入」单独负责，避免填表上下文爆炸。
         var chronicleCount = await dbContext.Chronicle.CountAsync(cancellationToken);
+        var recentChronicle = await dbContext.Chronicle.AsNoTracking()
+            .OrderByDescending(c => c.RowId).Take(3)
+            .Select(c => $"    {c.CodeIndex}({c.TimeSpan}): {c.Summary}")
+            .ToListAsync(cancellationToken);
+        sb.AppendLine($"【chronicle】{chronicleCount}行（追加式，仅列最近3条概览）："
+            + (recentChronicle.Count == 0 ? " 空表" : "\n" + string.Join("\n", ((IEnumerable<string>)recentChronicle).Reverse())));
+
         var memoryCount = await dbContext.CharacterMemory.CountAsync(cancellationToken);
+        var recentMemory = await dbContext.CharacterMemory.AsNoTracking()
+            .OrderByDescending(m => m.RowId).Take(5)
+            .Select(m => $"    [{m.RoundIndex}]{m.CharacterName}: {m.MemoryText}（情绪:{m.EmotionalState}）")
+            .ToListAsync(cancellationToken);
+        sb.AppendLine($"【character_memory】{memoryCount}行（追加式，仅列最近5条）："
+            + (recentMemory.Count == 0 ? " 空表" : "\n" + string.Join("\n", ((IEnumerable<string>)recentMemory).Reverse())));
 
-        var npcNames = npcCount == 0
-            ? "（无）"
-            : string.Join("、", await dbContext.ImportantNpcs.AsNoTracking()
-                .OrderBy(n => n.RowId)
-                .Select(n => n.Name)
-                .ToListAsync(cancellationToken));
+        return sb.ToString().TrimEnd();
+    }
 
-        return $"global={(global is null ? "【空表-需要初始化】" : $"{global.CurrentLocation}/{global.CurTime}/chapter={global.CurrentChapter}")}; "
-            + $"protagonist={(protagonist is null ? "【空表-需要初始化】" : $"{protagonist.Name}/{protagonist.LocationName}")}; "
-            + $"world_map_points={mapPointCount}行; map_elements={mapElementCount}行; factions={factionCount}行; "
-            + $"important_npc={npcCount}行=[{npcNames}]; "
-            + $"inventory={inventoryCount}行; equipment={equipmentCount}行; quests={questCount}行; "
-            + $"chronicle={chronicleCount}行; character_memory={memoryCount}行";
+    /// <summary>逐行 dump 一张表：标注行数，空表明确提示需初始化，非空表每行一条全字段记录。</summary>
+    private static void AppendTable<T>(StringBuilder sb, string tableName, IReadOnlyList<T> rows, Func<T, string> render)
+    {
+        if (rows.Count == 0)
+        {
+            sb.AppendLine($"【{tableName}】0行 —— 空表，若为开局需初始化。");
+            return;
+        }
+
+        sb.AppendLine($"【{tableName}】{rows.Count}行：");
+        foreach (var row in rows)
+        {
+            sb.Append("  ").AppendLine(render(row));
+        }
     }
 
     private static IReadOnlyList<string> ParseSqlPayload(string content)
