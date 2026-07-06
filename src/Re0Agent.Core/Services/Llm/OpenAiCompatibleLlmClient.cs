@@ -29,7 +29,7 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         if (!response.IsSuccessStatusCode)
         {
-            return new LlmResponse(request.AgentName, string.Empty, body);
+            throw CreateHttpErrorException(response, body);
         }
 
         var (content, reasoning) = ReadAssistantContent(body);
@@ -79,7 +79,11 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw CreateHttpErrorException(response, body);
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
@@ -118,7 +122,7 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
 
         // 流式请求要求服务端在末尾追加 usage 块（DeepSeek/OpenAI 支持），
         // 否则流式下拿不到缓存命中统计。
-        if (stream)
+        if (stream && SupportsStreamUsageOptions(options))
         {
             payload["stream_options"] = new { include_usage = true };
         }
@@ -140,9 +144,42 @@ public sealed class OpenAiCompatibleLlmClient(HttpClient httpClient) : ILlmClien
         return httpRequest;
     }
 
+    private static HttpRequestException CreateHttpErrorException(
+        HttpResponseMessage response,
+        string responseBody)
+    {
+        var body = NormalizeErrorBody(responseBody);
+        var message = $"LLM 请求失败 (HTTP {(int)response.StatusCode} {response.StatusCode})";
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            message += $": {body}";
+        }
+
+        return new HttpRequestException(message, inner: null, response.StatusCode);
+    }
+
+    private static string NormalizeErrorBody(string responseBody)
+    {
+        var body = responseBody.Trim();
+        const int maxLength = 4_000;
+        return body.Length <= maxLength ? body : body[..maxLength] + "...";
+    }
+
     private static bool IsDeepSeek(LlmOptions options) =>
         (options.ApiEndpoint?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false)
         || (options.ModelName?.Contains("deepseek", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static bool SupportsStreamUsageOptions(LlmOptions options)
+    {
+        // Google Gemini 的 OpenAI-compatible endpoint 可流式输出，但不稳定接受
+        // OpenAI 的 stream_options 扩展参数；省略后仍能正常读取内容增量。
+        if (options.ApiEndpoint?.Contains("generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     private static bool IsClaude(LlmOptions options) =>
         (options.ModelName?.Contains("claude", StringComparison.OrdinalIgnoreCase) ?? false)
