@@ -98,6 +98,7 @@ public sealed class ProtagonistTemplateService(
 
         // 不再硬编码初始地点：留空，由填表 Agent 在首回合按世界书生成。
         protagonist.LocationName = string.Empty;
+        protagonist = GameStateTextNormalizer.NormalizeProtagonist(protagonist);
 
         var addedSubaruNpc = false;
         var transaction = dbContext.Database.CurrentTransaction is null
@@ -160,29 +161,8 @@ public sealed class ProtagonistTemplateService(
             throw new InvalidOperationException($"模板名称 '{templateName}' 已存在。");
         }
 
-        var cleanProtagonist = new ProtagonistInfo
-        {
-            RowId = 1,
-            CharId = protagonist.CharId,
-            Name = protagonist.Name,
-            Gender = protagonist.Gender,
-            Age = protagonist.Age,
-            Appearance = protagonist.Appearance,
-            IdentityText = protagonist.IdentityText,
-            SelfStatus = protagonist.SelfStatus ?? "正常",
-            LocationName = protagonist.LocationName ?? "王都",
-            BaseAttributes = protagonist.BaseAttributes,
-            SpecialAttributes = protagonist.SpecialAttributes,
-            ResourcesText = protagonist.ResourcesText,
-            Hp = protagonist.Hp,
-            MaxHp = protagonist.MaxHp,
-            Mp = protagonist.Mp,
-            MaxMp = protagonist.MaxMp,
-            Stamina = protagonist.Stamina,
-            MaxStamina = protagonist.MaxStamina,
-            Armor = protagonist.Armor,
-            SkillsJson = protagonist.SkillsJson
-        };
+        var cleanProtagonist = GameStateTextNormalizer.NormalizeProtagonist(protagonist, "王都");
+        cleanProtagonist.RowId = 1;
 
         var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
 

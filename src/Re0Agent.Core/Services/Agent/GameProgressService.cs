@@ -1716,7 +1716,10 @@ public sealed class GameProgressService
 
             if (IsCustomProtagonist)
             {
-                var templateName = $"自定义主角：{CustomProtagonist.Name}";
+                var cleanProtagonist = GameStateTextNormalizer.NormalizeProtagonist(CustomProtagonist, "王都");
+                cleanProtagonist.RowId = 1;
+
+                var templateName = $"自定义主角：{cleanProtagonist.Name}";
                 var existing = await db.ProtagonistTemplates
                     .FirstOrDefaultAsync(t => t.TemplateName == templateName);
                 if (existing is not null)
@@ -1726,21 +1729,6 @@ public sealed class GameProgressService
                 }
 
                 int includesSubaruInt = IncludeSubaruAsNpc ? 1 : 0;
-                var cleanProtagonist = new ProtagonistInfo
-                {
-                    RowId = 1,
-                    Name = CustomProtagonist.Name,
-                    Gender = CustomProtagonist.Gender,
-                    Age = CustomProtagonist.Age,
-                    Appearance = CustomProtagonist.Appearance,
-                    IdentityText = CustomProtagonist.IdentityText,
-                    SelfStatus = CustomProtagonist.SelfStatus ?? "正常",
-                    LocationName = CustomProtagonist.LocationName ?? "王都",
-                    BaseAttributes = CustomProtagonist.BaseAttributes,
-                    SpecialAttributes = CustomProtagonist.SpecialAttributes,
-                    ResourcesText = CustomProtagonist.ResourcesText
-                };
-
                 var baseData = JsonSerializer.Serialize(new { protagonist = cleanProtagonist }, JsonOptions);
                 var newTpl = new ProtagonistTemplate
                 {

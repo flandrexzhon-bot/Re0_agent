@@ -26,6 +26,7 @@ public sealed partial class FormAgentSqlExecutor(
         var safeStatements = statements
             .Select(HardenImportantNpcInsert)
             .Select(StripCurrentChapterAssignment)
+            .Select(LimitConstrainedTextFields)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
 

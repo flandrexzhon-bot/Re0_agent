@@ -108,6 +108,53 @@ public sealed class Phase4SaveAndTemplateTests
     }
 
     [Fact]
+    public async Task FormExecutorTruncatesConstrainedTextFieldsBeforeExecuting()
+    {
+        var databasePath = CreateTempDatabasePath();
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await SeedGameStateAsync(context);
+
+            var executor = new FormAgentSqlExecutor(context, new SqlSafetyValidator());
+            var longAppearance = new string('A', 80);
+            var longIdentity = new string('B', 70);
+            var longBrief = new string('C', 45);
+            var longPast = new string('D', 700);
+            var longItemName = new string('E', 12);
+            var longDescription = new string('F', 80);
+
+            var result = await executor.ExecuteAsync(
+            [
+                $"UPDATE protagonist_info SET appearance = '{longAppearance}', identity_text = '{longIdentity}' WHERE row_id = 1;",
+                "INSERT INTO important_npc (row_id, char_id, name, gender, age, brief_intro, appearance, identity_text, base_attributes, location_name, past_experience, self_status) "
+                    + $"VALUES (2, 6, '长文本角色', '女', 20, '{longBrief}', '{longAppearance}', '{longIdentity}', '力量:50; 敏捷:50', '王都', '{longPast}', '正常');",
+                "INSERT INTO inventory (row_id, item_name, item_type, quantity, quality, description) "
+                    + $"VALUES (2, '{longItemName}', '剧情物品', 1, '普通', '{longDescription}');"
+            ]);
+
+            context.ChangeTracker.Clear();
+            var protagonist = await context.ProtagonistInfo.SingleAsync();
+            var npc = await context.ImportantNpcs.SingleAsync(item => item.Name == "长文本角色");
+            var inventory = await context.Inventory.SingleAsync(item => item.RowId == 2);
+
+            Assert.Equal(3, result.StatementsExecuted);
+            Assert.Equal(60, protagonist.Appearance.Length);
+            Assert.Equal(40, protagonist.IdentityText.Length);
+            Assert.Equal(30, npc.BriefIntro.Length);
+            Assert.Equal(60, npc.Appearance.Length);
+            Assert.Equal(40, npc.IdentityText.Length);
+            Assert.Equal(600, npc.PastExperience.Length);
+            Assert.Equal(10, inventory.ItemName.Length);
+            Assert.Equal(60, inventory.Description.Length);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task DeathReturnRestoresGameStateAndKeepsOnlyProtagonistMemory()
     {
         var databasePath = CreateTempDatabasePath();
@@ -224,6 +271,58 @@ public sealed class Phase4SaveAndTemplateTests
 
             // 初始地点表应为空（无硬编码地点）。
             Assert.Empty(await context.WorldMapPoints.ToListAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task ProtagonistTemplateServiceTruncatesConstrainedTextFieldsBeforeApply()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+            var templateService = CreateTemplateService(context, [50]);
+            var longAppearance = new string('A', 80);
+            var longIdentity = new string('B', 70);
+            var custom = new ProtagonistTemplate
+            {
+                TemplateName = "长背景主角",
+                IncludesSubaru = 0,
+                BaseData = JsonSerializer.Serialize(new
+                {
+                    protagonist = new ProtagonistInfo
+                    {
+                        RowId = 1,
+                        Name = "阿斯特",
+                        Gender = "男",
+                        Age = 18,
+                        Appearance = longAppearance,
+                        IdentityText = longIdentity,
+                        SelfStatus = "正常",
+                        LocationName = "王都",
+                        BaseAttributes = "体质:50; 敏捷:50; 感知:50",
+                        SpecialAttributes = "无",
+                        ResourcesText = "无"
+                    }
+                }),
+                IsDefault = 0
+            };
+            context.ProtagonistTemplates.Add(custom);
+            await context.SaveChangesAsync();
+
+            var result = await templateService.ApplyTemplateAsync(custom.TemplateId);
+            context.ChangeTracker.Clear();
+
+            var protagonist = await context.ProtagonistInfo.SingleAsync();
+            Assert.Equal("阿斯特", result.ProtagonistName);
+            Assert.Equal(60, protagonist.Appearance.Length);
+            Assert.Equal(40, protagonist.IdentityText.Length);
         }
         finally
         {
