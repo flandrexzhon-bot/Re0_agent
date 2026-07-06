@@ -17,9 +17,12 @@ public sealed class Phase3RagAndDiceTests
     {
         var entries = BlackTeaWorldBook.Entries;
 
-        Assert.InRange(entries.Count, 200, 220);
+        Assert.InRange(entries.Count, 220, 230);
         Assert.Contains(entries, entry => entry.Comment.Contains("基础", StringComparison.Ordinal) && entry.Constant);
         Assert.Contains(entries, entry => entry.Keys.Contains("爱蜜莉雅"));
+        Assert.Contains(entries, entry => entry.Comment.Contains("第54章", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, entry => entry.Comment is "变量提示词" or "[initvar]" or "🔆状态栏🔆");
+        Assert.DoesNotContain(entries, entry => !entry.Enabled);
     }
 
     [Fact]

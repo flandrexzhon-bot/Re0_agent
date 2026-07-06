@@ -21,8 +21,11 @@ public sealed class JsonResourceTests
     {
         var entries = BlackTeaWorldBook.Entries;
 
-        Assert.InRange(entries.Count, 200, 220);
+        Assert.InRange(entries.Count, 220, 230);
         Assert.Contains(entries, entry => entry.Comment.Contains("基础", StringComparison.Ordinal));
         Assert.Contains(entries, entry => entry.Comment.StartsWith("第", StringComparison.Ordinal));
+        Assert.Contains(entries, entry => entry.Comment.Contains("第54章", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, entry => entry.Comment is "变量提示词" or "[initvar]" or "🔆状态栏🔆");
+        Assert.DoesNotContain(entries, entry => !entry.Enabled);
     }
 }
