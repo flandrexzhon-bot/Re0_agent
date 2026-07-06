@@ -44,7 +44,8 @@ public static class SqlSheetCatalog
             错：当前详细地点填 "东京-新宿区-御苑"
             
             【时间格式】
-            当前时间、上轮场景时间："YYYY-MM-DD HH:MM"
+            当前时间、上轮场景时间："<月>-<日>-<时>:<分>"，例如 "塔姆兹月-14日-??:??"。
+            未知的时或分用 "??" 占位；禁止写 "上午"、"下午"、"早晨" 等自然时段词。
             经过的时间："{数值}{单位}"，多单位直接连写，不加空格。
             单位示例：[年,月,周,天,小时,分]
             示例："3小时20分" | "2天" | "3年6月"
@@ -58,15 +59,15 @@ public static class SqlSheetCatalog
             """",
             InitNode: """
             插入唯一的一行，填入初始时间和位置。
-            SQL示例: INSERT INTO global_state (row_id, current_location, current_minor_region, current_major_region, prev_scene_time, elapsed_time, cur_time, is_lewd) VALUES (1, '御苑', '新宿区', '东京都', NULL, '0分', '2024-04-01 09:00','否');
+            SQL示例: INSERT INTO global_state (row_id, current_location, current_minor_region, current_major_region, prev_scene_time, elapsed_time, cur_time, is_lewd) VALUES (1, '御苑', '新宿区', '东京都', NULL, '0分', '塔姆兹月-14日-??:??','否');
             """,
             DeleteNode: """
             禁止。
             """,
             UpdateNode: """
-            每轮都要更新：上轮场景时间、经过的时间、当前时间。位置有变就更新对应地点字段。current_location、current_minor_region、current_major_region、elapsed_time、cur_time、is_lewd均 NOT NULL，不能写成 NULL 或空串。cur_time / prev_scene_time 必须严格是 'YYYY-MM-DD HH:MM' 格式。
-            SQL示例(纯时间推进): UPDATE global_state SET prev_scene_time = '2024-04-01 09:00', elapsed_time = '3小时20分', cur_time = '2024-04-01 12:20', is_lewd = '否' WHERE row_id = 1;
-            SQL示例(含位置变动): UPDATE global_state SET current_location = '御苑', current_minor_region = '新宿区', current_major_region = '东京都', prev_scene_time = '2024-04-01 12:20', elapsed_time = '1小时', cur_time = '2024-04-01 13:20', is_lewd = '否' WHERE row_id = 1;
+            每轮都要更新：上轮场景时间、经过的时间、当前时间。位置有变就更新对应地点字段。current_location、current_minor_region、current_major_region、elapsed_time、cur_time、is_lewd均 NOT NULL，不能写成 NULL 或空串。cur_time / prev_scene_time 必须严格是 '<月>-<日>-<时>:<分>' 格式；未知时分写 '??:??'，禁止写自然时段词。
+            SQL示例(纯时间推进): UPDATE global_state SET prev_scene_time = '塔姆兹月-14日-??:??', elapsed_time = '3小时20分', cur_time = '塔姆兹月-14日-??:??', is_lewd = '否' WHERE row_id = 1;
+            SQL示例(含位置变动): UPDATE global_state SET current_location = '御苑', current_minor_region = '新宿区', current_major_region = '东京都', prev_scene_time = '塔姆兹月-14日-??:??', elapsed_time = '1小时', cur_time = '塔姆兹月-14日-??:??', is_lewd = '否' WHERE row_id = 1;
             """,
             InsertNode: """
             禁止。
@@ -77,9 +78,9 @@ public static class SqlSheetCatalog
               current_location TEXT NOT NULL, -- 当前详细地点
               current_minor_region TEXT NOT NULL, -- 当前次要地区
               current_major_region TEXT NOT NULL, -- 当前主要地区
-              prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR prev_scene_time GLOB '????-??-?? ??:??'), -- 上轮场景时间
+              prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR (prev_scene_time GLOB '*月-*日-*:*' AND instr(prev_scene_time, '上午') = 0 AND instr(prev_scene_time, '下午') = 0 AND instr(prev_scene_time, '早晨') = 0)), -- 上轮场景时间
               elapsed_time TEXT NOT NULL, -- 经过的时间
-              cur_time TEXT NOT NULL CHECK(cur_time GLOB '????-??-?? ??:??'), -- 当前时间
+              cur_time TEXT NOT NULL CHECK(cur_time GLOB '*月-*日-*:*' AND instr(cur_time, '上午') = 0 AND instr(cur_time, '下午') = 0 AND instr(cur_time, '早晨') = 0), -- 当前时间
               is_lewd TEXT NOT NULL DEFAULT '否' CHECK(is_lewd IN ('是', '否')) -- 是否色色
             );
             """,

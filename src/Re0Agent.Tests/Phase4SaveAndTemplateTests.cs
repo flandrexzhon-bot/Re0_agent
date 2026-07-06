@@ -23,7 +23,7 @@ public sealed class Phase4SaveAndTemplateTests
             var saveSystem = CreateSaveSystem(context, [50]);
 
             var first = await saveSystem.CreateSavePointAsync("round_end");
-            context.GlobalStates.Single().CurTime = "2024-04-01 09:10";
+            context.GlobalStates.Single().CurTime = "塔姆兹月-14日-??:??";
             await context.SaveChangesAsync();
             var second = await saveSystem.CreateSavePointAsync("round_end");
 
@@ -83,7 +83,7 @@ public sealed class Phase4SaveAndTemplateTests
             {
                 RowId = 1, CurrentLocation = "王都", CurrentMinorRegion = "王都中心",
                 CurrentMajorRegion = "露格尼卡", ElapsedTime = "0分钟",
-                CurTime = "2024-04-01 09:00", CurrentChapter = 1, IsLewd = "否"
+                CurTime = "塔姆兹月-14日-??:??", CurrentChapter = 1, IsLewd = "否"
             });
             await context.SaveChangesAsync();
 
@@ -271,6 +271,44 @@ public sealed class Phase4SaveAndTemplateTests
 
             // 初始地点表应为空（无硬编码地点）。
             Assert.Empty(await context.WorldMapPoints.ToListAsync());
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, "塔姆兹月-14日-??:??")]
+    [InlineData(7, "塔姆兹月-15日-??:??")]
+    [InlineData(18, "塔姆兹月-25日-??:??")]
+    [InlineData(53, "未知月-未知日-??:??")]
+    [InlineData(82, "第二年塔姆兹月-3日-??:??")]
+    public async Task TemplateAppliesWorldBookInitialTimeForStartingChapter(
+        int startingChapter,
+        string expectedTime)
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            var templateService = CreateTemplateService(context, [50]);
+
+            await templateService.EnsureDefaultTemplateAsync();
+            var template = await context.ProtagonistTemplates.SingleAsync(item => item.TemplateName == "菜月昴");
+
+            await templateService.ApplyTemplateAsync(template.TemplateId, startingChapter);
+            context.ChangeTracker.Clear();
+
+            var globalState = await context.GlobalStates.SingleAsync();
+            Assert.Equal(startingChapter, globalState.CurrentChapter);
+            Assert.Equal(expectedTime, globalState.CurTime);
+            Assert.Matches("^.+月-.+日-.+:.+$", globalState.CurTime);
+            Assert.DoesNotMatch(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$", globalState.CurTime);
+            Assert.DoesNotContain("上午", globalState.CurTime);
+            Assert.DoesNotContain("下午", globalState.CurTime);
+            Assert.DoesNotContain("早晨", globalState.CurTime);
         }
         finally
         {
@@ -616,7 +654,7 @@ public sealed class Phase4SaveAndTemplateTests
             CurrentMinorRegion = "王都中心",
             CurrentMajorRegion = "露格尼卡",
             ElapsedTime = "0分钟",
-            CurTime = "2024-04-01 09:00",
+            CurTime = "塔姆兹月-14日-??:??",
             CurrentChapter = 1,
             IsLewd = "否"
         });

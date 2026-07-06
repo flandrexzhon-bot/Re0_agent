@@ -154,6 +154,102 @@ public sealed class DatabaseSchemaTests
     }
 
     [Fact]
+    public async Task GlobalStateAcceptsWorldBookCalendarTime()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+
+            context.GlobalStates.Add(new GlobalState
+            {
+                RowId = 1,
+                CurrentLocation = "王都",
+                CurrentMinorRegion = "王都中心",
+                CurrentMajorRegion = "露格尼卡",
+                PrevSceneTime = "塔姆兹月-14日-??:??",
+                ElapsedTime = "0分",
+                CurTime = "塔姆兹月-14日-??:??",
+                CurrentChapter = 1,
+                IsLewd = "否"
+            });
+
+            await context.SaveChangesAsync();
+            context.ChangeTracker.Clear();
+
+            var state = await context.GlobalStates.SingleAsync();
+            Assert.Equal("塔姆兹月-14日-??:??", state.CurTime);
+            Assert.Equal("塔姆兹月-14日-??:??", state.PrevSceneTime);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task InitializeAsyncMigratesOldGlobalStateTimeWithoutNewColumns()
+    {
+        var databasePath = CreateTempDatabasePath();
+
+        try
+        {
+            await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = """
+                    CREATE TABLE global_state (
+                      row_id INTEGER PRIMARY KEY CHECK(row_id = 1),
+                      current_location TEXT NOT NULL,
+                      current_minor_region TEXT NOT NULL,
+                      current_major_region TEXT NOT NULL,
+                      prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR prev_scene_time GLOB '????-??-?? ??:??'),
+                      elapsed_time TEXT NOT NULL,
+                      cur_time TEXT NOT NULL CHECK(cur_time GLOB '????-??-?? ??:??')
+                    );
+
+                    INSERT INTO global_state (
+                      row_id,
+                      current_location,
+                      current_minor_region,
+                      current_major_region,
+                      prev_scene_time,
+                      elapsed_time,
+                      cur_time
+                    )
+                    VALUES (
+                      1,
+                      '王都',
+                      '王都中心',
+                      '露格尼卡',
+                      '2024-04-01 09:00',
+                      '0分',
+                      '2024-04-01 09:00'
+                    );
+                    """;
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await using var context = CreateContext(databasePath);
+            await DatabaseInitializer.InitializeAsync(context);
+
+            context.ChangeTracker.Clear();
+            var state = await context.GlobalStates.SingleAsync();
+            Assert.Null(state.PrevSceneTime);
+            Assert.Equal("未知月-未知日-??:??", state.CurTime);
+            Assert.Equal(1, state.CurrentChapter);
+            Assert.Equal("否", state.IsLewd);
+        }
+        finally
+        {
+            DeleteIfExists(databasePath);
+        }
+    }
+
+    [Fact]
     public async Task EntityMappingsAllowCorePhaseOneRows()
     {
         var databasePath = CreateTempDatabasePath();
@@ -170,7 +266,7 @@ public sealed class DatabaseSchemaTests
                 CurrentMinorRegion = "王都中心",
                 CurrentMajorRegion = "露格尼卡",
                 ElapsedTime = "0分钟",
-                CurTime = "2024-04-01 09:00",
+                CurTime = "塔姆兹月-14日-??:??",
                 CurrentChapter = 1,
                 IsLewd = "否"
             });

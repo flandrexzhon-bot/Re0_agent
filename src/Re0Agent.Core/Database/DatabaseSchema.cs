@@ -31,9 +31,9 @@ public static class DatabaseSchema
           current_location TEXT NOT NULL,
           current_minor_region TEXT NOT NULL,
           current_major_region TEXT NOT NULL,
-          prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR prev_scene_time GLOB '????-??-?? ??:??'),
+          prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR (prev_scene_time GLOB '*月-*日-*:*' AND instr(prev_scene_time, '上午') = 0 AND instr(prev_scene_time, '下午') = 0 AND instr(prev_scene_time, '早晨') = 0)),
           elapsed_time TEXT NOT NULL,
-          cur_time TEXT NOT NULL CHECK(cur_time GLOB '????-??-?? ??:??'),
+          cur_time TEXT NOT NULL CHECK(cur_time GLOB '*月-*日-*:*' AND instr(cur_time, '上午') = 0 AND instr(cur_time, '下午') = 0 AND instr(cur_time, '早晨') = 0),
           current_chapter INTEGER NOT NULL DEFAULT 1 CHECK(current_chapter >= 1),
           is_lewd TEXT NOT NULL DEFAULT '否' CHECK(is_lewd IN ('是', '否'))
         );

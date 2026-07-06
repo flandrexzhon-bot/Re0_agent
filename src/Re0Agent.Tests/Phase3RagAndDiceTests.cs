@@ -197,7 +197,7 @@ public sealed class Phase3RagAndDiceTests
             CurrentMinorRegion = "王都",
             CurrentMajorRegion = "露格尼卡",
             ElapsedTime = "0分钟",
-            CurTime = "2026-06-06 09:00",
+            CurTime = "第二年塔姆兹月-3日-??:??",
             CurrentChapter = 82,
             IsLewd = "否"
         });

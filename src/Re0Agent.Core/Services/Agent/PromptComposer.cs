@@ -1120,7 +1120,8 @@ public sealed class PromptComposer
 
     private const string GlobalStateNote = """
         【表 global_state】全局状态，只允许 UPDATE WHERE row_id = 1，禁止 INSERT/DELETE。
-        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('yyyy-MM-dd HH:mm'), `is_lewd`('是'/'否')。
+        - 可更新: `current_location`, `current_minor_region`, `current_major_region`, `elapsed_time`, `cur_time`('<月>-<日>-<时>:<分>，如 塔姆兹月-14日-??:??'), `is_lewd`('是'/'否')。
+        - `cur_time` 必须严格使用 `月-日-时:分` 分隔格式；未知时分写 `??:??`，不要写“上午”“下午”“早晨”等自然时段词。
         - 【禁止】改 `current_chapter`：章节号由章节切换 Agent 专属维护，且必须是纯整数（如 7），绝不能写成"第七章：xxx"这类文字，否则会写库失败。
         """;
 

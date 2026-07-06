@@ -19,6 +19,7 @@ public static class DatabaseInitializer
                 await context.Database.ExecuteSqlRawAsync(statement, cancellationToken);
             }
 
+            await EnsureGlobalStateWorldBookTimeFormatAsync(context, cancellationToken);
             await EnsureSavePointUpgradeColumnsAsync(context, cancellationToken);
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
             await EnsureImportantNpcUpgradeColumnsAsync(context, cancellationToken);
@@ -31,6 +32,112 @@ public static class DatabaseInitializer
         {
             await context.Database.CloseConnectionAsync();
         }
+    }
+
+    private static async Task EnsureGlobalStateWorldBookTimeFormatAsync(
+        Re0AgentDbContext context,
+        CancellationToken cancellationToken)
+    {
+        string tableSql = string.Empty;
+        await using (var command = context.Database.GetDbConnection().CreateCommand())
+        {
+            command.CommandText = "SELECT sql FROM sqlite_master WHERE type='table' AND name='global_state';";
+            var result = await command.ExecuteScalarAsync(cancellationToken);
+            if (result is not null)
+            {
+                tableSql = result.ToString() ?? "";
+            }
+        }
+
+        if (tableSql.Contains("*月-*日-*:*", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var oldColumns = await ReadColumnNamesAsync(context, "global_state", cancellationToken);
+        var currentChapterSelect = oldColumns.Contains("current_chapter")
+            ? "CASE WHEN current_chapter IS NOT NULL "
+                + "AND CAST(current_chapter AS TEXT) GLOB '[0-9]*' "
+                + "AND CAST(current_chapter AS TEXT) NOT GLOB '*[^0-9]*' "
+                + "AND CAST(current_chapter AS INTEGER) >= 1 "
+                + "THEN CAST(current_chapter AS INTEGER) ELSE 1 END"
+            : "1";
+        var isLewdSelect = oldColumns.Contains("is_lewd")
+            ? "CASE WHEN is_lewd IN ('是', '否') THEN is_lewd ELSE '否' END"
+            : "'否'";
+        var insertStatement = $"""
+            INSERT INTO global_state (
+              row_id,
+              current_location,
+              current_minor_region,
+              current_major_region,
+              prev_scene_time,
+              elapsed_time,
+              cur_time,
+              current_chapter,
+              is_lewd
+            )
+            SELECT
+              row_id,
+              current_location,
+              current_minor_region,
+              current_major_region,
+              CASE
+                WHEN prev_scene_time IS NULL THEN NULL
+                WHEN prev_scene_time GLOB '*月-*日-*:*' AND instr(prev_scene_time, '上午') = 0 AND instr(prev_scene_time, '下午') = 0 AND instr(prev_scene_time, '早晨') = 0 THEN prev_scene_time
+                ELSE NULL
+              END,
+              elapsed_time,
+              CASE
+                WHEN cur_time GLOB '*月-*日-*:*' AND instr(cur_time, '上午') = 0 AND instr(cur_time, '下午') = 0 AND instr(cur_time, '早晨') = 0 THEN cur_time
+                ELSE '未知月-未知日-??:??'
+              END,
+              {currentChapterSelect},
+              {isLewdSelect}
+            FROM global_state_old;
+            """;
+
+        var migrationStatements = new[]
+        {
+            "ALTER TABLE global_state RENAME TO global_state_old;",
+            """
+            CREATE TABLE global_state (
+              row_id INTEGER PRIMARY KEY CHECK(row_id = 1),
+              current_location TEXT NOT NULL,
+              current_minor_region TEXT NOT NULL,
+              current_major_region TEXT NOT NULL,
+              prev_scene_time TEXT CHECK(prev_scene_time IS NULL OR (prev_scene_time GLOB '*月-*日-*:*' AND instr(prev_scene_time, '上午') = 0 AND instr(prev_scene_time, '下午') = 0 AND instr(prev_scene_time, '早晨') = 0)),
+              elapsed_time TEXT NOT NULL,
+              cur_time TEXT NOT NULL CHECK(cur_time GLOB '*月-*日-*:*' AND instr(cur_time, '上午') = 0 AND instr(cur_time, '下午') = 0 AND instr(cur_time, '早晨') = 0),
+              current_chapter INTEGER NOT NULL DEFAULT 1 CHECK(current_chapter >= 1),
+              is_lewd TEXT NOT NULL DEFAULT '否' CHECK(is_lewd IN ('是', '否'))
+            );
+            """,
+            insertStatement,
+            "DROP TABLE global_state_old;"
+        };
+
+        foreach (var stmt in migrationStatements)
+        {
+            await context.Database.ExecuteSqlRawAsync(stmt, cancellationToken);
+        }
+    }
+
+    private static async Task<HashSet<string>> ReadColumnNamesAsync(
+        Re0AgentDbContext context,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName});";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        return columns;
     }
 
     private static async Task EnsureSavePointUpgradeColumnsAsync(

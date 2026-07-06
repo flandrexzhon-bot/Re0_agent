@@ -217,13 +217,31 @@ public sealed class ProtagonistTemplateService(
             CurrentMinorRegion = string.Empty,
             CurrentMajorRegion = string.Empty,
             ElapsedTime = "0分钟",
-            CurTime = "2024-04-01 09:00",
+            CurTime = GetInitialCurTime(startingChapter),
             CurrentChapter = startingChapter,
             IsLewd = "否"
         });
 
         // 不再硬编码任何初始地点：world_map_points 与 global_state 地点字段均留空，
         // 由填表 Agent 在首回合按世界书生成（含主角所在地点）。
+    }
+
+    private static string GetInitialCurTime(int startingChapter)
+    {
+        return startingChapter switch
+        {
+            // 世界书存档点给出塔姆兹月14日；具体时分留给玩家自定义。
+            1 => "塔姆兹月-14日-??:??",
+            // 世界书存档点给出塔姆兹月15日；具体时分留给玩家自定义。
+            7 => "塔姆兹月-15日-??:??",
+            // 世界书存档点给出塔姆兹月25日；具体时分留给玩家自定义。
+            18 => "塔姆兹月-25日-??:??",
+            // 世界书未给出复活点月日或具体钟点。
+            53 => "未知月-未知日-??:??",
+            // 世界书存档点给出第二年塔姆兹月3日；具体时分留给玩家自定义。
+            82 => "第二年塔姆兹月-3日-??:??",
+            _ => "未知月-未知日-??:??"
+        };
     }
 
     private async Task UpsertSubaruNpcAsync(
