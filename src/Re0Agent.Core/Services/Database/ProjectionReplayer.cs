@@ -108,7 +108,7 @@ public sealed class ProjectionReplayer(
         return result;
     }
 
-    private async Task<IReadOnlyList<CharacterMemory>> CaptureRetainedMemoriesAsync(
+    private async Task<IReadOnlyList<RetainedMemory>> CaptureRetainedMemoriesAsync(
         IReadOnlyCollection<string> memoryRetainers,
         CancellationToken cancellationToken)
     {
@@ -116,13 +116,17 @@ public sealed class ProjectionReplayer(
         {
             return [];
         }
-        return await dbContext.CharacterMemory.AsNoTracking()
+        var memories = await dbContext.CharacterMemory.AsNoTracking()
             .Where(item => memoryRetainers.Contains(item.OwnerCharacterId) && item.RetainOnRewind == 1)
             .ToListAsync(cancellationToken);
+        var ids = memories.Select(item => item.RowId).ToList();
+        var embeddings = await dbContext.MemoryEmbeddings.AsNoTracking().Where(item => ids.Contains(item.MemoryRowId))
+            .ToDictionaryAsync(item => item.MemoryRowId, cancellationToken);
+        return memories.Select(item => new RetainedMemory(item, embeddings.GetValueOrDefault(item.RowId))).ToList();
     }
 
     private async Task RestoreRetainedMemoriesAsync(
-        IReadOnlyList<CharacterMemory> retainedMemories,
+        IReadOnlyList<RetainedMemory> retainedMemories,
         CancellationToken cancellationToken)
     {
         if (retainedMemories.Count == 0)
@@ -132,27 +136,54 @@ public sealed class ProjectionReplayer(
         var existingSourceIds = await dbContext.CharacterMemory.AsNoTracking()
             .Select(item => item.SourceEventId).ToListAsync(cancellationToken);
         var nextId = (await dbContext.CharacterMemory.MaxAsync(item => (int?)item.RowId, cancellationToken) ?? 0) + 1;
-        var additions = retainedMemories.Where(item => !existingSourceIds.Contains(item.SourceEventId, StringComparer.Ordinal))
+        var sourceToRowId = new Dictionary<string, int>(StringComparer.Ordinal);
+        var additions = retainedMemories.Where(item => !existingSourceIds.Contains(item.Memory.SourceEventId, StringComparer.Ordinal))
             .Select(item => new CharacterMemory
             {
                 RowId = nextId++,
-                OwnerCharacterId = item.OwnerCharacterId,
-                SourceEventId = item.SourceEventId,
-                WorldTime = item.WorldTime,
-                WorldEpoch = item.WorldEpoch,
-                ObservationChannel = item.ObservationChannel,
-                Confidence = item.Confidence,
-                VisibilityScope = item.VisibilityScope,
-                MemoryType = item.MemoryType,
+                OwnerCharacterId = item.Memory.OwnerCharacterId,
+                SourceEventId = item.Memory.SourceEventId,
+                WorldTime = item.Memory.WorldTime,
+                WorldEpoch = item.Memory.WorldEpoch,
+                ObservationChannel = item.Memory.ObservationChannel,
+                Confidence = item.Memory.Confidence,
+                VisibilityScope = item.Memory.VisibilityScope,
+                MemoryType = item.Memory.MemoryType,
                 RetainOnRewind = 1,
-                MemoryText = item.MemoryText,
-                EmotionalState = item.EmotionalState,
-                CreatedAt = item.CreatedAt
+                MemoryText = item.Memory.MemoryText,
+                EmotionalState = item.Memory.EmotionalState,
+                CreatedAt = item.Memory.CreatedAt
             }).ToList();
+        foreach (var addition in additions) sourceToRowId[addition.SourceEventId] = addition.RowId;
         if (additions.Count > 0)
         {
             dbContext.CharacterMemory.AddRange(additions);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
+        var restoredSourceIds = sourceToRowId.Keys.ToList();
+        var currentRows = await dbContext.CharacterMemory.AsNoTracking()
+            .Where(item => existingSourceIds.Contains(item.SourceEventId) || restoredSourceIds.Contains(item.SourceEventId))
+            .ToDictionaryAsync(item => item.SourceEventId, cancellationToken);
+        var existingEmbeddings = (await dbContext.MemoryEmbeddings.AsNoTracking().Select(item => item.MemoryRowId).ToListAsync(cancellationToken)).ToHashSet();
+        var restoredEmbeddings = retainedMemories.Where(item => item.Embedding is not null)
+            .Where(item => currentRows.ContainsKey(item.Memory.SourceEventId))
+            .Where(item => !existingEmbeddings.Contains(currentRows[item.Memory.SourceEventId].RowId))
+            .Select(item => new MemoryEmbedding
+            {
+                MemoryRowId = currentRows[item.Memory.SourceEventId].RowId,
+                ModelId = item.Embedding!.ModelId,
+                Dimensions = item.Embedding.Dimensions,
+                WorldEpoch = item.Embedding.WorldEpoch,
+                VectorJson = item.Embedding.VectorJson,
+                ContentHash = item.Embedding.ContentHash,
+                CreatedAt = item.Embedding.CreatedAt
+            }).ToList();
+        if (restoredEmbeddings.Count > 0)
+        {
+            dbContext.MemoryEmbeddings.AddRange(restoredEmbeddings);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
+
+    private sealed record RetainedMemory(CharacterMemory Memory, MemoryEmbedding? Embedding);
 }
