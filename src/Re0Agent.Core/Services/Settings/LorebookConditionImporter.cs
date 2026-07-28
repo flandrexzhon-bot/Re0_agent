@@ -18,10 +18,11 @@ public static partial class LorebookConditionImporter
 
         var createdAt = DateTimeOffset.UtcNow.ToString("O");
         var entries = new List<LorebookConditionEntry>();
+        var sourceOrders = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var source in BlackTeaWorldBook.Entries)
         {
             var sourceKey = source.Keys.FirstOrDefault() ?? source.Comment;
-            var order = 0;
+            var order = sourceOrders.GetValueOrDefault(sourceKey);
             foreach (var (condition, content) in ExtractConditionalSegments(source.Content))
             {
                 entries.Add(new LorebookConditionEntry
@@ -34,6 +35,7 @@ public static partial class LorebookConditionImporter
                     CreatedAt = createdAt
                 });
             }
+            sourceOrders[sourceKey] = order;
         }
 
         if (entries.Count > 0)

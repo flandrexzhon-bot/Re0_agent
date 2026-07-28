@@ -42,7 +42,9 @@ public sealed class PaceGovernor(Re0AgentDbContext dbContext, PacingFeatureExtra
         return state;
     }
 
-    public PaceDecision Decide(PacingState state) => state switch
+    public PaceDecision Decide(PacingState state) => DecideDeterministically(state);
+
+    public static PaceDecision DecideDeterministically(PacingState state) => state switch
     {
         { BreathingDebt: >= 1 } => new(.35, true, false, "呼吸债务达到阈值。"),
         { ProgressDebt: >= 1 } => new(.7, false, true, "推进债务达到阈值。"),

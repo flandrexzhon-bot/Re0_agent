@@ -11,8 +11,8 @@ public static class DatabaseInitializer
         "equipment", "inventory", "important_npc", "protagonist_info", "factions",
         "map_elements", "world_map_points", "global_state", "timeline_events",
         "timeline_branches", "projection_checkpoints", "projection_entity_versions", "projection_command_log",
-        "world_scheduler_jobs", "world_runtime_state", "pending_directions", "reveal_queue", "character_card_sources", "lorebook_sources",
-        "scene_states", "character_agency_states", "story_threads", "memory_embeddings", "pacing_state_cache", "director_plan_versions", "chat_sessions"
+        "world_scheduler_jobs", "world_runtime_state", "pending_directions", "reveal_queue",
+        "scene_states", "character_agency_states", "story_threads", "memory_embeddings", "pacing_state_cache", "director_plan_versions", "director_pulses", "chat_sessions"
     ];
 
     public static async Task InitializeAsync(
@@ -23,6 +23,7 @@ public static class DatabaseInitializer
         try
         {
             await context.Database.ExecuteSqlRawAsync("PRAGMA foreign_keys = ON;", cancellationToken);
+            await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;", cancellationToken);
             if (await HasLegacyGameStorageAsync(context, cancellationToken))
             {
                 await ClearLegacyGameStorageAsync(context, cancellationToken);
@@ -30,7 +31,7 @@ public static class DatabaseInitializer
 
             foreach (var statement in DatabaseSchema.CreateStatements)
             {
-                await context.Database.ExecuteSqlRawAsync(statement, cancellationToken);
+                await ExecuteStatementAsync(context, statement, cancellationToken);
             }
 
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
@@ -40,6 +41,8 @@ public static class DatabaseInitializer
             await EnsureWorldRuntimeUpgradeColumnsAsync(context, cancellationToken);
             await EnsureDirectorPlanUpgradeColumnsAsync(context, cancellationToken);
             await EnsureMemoryEmbeddingUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureStoryThreadUpgradeColumnsAsync(context, cancellationToken);
+            await RecoverDirectorPulsesAsync(context, cancellationToken);
             await LorebookConditionImporter.ImportAsync(context, cancellationToken);
         }
         finally
@@ -93,6 +96,16 @@ public static class DatabaseInitializer
         parameter.Value = tableName;
         command.Parameters.Add(parameter);
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
+    private static async Task ExecuteStatementAsync(
+        Re0AgentDbContext context,
+        string statement,
+        CancellationToken cancellationToken)
+    {
+        await using var command = context.Database.GetDbConnection().CreateCommand();
+        command.CommandText = statement;
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<HashSet<string>> ReadColumnNamesAsync(
@@ -151,7 +164,9 @@ public static class DatabaseInitializer
             ("allowed_visibility_scope", "TEXT NOT NULL DEFAULT '[]'"),
             ("causal_distance", "INTEGER NOT NULL DEFAULT 0"),
             ("latest_reveal_world_time", "TEXT NOT NULL DEFAULT ''"),
-            ("must_reveal", "INTEGER NOT NULL DEFAULT 0")
+            ("must_reveal", "INTEGER NOT NULL DEFAULT 0"),
+            ("coalesced_event_ids", "TEXT NOT NULL DEFAULT '[]'"),
+            ("merge_category", "TEXT NOT NULL DEFAULT 'other'")
         };
         foreach (var (name, definition) in additions)
         {
@@ -209,7 +224,12 @@ public static class DatabaseInitializer
     {
         if (!await TableExistsAsync(context, "director_plan_versions", cancellationToken)) return;
         var columns = await ReadColumnNamesAsync(context, "director_plan_versions", cancellationToken);
-        var additions = new[] { ("changed_story_thread_id", "INTEGER"), ("change_summary", "TEXT NOT NULL DEFAULT 'no_story_thread_change'") };
+        var additions = new[]
+        {
+            ("changed_story_thread_id", "INTEGER"),
+            ("change_summary", "TEXT NOT NULL DEFAULT 'no_story_thread_change'"),
+            ("pace_phase", "TEXT")
+        };
         foreach (var (name, definition) in additions)
         {
             if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE director_plan_versions ADD COLUMN " + name + " " + definition + ";", cancellationToken);
@@ -222,5 +242,24 @@ public static class DatabaseInitializer
         var columns = await ReadColumnNamesAsync(context, "memory_embeddings", cancellationToken);
         if (!columns.Contains("world_epoch"))
             await context.Database.ExecuteSqlRawAsync("ALTER TABLE memory_embeddings ADD COLUMN world_epoch INTEGER NOT NULL DEFAULT 1;", cancellationToken);
+    }
+
+    private static async Task EnsureStoryThreadUpgradeColumnsAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "story_threads", cancellationToken)) return;
+        var columns = await ReadColumnNamesAsync(context, "story_threads", cancellationToken);
+        if (!columns.Contains("last_plan_version_id"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE story_threads ADD COLUMN last_plan_version_id INTEGER;", cancellationToken);
+        if (!columns.Contains("modified_count"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE story_threads ADD COLUMN modified_count INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+    }
+
+    private static async Task RecoverDirectorPulsesAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "director_pulses", cancellationToken)) return;
+        await context.Database.ExecuteSqlRawAsync("UPDATE director_pulses SET status = 'Pending' WHERE status = 'Running';", cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE director_pulses SET status = 'Stale' WHERE status = 'Completed' AND expires_at < {DateTimeOffset.UtcNow.ToString("O")};",
+            cancellationToken);
     }
 }

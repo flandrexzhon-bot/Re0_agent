@@ -15,6 +15,20 @@ public sealed record WorldClockAdvance(
 
 public sealed class WorldClockService(Re0AgentDbContext dbContext, EventSingleWriter eventWriter)
 {
+    public async Task SetTimeScaleAsync(int sessionId, double timeScale, CancellationToken cancellationToken = default)
+    {
+        if (timeScale is < .1 or > 10) throw new ArgumentOutOfRangeException(nameof(timeScale));
+        var session = await dbContext.ChatSessions.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
+        session.SessionTimeScale = timeScale;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await eventWriter.CommitAsync(
+            sessionId,
+            "RuntimeControl",
+            $"{{\"control\":\"time_scale\",\"value\":{timeScale.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}",
+            triggerCause: "runtime_control",
+            cancellationToken: cancellationToken);
+    }
+
     public async Task<WorldClockAdvance> AdvanceAsync(
         int sessionId,
         TimeSpan monotonicRealDelta,

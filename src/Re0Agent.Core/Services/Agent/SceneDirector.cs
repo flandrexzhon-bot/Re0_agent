@@ -18,6 +18,11 @@ public sealed class SceneDirector(
 {
     public async Task<BeatPlan> CreatePulseAsync(int sessionId, CancellationToken cancellationToken = default)
     {
+        return await CreatePlanAsync(sessionId, TimeSpan.FromMilliseconds(1500), "director_pulse", cancellationToken);
+    }
+
+    public async Task<BeatPlan> CreateDeterministicPlanAsync(int sessionId, CancellationToken cancellationToken = default)
+    {
         var (candidates, decision) = await LoadCandidatesAsync(sessionId, cancellationToken);
         var plan = FallbackPlan(candidates, decision);
         Validate(plan, candidates, decision);
@@ -26,13 +31,24 @@ public sealed class SceneDirector(
 
     public async Task<BeatPlan> CreateFullPlanAsync(int sessionId, CancellationToken cancellationToken = default)
     {
+        var plan = await CreatePlanAsync(sessionId, TimeSpan.FromSeconds(4), "director_reflection", cancellationToken);
+        await eventWriter.CommitAsync(sessionId, "DirectorPlan", JsonSerializer.Serialize(plan), triggerCause: "director_reflection", cancellationToken: cancellationToken);
+        return plan;
+    }
+
+    private async Task<BeatPlan> CreatePlanAsync(
+        int sessionId,
+        TimeSpan timeoutDuration,
+        string trigger,
+        CancellationToken cancellationToken)
+    {
         var (candidates, decision) = await LoadCandidatesAsync(sessionId, cancellationToken);
         var config = await configResolver.FindConfigAsync("Director", "SceneDirector", cancellationToken);
         BeatPlan plan;
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(4));
+            timeout.CancelAfter(timeoutDuration);
             var response = await llmClient.SendChatAsync(new LlmRequest
             {
                 AgentName = "SceneDirector",
@@ -46,13 +62,12 @@ public sealed class SceneDirector(
         {
             plan = FallbackPlan(candidates, decision);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             plan = FallbackPlan(candidates, decision);
         }
         Validate(plan, candidates, decision);
         await affordanceValidator.ValidateBeatPlanAsync(sessionId, plan, cancellationToken);
-        await eventWriter.CommitAsync(sessionId, "DirectorPlan", JsonSerializer.Serialize(plan), triggerCause: "director_reflection", cancellationToken: cancellationToken);
         return plan;
     }
 
@@ -62,6 +77,18 @@ public sealed class SceneDirector(
         var candidates = await dbContext.TimelineEvents.AsNoTracking()
             .Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed" && item.EventType != "DirectorPlan")
             .OrderByDescending(item => item.Sequence).Take(12).ToListAsync(cancellationToken);
+        if (session.GameMode == "RP")
+        {
+            var protagonistId = await dbContext.ProtagonistInfo.AsNoTracking().Select(item => $"protagonist:{item.RowId}")
+                .FirstOrDefaultAsync(cancellationToken);
+            var revealed = await dbContext.TimelineEvents.AsNoTracking().Where(item => item.BranchId == session.CurrentBranchId)
+                .Select(item => item.RevealedEventCursors).ToListAsync(cancellationToken);
+            var revealedIds = revealed.SelectMany(RevealQueueProjector.DeserializeIds).ToHashSet(StringComparer.Ordinal);
+            candidates = candidates.Where(item => revealedIds.Contains(item.EventId)
+                    || item.EventType is "InitialProjection" or "ImportedGreeting" or "PlayerInput" or "PlayerDirection"
+                    || protagonistId is not null && RevealQueueProjector.DeserializeIds(item.DirectObservers).Contains(protagonistId, StringComparer.Ordinal))
+                .ToList();
+        }
         var state = await paceGovernor.ExtractAsync(session.CurrentBranchId!, candidates.OrderBy(item => item.Sequence).ToList(), cancellationToken);
         return (candidates, paceGovernor.Decide(state));
     }

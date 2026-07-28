@@ -27,11 +27,6 @@ public sealed class WorldCancellationRegistry
         if (!domain.Foreground.IsCancellationRequested) return;
         domain.Foreground.Dispose();
         domain.Foreground = new CancellationTokenSource();
-        if (domain.Plan.IsCancellationRequested)
-        {
-            domain.Plan.Dispose();
-            domain.Plan = new CancellationTokenSource();
-        }
     }
 
     public void ResetPlan(int sessionId)

@@ -10,7 +10,9 @@ public sealed class EventSingleWriter(
     Re0AgentDbContext dbContext,
     StateChangeSetValidator validator,
     ProjectionCommandApplier projectionCommandApplier,
-    ProjectionCheckpointService checkpointService)
+    ProjectionCheckpointService checkpointService,
+    Re0Agent.Core.Services.Agent.DirectorPulseScheduler pulseScheduler,
+    Re0Agent.Core.Services.Agent.RevealQueueProjector revealQueueProjector)
 {
     public async Task<TimelineEvent> CommitAsync(
         int sessionId,
@@ -95,6 +97,8 @@ public sealed class EventSingleWriter(
         {
             await checkpointService.CaptureAsync(eventRecord.BranchId, nextSequence, eventRecord.WorldEpoch, cancellationToken);
         }
+        await pulseScheduler.EnqueueAfterCommitAsync(sessionId, eventRecord, cancellationToken);
+        await revealQueueProjector.EnqueueAfterCommitAsync(sessionId, eventRecord, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return eventRecord;
     }
@@ -137,6 +141,7 @@ public sealed class EventSingleWriter(
                 ["observation_channel"] = JsonSerializer.SerializeToElement(
                     observers.ObserverChannels.GetValueOrDefault(ownerId, "direct")),
                 ["confidence"] = JsonSerializer.SerializeToElement("确知"),
+                ["created_at"] = JsonSerializer.SerializeToElement(DateTimeOffset.UtcNow.ToString("O")),
                 ["visibility_scope"] = JsonSerializer.SerializeToElement(JsonSerializer.Serialize(new
                 {
                     direct = observers.DirectObserverIds,
@@ -153,5 +158,6 @@ public sealed class EventSingleWriter(
     private static bool IsNonObservable(string eventType) => eventType is
         "InitialProjection" or "WorldRewindCommitted" or "DirectorPlan" or "RuntimeControl" or "ProjectionCheckpoint"
         or "InputActivityStarted" or "InputActivityEnded" or "SttStarted" or "SttEnded" or "PlayerDirection"
-        or "PlayerDirectionRealizing" or "PlayerDirectionCompleted" or "DistantWorldAdvance" or "RevealCommitted" or "InitialSceneProposal" or "DirectorReflection";
+        or "PlayerDirectionRealizing" or "PlayerDirectionCompleted" or "PlayerDirectionBlocked" or "DirectionSceneOpportunity"
+        or "DistantWorldAdvance" or "RevealCommitted" or "InitialSceneProposal" or "DirectorReflection";
 }

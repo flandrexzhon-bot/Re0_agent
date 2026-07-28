@@ -26,7 +26,10 @@ public sealed class WorldTickGovernor(
     DirectorReflectionService directorReflection,
     WorldCandidateBuilder candidateBuilder,
     WorldCancellationRegistry cancellationRegistry,
-    RevealQueueService revealQueueService)
+    RevealQueueService revealQueueService,
+    DirectorPulseConsumer pulseConsumer,
+    DirectorPulseCoordinator pulseCoordinator,
+    KnowledgePropagationService knowledgePropagation)
 {
     private const int MaxForegroundActionsPerWindow = 3;
     private static readonly TimeSpan SceneActionDelay = TimeSpan.FromSeconds(20);
@@ -80,20 +83,36 @@ public sealed class WorldTickGovernor(
                 reflectionPlan = await directorReflection.ReflectIfTriggeredAsync(sessionId, latestEvent.EventId, latestEvent.EventType, planCancellation.Token);
         }
         await offscreenSimulation.AdvanceDueAsync(sessionId, clock.LogicalWorldTime, cancellationToken);
+        pulseCoordinator.Kick(sessionId);
+        var currentPlanVersion = await dbContext.DirectorPlanVersions.Where(item => item.BranchId == session.CurrentBranchId)
+            .MaxAsync(item => (int?)item.VersionId, cancellationToken) ?? 0;
+        var pulsePlan = reflectionPlan is null
+            ? await pulseConsumer.ConsumeReadyAsync(sessionId, currentPlanVersion, cancellationToken)
+            : null;
         var sceneId = await dbContext.GlobalStates.AsNoTracking().Select(item => item.CurrentLocation)
             .FirstOrDefaultAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(sceneId))
         {
             return new WorldTickResult(clock, null, null, null);
         }
+        await offscreenSimulation.PromoteForForegroundAsync(sessionId, sceneId, clock.LogicalWorldTime, cancellationToken);
 
         var runtime = await dbContext.WorldRuntimeStates.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
         ResetBudgetWindowIfNeeded(runtime);
-        await revealQueueService.RevealMustRevealForSceneAsync(sessionId, sceneId, clock.LogicalWorldTime, cancellationToken);
-        if (session.InputSlowFactor < .999 && runtime.InputEventCount >= runtime.ForegroundAdmissionLimit)
+        var forcedReveals = await revealQueueService.RevealMustRevealForSceneAsync(sessionId, sceneId, clock.LogicalWorldTime, cancellationToken);
+        if (session.InputSlowFactor < .999)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return new WorldTickResult(clock, null, null, null);
+            if (forcedReveals.Count > 0) runtime.InputEventCount++;
+            var unavoidableTimes = await dbContext.WorldSchedulerJobs.AsNoTracking().Where(item =>
+                    item.SessionId == sessionId && item.Status == "Pending" && item.JobType == "CausalConsequence")
+                .Select(item => item.ScheduledWorldTime).ToListAsync(cancellationToken);
+            var unavoidableDue = unavoidableTimes.Any(value =>
+                DateTimeOffset.TryParse(value, out var scheduled) && scheduled <= clock.LogicalWorldTime);
+            if (runtime.InputEventCount >= runtime.ForegroundAdmissionLimit || !unavoidableDue)
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new WorldTickResult(clock, null, null, null);
+            }
         }
         if (runtime.CurrentSceneBudgetUsed >= MaxForegroundActionsPerWindow)
         {
@@ -101,7 +120,9 @@ public sealed class WorldTickGovernor(
             return new WorldTickResult(clock, null, null, null);
         }
 
-        var dueJob = await FindOrScheduleJobAsync(session, sceneId, clock.LogicalWorldTime, runtime, cancellationToken);
+        var dueJob = await FindOrScheduleJobAsync(
+            session, sceneId, clock.LogicalWorldTime, runtime, session.InputSlowFactor < .999,
+            reflectionPlan ?? pulsePlan, cancellationToken);
         if (dueJob is null)
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -124,9 +145,11 @@ public sealed class WorldTickGovernor(
                 triggerCause: "world_scheduler",
                 cancellationToken: cancellationToken);
             var action = await agentOrchestrator.RunCharacterActionAsync(
-                payload.CharacterId, opportunity, payload.Opportunity, cancellationToken);
-            var beatPlan = reflectionPlan ?? await sceneDirector.CreatePulseAsync(sessionId, planCancellation.Token);
+                payload.CharacterId, opportunity, payload.Motivation, cancellationToken);
+            await knowledgePropagation.PropagateAsync(sessionId, action.EventId, cancellationToken);
+            var beatPlan = reflectionPlan ?? pulsePlan ?? await sceneDirector.CreateDeterministicPlanAsync(sessionId, planCancellation.Token);
             await keplerAgent.RenderAsync(sessionId, beatPlan, cancellationToken);
+            pulseCoordinator.Kick(sessionId);
             dueJob.Status = "Completed";
             runtime.CurrentSceneBudgetUsed++;
             if (session.InputSlowFactor < .999) runtime.InputEventCount++;
@@ -155,10 +178,13 @@ public sealed class WorldTickGovernor(
         string sceneId,
         DateTimeOffset logicalNow,
         WorldRuntimeState runtime,
+        bool unavoidableOnly,
+        BeatPlan? nextOpportunityPlan,
         CancellationToken cancellationToken)
     {
         var pending = await dbContext.WorldSchedulerJobs
-            .Where(item => item.SessionId == session.SessionId && item.Status == "Pending")
+            .Where(item => item.SessionId == session.SessionId && item.Status == "Pending"
+                && (!unavoidableOnly || item.JobType == "CausalConsequence"))
             .OrderBy(item => item.ScheduledWorldTime).ToListAsync(cancellationToken);
         var due = pending.FirstOrDefault(item => DateTimeOffset.TryParse(item.ScheduledWorldTime, out var time) && time <= logicalNow);
         if (due is not null)
@@ -169,9 +195,12 @@ public sealed class WorldTickGovernor(
         {
             return null;
         }
+        if (unavoidableOnly) return null;
 
         var eligible = (await candidateBuilder.BuildCurrentSceneAsync(session, sceneId, logicalNow, cancellationToken))
-            .OrderBy(item => item.CharacterId, StringComparer.Ordinal).ToList();
+            .OrderByDescending(item => item.Motivation.Urgency == "high")
+            .ThenByDescending(item => nextOpportunityPlan?.CandidateCharacterIds.Contains(item.CharacterId, StringComparer.Ordinal) == true)
+            .ThenBy(item => item.CharacterId, StringComparer.Ordinal).ToList();
         if (eligible.Count == 0)
         {
             return null;
@@ -183,7 +212,7 @@ public sealed class WorldTickGovernor(
             SessionId = session.SessionId,
             JobType = "CharacterAgency",
             ScheduledWorldTime = selected.EarliestWorldTime.ToString("O"),
-            Payload = JsonSerializer.Serialize(new ScheduledCharacterAction(selected.CharacterId, selected.Opportunity)),
+            Payload = JsonSerializer.Serialize(new ScheduledCharacterAction(selected.CharacterId, selected.Motivation)),
             Status = "Pending",
             CreatedAt = DateTimeOffset.UtcNow.ToString("O")
         };
@@ -202,5 +231,5 @@ public sealed class WorldTickGovernor(
         }
     }
 
-    private sealed record ScheduledCharacterAction(string CharacterId, string Opportunity);
+    private sealed record ScheduledCharacterAction(string CharacterId, ActorMotivation Motivation);
 }

@@ -26,7 +26,7 @@
 - **死亡回归**：主角死亡后回到之前的存档点，保留元记忆，重走命运 —— 原作的核心设定。
 - **骰子判定与战斗**：内建骰子表格（`骰子表格SQL_v4.1.json`）+ 角色属性系统，行动与战斗以掷骰结算。
 - **世界观 RAG**：内置 4MB+ 的 Re:Zero 设定书（`re0从零开始的异世界生活.json`），按场景检索相关词条注入提示词，让 NPC 言行贴合原作。
-- **角色卡与世界书**：支持 SillyTavern JSON/PNG 角色卡、独立或内嵌世界书，以及原样保留的 `first_mes` 和备用问候。
+- **角色卡与世界书**：支持 SillyTavern JSON/PNG/CHARX 角色卡、独立或内嵌世界书，以及原样保留的 `first_mes` 和备用问候。导入角色会建立独立 Agent 配置与自治状态。
 
 ## 技术架构
 
@@ -43,7 +43,13 @@ Re0Agent.sln
 
 ### 连续事件架构
 
-`WorldTickGovernor` 按逻辑时钟唤醒在场角色；`EventSingleWriter` 为每个分支分配单调序号，并在同一事务中提交事件与 `StateChangeSet`。`ProjectionReplayer` 可从事件游标重建投影，`SavePoint` 是不可变事件书签。
+`WorldTickGovernor` 按逻辑时钟唤醒在场与离屏角色；`EventSingleWriter` 为每个分支分配单调序号，并在同一事务中提交事件、`StateChangeSet`、揭示缓存和 DirectorPulse 任务。`ProjectionReplayer` 可从事件游标重建投影，`SavePoint` 是不可变事件书签。
+
+SceneDirector 分为两级：`DirectorReflection` 在方向、回归、节奏阶段变化和因果冲突等关键节点修订有限数量的故事线；`DirectorPulse` 在前台事件或重要离屏提升提交后进入持久化队列，由独立作用域后台生成下一次机会建议，下一 tick 才能消费。Pulse 先运行影子评估，过期或计划版本不匹配的结果直接作废。
+
+角色上下文由 `InformationGate` 生成。`direct_observers` 是立即可知事实，`potential_learners` 只有在报告、接触、调查或入场条件成立后才转成角色私有记忆。RP 模式下，开普勒只呈现主角已经观察或本次合法揭示的事实。
+
+`RevealQueue` 对待揭示事实设置会话容量、故事线配额和同类事件合并；合并项保留全部事件 cursor。缓存损坏时可从前台事件的 `revealed_event_cursors` 确定性重建。
 
 ### 主要参与者
 
@@ -58,7 +64,7 @@ Re0Agent.sln
 
 | 路由 | 页面 | 作用 |
 |------|------|------|
-| `/` | Home | 连续事件流、会话、暂停和输入 |
+| `/` | Home | 连续事件流、固定 RP/剧场模式、暂停/停止、世界速度、输入慢动作、STT 活动和导演指令状态 |
 | `/database` | DatabaseView | 查看当前世界 / 主角 / NPC / 物品等数据库状态 |
 | `/agents` | AgentConfig（契约之书） | 配置各 LLM 智能体的端点 / 密钥 / 模型 / 参数 |
 | `/world-codex` | WorldCodexView | 浏览世界观设定书 |
@@ -87,6 +93,8 @@ dotnet run --project src/Re0Agent.App -f net8.0-windows10.0.19041.0
 ```bash
 dotnet test src/Re0Agent.Tests
 ```
+
+测试项目只编译连续模式硬门样本，不重新启用已经失效的六段回合测试。样本覆盖 checkpoint/分支/回归重放、RevealQueue 重建、DirectorPulse 生命周期、PlayerDirection 因果完成、离屏预算、向量降级和 SillyTavern 导入。
 
 ## 自行打包 install.exe
 
@@ -125,6 +133,8 @@ pwsh -File build/pack.ps1 -SkipPublish
 - 目前仅提供 Windows 桌面版（项目已为 Android 迁移预留 TFM，尚未开启）。
 - 安装器未做代码签名，首次运行可能出现 SmartScreen「未知发布者」提示，选择「仍要运行」即可。
 - 游戏体验依赖你配置的 LLM 服务质量与上下文长度。
+- 首页的 STT 控件负责向世界时钟发送 `SttStarted/SttEnded` 活动信号；麦克风采集与语音识别由外部输入链路提供。
+- 长期记忆默认可使用本地确定性 feature-hash 向量；没有向量或模型不匹配时自动退回经过权限过滤的时间序检索。
 
 ---
 

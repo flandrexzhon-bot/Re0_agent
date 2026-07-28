@@ -27,4 +27,8 @@
     <ProjectReference Include="..\Re0Agent.Core\Re0Agent.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="ContinuousModeHardGateTests.cs" />
+  </ItemGroup>
+
 </Project>

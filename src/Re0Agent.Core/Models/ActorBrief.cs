@@ -8,4 +8,11 @@ public sealed record ActorBrief(
     TimelineEvent ContextEvent,
     IReadOnlyList<TimelineEvent> DirectlyObservedEvents,
     IReadOnlyList<CharacterMemory> PrivateMemories,
-    string? Opportunity);
+    ActorMotivation Motivation);
+
+public sealed record ActorMotivation(
+    string AbstractMotivation,
+    string Urgency,
+    IReadOnlyList<string> AllowedGoals,
+    IReadOnlyList<string> KnowledgeConstraints,
+    string Source);

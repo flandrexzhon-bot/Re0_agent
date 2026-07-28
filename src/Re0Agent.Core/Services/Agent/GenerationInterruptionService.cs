@@ -10,6 +10,20 @@ public sealed class GenerationInterruptionService(
     ObservabilityComputer observabilityComputer,
     WorldCancellationRegistry cancellationRegistry)
 {
+    public async Task StopCurrentAsync(int sessionId, CancellationToken cancellationToken = default)
+    {
+        cancellationRegistry.CancelForeground(sessionId);
+        cancellationRegistry.CancelPlan(sessionId);
+        await dbContext.WorldSchedulerJobs.Where(item => item.SessionId == sessionId && item.Status == "Running")
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.Status, "Interrupted"), cancellationToken);
+        await eventWriter.CommitAsync(
+            sessionId,
+            "RuntimeControl",
+            "{\"control\":\"stop_generation\"}",
+            triggerCause: "player_stop",
+            cancellationToken: cancellationToken);
+    }
+
     public async Task<string> InterruptAsync(
         int sessionId,
         string displayedPrefix,
@@ -18,6 +32,7 @@ public sealed class GenerationInterruptionService(
         CancellationToken cancellationToken = default)
     {
         cancellationRegistry.CancelForeground(sessionId);
+        cancellationRegistry.CancelPlan(sessionId);
         var observers = await observabilityComputer.ComputeAsync(sceneId, actorId, null, cancellationToken);
         var interrupted = await eventWriter.CommitAsync(
             sessionId,

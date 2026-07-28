@@ -12,7 +12,7 @@ public sealed class PromptComposer
         CharacterAgentProfile profile,
         TimelineEvent contextEvent,
         IReadOnlyList<CharacterMemory> memories,
-        string? actorOpportunity,
+        ActorMotivation motivation,
         RagContext? ragContext,
         string databaseSummary)
     {
@@ -25,7 +25,10 @@ public sealed class PromptComposer
 
             当前已提交事件：{contextEvent.EventType}
             事件内容：{contextEvent.Content}
-            你的行动机会：{actorOpportunity ?? "根据自身目标和当前可见情境自主行动。"}
+            抽象行动动机：{motivation.AbstractMotivation}
+            紧迫度：{motivation.Urgency}
+            允许目标：{string.Join("、", motivation.AllowedGoals)}
+            知识约束：{string.Join("；", motivation.KnowledgeConstraints)}
             你的状态引用：{profile.CurrentStateReference}
             你可见的世界状态：{databaseSummary}
             你的私有记忆：

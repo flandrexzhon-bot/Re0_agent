@@ -34,6 +34,7 @@ public static class DatabaseSchema
         "memory_embeddings",
         "pacing_state_cache",
         "director_plan_versions",
+        "director_pulses",
         "death_return_log",
         "agent_config",
         "protagonist_templates",
@@ -325,6 +326,8 @@ public static class DatabaseSchema
           causal_distance INTEGER NOT NULL DEFAULT 0,
           latest_reveal_world_time TEXT NOT NULL,
           must_reveal INTEGER NOT NULL DEFAULT 0 CHECK(must_reveal IN (0, 1)),
+          coalesced_event_ids TEXT NOT NULL DEFAULT '[]',
+          merge_category TEXT NOT NULL DEFAULT 'other',
           created_at TEXT NOT NULL,
           UNIQUE(session_id, event_id)
         );
@@ -399,7 +402,9 @@ public static class DatabaseSchema
           status TEXT NOT NULL DEFAULT 'Active',
           urgency REAL NOT NULL DEFAULT 0,
           prerequisites TEXT NOT NULL DEFAULT '[]',
-          updated_world_time TEXT NOT NULL
+          updated_world_time TEXT NOT NULL,
+          last_plan_version_id INTEGER,
+          modified_count INTEGER NOT NULL DEFAULT 0
         );
         """,
         """
@@ -430,8 +435,31 @@ public static class DatabaseSchema
           reflection_reason TEXT NOT NULL,
           changed_story_thread_id INTEGER,
           change_summary TEXT NOT NULL DEFAULT 'no_story_thread_change',
+          pace_phase TEXT,
           created_at TEXT NOT NULL
         );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS director_pulses (
+          pulse_id TEXT PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          trigger_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          plan_version_id INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('Pending','Running','Completed','Shadowed','Consumed','Stale','Failed')),
+          suggestion_json TEXT,
+          baseline_json TEXT,
+          is_shadow INTEGER NOT NULL DEFAULT 1 CHECK(is_shadow IN (0,1)),
+          benefit_score REAL,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          completed_at TEXT,
+          consumed_at TEXT,
+          error TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_director_pulses_session_status
+        ON director_pulses(session_id, status);
         """,
         """
         CREATE TABLE IF NOT EXISTS death_return_log (

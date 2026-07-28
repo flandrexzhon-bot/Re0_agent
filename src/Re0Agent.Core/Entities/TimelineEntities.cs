@@ -244,6 +244,8 @@ public sealed class RevealQueueItem
     [Column("causal_distance")] public int CausalDistance { get; set; }
     [Column("latest_reveal_world_time")] public required string LatestRevealWorldTime { get; set; }
     [Column("must_reveal")] public int MustReveal { get; set; }
+    [Column("coalesced_event_ids")] public required string CoalescedEventIds { get; set; } = "[]";
+    [Column("merge_category")] public string MergeCategory { get; set; } = "other";
     [Column("created_at")] public required string CreatedAt { get; set; }
 }
 
@@ -339,6 +341,8 @@ public sealed class StoryThread
     [Column("urgency")] public double Urgency { get; set; }
     [Column("prerequisites")] public required string Prerequisites { get; set; } = "[]";
     [Column("updated_world_time")] public required string UpdatedWorldTime { get; set; }
+    [Column("last_plan_version_id")] public int? LastPlanVersionId { get; set; }
+    [Column("modified_count")] public int ModifiedCount { get; set; }
 }
 
 [Table("memory_embeddings")]
@@ -372,5 +376,25 @@ public sealed class DirectorPlanVersion
     [Column("reflection_reason")] public required string ReflectionReason { get; set; }
     [Column("changed_story_thread_id")] public int? ChangedStoryThreadId { get; set; }
     [Column("change_summary")] public required string ChangeSummary { get; set; } = "no_story_thread_change";
+    [Column("pace_phase")] public string? PacePhase { get; set; }
     [Column("created_at")] public required string CreatedAt { get; set; }
+}
+
+[Table("director_pulses")]
+public sealed class DirectorPulse
+{
+    [Key, Column("pulse_id")] public required string PulseId { get; set; }
+    [Column("session_id")] public int SessionId { get; set; }
+    [Column("trigger_event_id")] public required string TriggerEventId { get; set; }
+    [Column("plan_version_id")] public int PlanVersionId { get; set; }
+    [Column("status")] public required string Status { get; set; } = "Pending";
+    [Column("suggestion_json")] public string? SuggestionJson { get; set; }
+    [Column("baseline_json")] public string? BaselineJson { get; set; }
+    [Column("is_shadow")] public int IsShadow { get; set; } = 1;
+    [Column("benefit_score")] public double? BenefitScore { get; set; }
+    [Column("expires_at")] public required string ExpiresAt { get; set; }
+    [Column("created_at")] public required string CreatedAt { get; set; }
+    [Column("completed_at")] public string? CompletedAt { get; set; }
+    [Column("consumed_at")] public string? ConsumedAt { get; set; }
+    [Column("error")] public string? Error { get; set; }
 }

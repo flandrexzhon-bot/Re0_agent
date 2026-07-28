@@ -23,11 +23,18 @@ public sealed class SillyTavernImporter(Re0AgentDbContext dbContext)
         CancellationToken cancellationToken = default)
     {
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(charx), System.IO.Compression.ZipArchiveMode.Read);
-        var jsonEntry = archive.Entries.FirstOrDefault(item => item.FullName.EndsWith("card.json", StringComparison.OrdinalIgnoreCase))
-            ?? archive.Entries.FirstOrDefault(item => item.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
-        if (jsonEntry is null) throw new InvalidDataException("CHARX 中没有角色卡 JSON 元数据。");
+        if (archive.Entries.Any(item => item.FullName.Contains("..", StringComparison.Ordinal)
+            || Path.IsPathRooted(item.FullName)))
+            throw new InvalidDataException("CHARX 包含不安全的档案路径。");
+        var cardEntries = archive.Entries
+            .Where(item => item.FullName.Equals("card.json", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (cardEntries.Count != 1) throw new InvalidDataException("CHARX 必须且只能包含一个根目录 card.json。");
+        var jsonEntry = cardEntries[0];
+        if (jsonEntry.Length is <= 0 or > 10 * 1024 * 1024) throw new InvalidDataException("CHARX 的 card.json 大小无效。");
         using var reader = new StreamReader(jsonEntry.Open(), Encoding.UTF8);
         var json = await reader.ReadToEndAsync(cancellationToken);
+        ValidateMinimumCard(json, requireFirstMessage: true);
         return await ImportCharacterCardJsonAsync(sourceKey, json, cancellationToken);
     }
 
@@ -46,6 +53,7 @@ public sealed class SillyTavernImporter(Re0AgentDbContext dbContext)
         string json,
         CancellationToken cancellationToken = default)
     {
+        ValidateMinimumCard(json, requireFirstMessage: false);
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         var data = root.TryGetProperty("data", out var wrapped) && wrapped.ValueKind == JsonValueKind.Object ? wrapped : root;
@@ -82,6 +90,7 @@ public sealed class SillyTavernImporter(Re0AgentDbContext dbContext)
         var existing = await dbContext.CharacterCardSources.SingleOrDefaultAsync(item => item.SourceKey == sourceKey, cancellationToken);
         if (existing is not null) dbContext.CharacterCardSources.Remove(existing);
         dbContext.CharacterCardSources.Add(card);
+        await EnsureImportedCharacterAsync(card, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return new ImportedCard(card.SourceId, card.SourceKey, card.Name, card.FirstMessage, alternateGreetings, card.CharacterBook);
     }
@@ -113,6 +122,95 @@ public sealed class SillyTavernImporter(Re0AgentDbContext dbContext)
 
     private static string? ReadString(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private async Task EnsureImportedCharacterAsync(CharacterCardSource card, CancellationToken cancellationToken)
+    {
+        var npc = await dbContext.ImportantNpcs.SingleOrDefaultAsync(item => item.Name == card.Name, cancellationToken);
+        if (npc is null)
+        {
+            var rowId = (await dbContext.ImportantNpcs.MaxAsync(item => (int?)item.RowId, cancellationToken) ?? 0) + 1;
+            var charId = (await dbContext.ImportantNpcs.MaxAsync(item => (int?)item.CharId, cancellationToken) ?? 0) + 1;
+            var scene = await dbContext.GlobalStates.Select(item => item.CurrentLocation).FirstOrDefaultAsync(cancellationToken) ?? "未指定";
+            npc = new ImportantNpc
+            {
+                RowId = rowId,
+                CharId = charId,
+                Name = card.Name,
+                Gender = "未知",
+                Age = 0,
+                BriefIntro = Limit(card.Description ?? card.Personality ?? "导入角色", 60),
+                Appearance = Limit(card.Description ?? "外观未提供", 60),
+                IdentityText = Limit(card.Personality ?? "导入角色", 40),
+                BaseAttributes = "未设定",
+                SpecialAttributes = null,
+                LocationName = scene,
+                RelationsText = null,
+                InteractionOptions = "交谈",
+                PastExperience = card.Scenario ?? "暂无已提交经历。"
+            };
+            dbContext.ImportantNpcs.Add(npc);
+        }
+
+        var characterId = $"npc:{npc.RowId}";
+        var agency = await dbContext.CharacterAgencyStates.SingleOrDefaultAsync(item => item.CharacterId == characterId, cancellationToken);
+        if (agency is null)
+        {
+            dbContext.CharacterAgencyStates.Add(new CharacterAgencyState
+            {
+                CharacterId = characterId,
+                SceneId = npc.LocationName,
+                CurrentGoal = card.Scenario ?? card.Personality ?? "依据自身目标生活。",
+                NextActionWorldTime = DateTimeOffset.UtcNow.ToString("O"),
+                Fidelity = "foreground",
+                Status = "Active"
+            });
+        }
+
+        if (!await dbContext.AgentConfig.AnyAsync(item => item.AgentName == card.Name, cancellationToken))
+        {
+            var template = await dbContext.AgentConfig.AsNoTracking()
+                .Where(item => item.AgentType == "Character")
+                .OrderBy(item => item.ConfigId).FirstOrDefaultAsync(cancellationToken);
+            dbContext.AgentConfig.Add(new AgentConfig
+            {
+                ConfigId = (await dbContext.AgentConfig.MaxAsync(item => (int?)item.ConfigId, cancellationToken) ?? 0) + 1,
+                AgentType = "Character",
+                AgentName = card.Name,
+                ApiEndpoint = template?.ApiEndpoint ?? "",
+                ApiKey = template?.ApiKey ?? "",
+                ModelName = template?.ModelName ?? "",
+                Temperature = template?.Temperature ?? .7,
+                MaxTokens = template?.MaxTokens ?? 4096,
+                MaxInputTokens = template?.MaxInputTokens ?? 4096,
+                SystemPrompt = BuildCharacterPrompt(card),
+                Enabled = template is null ? 0 : template.Enabled,
+                EnableThinking = template?.EnableThinking ?? false,
+                ReasoningEffort = template?.ReasoningEffort ?? "medium",
+                AutoRetry = template?.AutoRetry ?? true
+            });
+        }
+    }
+
+    private static void ValidateMinimumCard(string json, bool requireFirstMessage)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var data = root.TryGetProperty("data", out var wrapped) && wrapped.ValueKind == JsonValueKind.Object ? wrapped : root;
+        if (string.IsNullOrWhiteSpace(ReadString(data, "name"))) throw new InvalidDataException("角色卡缺少 name。");
+        if (requireFirstMessage && string.IsNullOrWhiteSpace(ReadString(data, "first_mes")))
+            throw new InvalidDataException("CHARX 角色卡缺少 first_mes。");
+    }
+
+    private static string BuildCharacterPrompt(CharacterCardSource card) => string.Join('\n', new[]
+    {
+        $"你只扮演 {card.Name}。",
+        card.Description,
+        card.Personality,
+        card.SystemPrompt,
+        card.PostHistoryInstructions
+    }.Where(item => !string.IsNullOrWhiteSpace(item)));
+
+    private static string Limit(string value, int maximum) => value.Length <= maximum ? value : value[..maximum];
 
     private static string ReadCharaText(byte[] png)
     {

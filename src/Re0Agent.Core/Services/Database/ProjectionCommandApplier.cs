@@ -91,14 +91,15 @@ public sealed class ProjectionCommandApplier(Re0AgentDbContext dbContext)
         Microsoft.EntityFrameworkCore.Metadata.IProperty primaryKey,
         CancellationToken cancellationToken)
     {
-        var keyValue = ConvertValue(command.EntityId, primaryKey.ClrType);
-        var entity = await dbContext.FindAsync(entityType, [keyValue], cancellationToken);
+        var automaticInsert = command.OperationType == "insert" && command.EntityId.StartsWith("auto:", StringComparison.Ordinal);
+        var keyValue = automaticInsert ? null : ConvertValue(command.EntityId, primaryKey.ClrType);
+        var entity = automaticInsert ? null : await dbContext.FindAsync(entityType, [keyValue!], cancellationToken);
         switch (command.OperationType)
         {
             case "insert":
                 if (entity is not null) throw new InvalidOperationException("插入目标已存在。");
                 entity = Activator.CreateInstance(entityType) ?? throw new InvalidOperationException("无法创建投影实体。");
-                SetProperty(entity, primaryKey.PropertyInfo!, keyValue);
+                if (!automaticInsert) SetProperty(entity, primaryKey.PropertyInfo!, keyValue);
                 ApplyFields(entity, entityMetadata, command.FieldChanges);
                 dbContext.Add(entity);
                 break;

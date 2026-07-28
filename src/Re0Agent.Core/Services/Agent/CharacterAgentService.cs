@@ -72,7 +72,7 @@ public sealed class CharacterAgentService(
             Messages =
             [
                 LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的角色 Agent。"),
-                LlmMessage.User(promptComposer.ComposeCharacterAction(profile, actorBrief.ContextEvent, actorBrief.PrivateMemories, actorBrief.Opportunity, ragContext, summary)),
+                LlmMessage.User(promptComposer.ComposeCharacterAction(profile, actorBrief.ContextEvent, actorBrief.PrivateMemories, actorBrief.Motivation, ragContext, summary)),
                 LlmMessage.User(promptComposer.ComposeCharacterTurnThoughtGuide()),
                 LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
             ]

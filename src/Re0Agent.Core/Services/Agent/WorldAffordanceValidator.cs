@@ -69,7 +69,9 @@ public sealed class WorldAffordanceValidator(Re0AgentDbContext dbContext)
                     && await dbContext.ProtagonistInfo.AnyAsync(item => $"protagonist:{item.RowId}" == actorBrief.ContextEvent.TargetId, cancellationToken);
             if (!targetExists) throw new InvalidOperationException("行动机会引用了不存在的目标。");
         }
-        if (string.IsNullOrWhiteSpace(actorBrief.Opportunity))
+        if (string.IsNullOrWhiteSpace(actorBrief.Motivation.AbstractMotivation)
+            || actorBrief.Motivation.Urgency is not ("low" or "medium" or "high")
+            || actorBrief.Motivation.AllowedGoals.Count == 0)
         {
             throw new InvalidOperationException("行动机会缺少可验证的动机。");
         }

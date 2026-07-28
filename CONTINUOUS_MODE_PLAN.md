@@ -721,7 +721,18 @@ SceneDirector 负责分配“行动机会”，Character Agent 负责决定具�
 16. 前台事件通过 `revealed_event_cursors` 记录已揭示源事件，RevealQueue 始终可以从事件流确定性重建。
 17. 非感知事件允许 `direct_observers` 为空，但必须标记 `observability_computed`；角色可感知事件不得使用空集或占位值逃避计算。
 
-## 18. 研究依据
+## 18. 实施状态（2026-07-28）
+
+- P0-P8 已按连续模式单轨实现；旧 round/variant 类型不再参与编译或运行。
+- 数据库初始化会检测旧六段 schema，只清理游戏状态表，保留 Agent/API 配置、路由、导入角色卡、世界书和章节条件资产。
+- Director 使用持久化 `DirectorPlanVersion` 与单表 `director_pulses`；Pulse 在提交后排队、独立 DI scope 后台处理、下一 tick 原子消费，并检查影子状态、收益、过期时间和计划版本。
+- `ActorBrief` 只包含经过 InformationGate 过滤的直接观察事件、私有记忆和结构化 motivation；`potential_learners` 需通过后续事实满足渠道条件才会转成记忆。
+- RevealQueue 已实现会话容量、故事线配额、同类合并、cursor 保真和从事件流重建；诊断服务记录 must-reveal 超期与重建差异。
+- 离屏模拟每 tick 最多推进 8 个角色，并按已提交事件确定性执行 `distant → regional → foreground` 提升，不重新生成过去。
+- SillyTavern JSON/PNG/CHARX 与世界书支持导入导出；CHARX 校验安全根路径、唯一 `card.json` 和必要字段，导入后建立角色 Agent 与自治状态。
+- 连续模式硬门测试已覆盖固定节奏样本与三基线、旧 schema 清理、checkpoint/分支/回归、RevealQueue、Pulse、Direction、离屏上限、向量权限和 CHARX。
+
+## 19. 研究依据
 
 - Mike Booth, [The AI Systems of Left 4 Dead](https://cdn.akamai.steamstatic.com/apps/valve/2009/ai_systems_of_l4d_mike_booth.pdf)：采用可测 intensity、Build Up/Sustain Peak/Peak Fade/Relax 闭环、结构化不可预测性，以及“调节频率而非难度”的控制边界。
 - Hongqiu Wu et al., [Towards Enhanced Immersion and Agency for LLM-based Interactive Drama](https://aclanthology.org/2025.acl-long.546/)（ACL 2025）：采用 Director→Actor 抽象 motivation、Actor 不读取剧本和有限 plot-based reflection；其剧本泄露与不存在场景案例直接支持信息门和世界可行性校验。

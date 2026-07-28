@@ -12,7 +12,7 @@ public sealed class InformationGate(Re0AgentDbContext dbContext, MemoryRetrieval
         ChatSession session,
         string characterId,
         string contextEventId,
-        string? opportunity,
+        ActorMotivation motivation,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(session.CurrentBranchId))
@@ -30,7 +30,13 @@ public sealed class InformationGate(Re0AgentDbContext dbContext, MemoryRetrieval
         var context = visible.SingleOrDefault(item => item.EventId == contextEventId)
             ?? throw new InvalidOperationException("角色不能以未观察到的事件作为行动上下文。");
         var memories = await memoryRetrieval.RetrieveAsync(characterId, session.CurrentWorldEpoch, limit: 8, cancellationToken: cancellationToken);
-        return new ActorBrief(characterId, context.SceneId, context, visible.TakeLast(12).ToList(), memories, opportunity);
+        var constrainedMotivation = motivation with
+        {
+            KnowledgeConstraints = motivation.KnowledgeConstraints.Append(
+                "只能使用 directly_observed_events、自己的 private_memories 和当前场景投影中的事实。")
+                .Distinct(StringComparer.Ordinal).ToList()
+        };
+        return new ActorBrief(characterId, context.SceneId, context, visible.TakeLast(12).ToList(), memories, constrainedMotivation);
     }
 
     private static bool IsDirectObserver(TimelineEvent eventRecord, string characterId)

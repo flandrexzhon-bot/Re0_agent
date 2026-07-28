@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
+using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Database;
 
 namespace Re0Agent.Core.Services.Agent;
@@ -21,6 +22,7 @@ public sealed class AgentOrchestrator(
         CancellationToken cancellationToken = default)
     {
         var session = await ActiveSessionAsync(cancellationToken);
+        cancellationRegistry.CancelPlan(session.SessionId);
         if (session.GameMode == "Theater")
         {
             var direction = await eventWriter.CommitAsync(
@@ -59,7 +61,7 @@ public sealed class AgentOrchestrator(
     public async Task<TimelineEvent> RunCharacterActionAsync(
         string characterId,
         TimelineEvent contextEvent,
-        string? actorOpportunity = null,
+        ActorMotivation motivation,
         CancellationToken cancellationToken = default)
     {
         cancellationRegistry.ResetForeground((await ActiveSessionAsync(cancellationToken)).SessionId);
@@ -72,7 +74,7 @@ public sealed class AgentOrchestrator(
         var profile = profiles.SingleOrDefault(item => item.CharacterId == characterId)
             ?? throw new InvalidOperationException("角色不在当前会话的可行动集合中。");
         var actorBrief = await informationGate.BuildActorBriefAsync(
-            session, profile.CharacterId, contextEvent.EventId, actorOpportunity, cancellationToken);
+            session, profile.CharacterId, contextEvent.EventId, motivation, cancellationToken);
         await affordanceValidator.ValidateAsync(profile, actorBrief, cancellationToken);
         var content = await characterAgentService.GenerateActionAsync(actorBrief, profile, cancellationToken);
         var observers = await observabilityComputer.ComputeAsync(

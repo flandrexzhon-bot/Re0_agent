@@ -35,6 +35,7 @@ public sealed class Re0AgentDbContext(DbContextOptions<Re0AgentDbContext> option
     public DbSet<MemoryEmbedding> MemoryEmbeddings => Set<MemoryEmbedding>();
     public DbSet<PacingStateCache> PacingStateCache => Set<PacingStateCache>();
     public DbSet<DirectorPlanVersion> DirectorPlanVersions => Set<DirectorPlanVersion>();
+    public DbSet<DirectorPulse> DirectorPulses => Set<DirectorPulse>();
     public DbSet<DeathReturnLog> DeathReturnLog => Set<DeathReturnLog>();
     public DbSet<AgentConfig> AgentConfig => Set<AgentConfig>();
     public DbSet<ProtagonistTemplate> ProtagonistTemplates => Set<ProtagonistTemplate>();
@@ -59,5 +60,8 @@ public sealed class Re0AgentDbContext(DbContextOptions<Re0AgentDbContext> option
         modelBuilder.Entity<LorebookConditionEntry>()
             .HasIndex(item => new { item.SourceKey, item.SourceOrder, item.LegacyCondition, item.Content })
             .IsUnique();
+
+        modelBuilder.Entity<DirectorPulse>()
+            .HasIndex(item => new { item.SessionId, item.Status });
     }
 }

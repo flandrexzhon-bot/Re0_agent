@@ -86,27 +86,31 @@ public static class DbSummaryBuilder
         CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
-
-        var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        sb.Append("[全局状态栏] ").AppendLine(FormatGlobalState(state));
-
-        var mapPoints = await dbContext.WorldMapPoints.AsNoTracking().OrderBy(p => p.RowId).ToListAsync(cancellationToken);
-        sb.Append("[世界地图点] ").AppendLine(FormatMapPoints(mapPoints));
-
-        var mapElements = await dbContext.MapElements.AsNoTracking().OrderBy(e => e.RowId).ToListAsync(cancellationToken);
-        sb.Append("[地图元素] ").AppendLine(FormatMapElements(mapElements));
+        string? actorLocation;
 
         if (isPlayerControlled)
         {
             var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
             sb.Append("[我的状态（主角）] ").AppendLine(FormatProtagonist(protagonist));
+            actorLocation = protagonist?.LocationName;
         }
         else
         {
             var npc = await dbContext.ImportantNpcs.AsNoTracking()
                 .FirstOrDefaultAsync(n => n.Name == characterName, cancellationToken);
             sb.Append($"[我的状态（{characterName}）] ").AppendLine(npc is null ? "（我尚未在册）" : FormatNpcDetailed(npc));
+            actorLocation = npc?.LocationName;
         }
+
+        var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+        sb.Append("[当前时间] ").AppendLine(state is null ? "无" : $"{state.CurTime}，章节:{state.CurrentChapter}");
+        var mapPoints = await dbContext.WorldMapPoints.AsNoTracking()
+            .Where(point => point.LocationName == actorLocation || point.ExplorationStatus != "未探索")
+            .OrderBy(point => point.RowId).ToListAsync(cancellationToken);
+        sb.Append("[已知地图点] ").AppendLine(FormatMapPoints(mapPoints));
+        var mapElements = string.IsNullOrWhiteSpace(actorLocation) ? [] : await dbContext.MapElements.AsNoTracking()
+            .Where(element => element.LocationName == actorLocation).OrderBy(element => element.RowId).ToListAsync(cancellationToken);
+        sb.Append("[当前场景元素] ").AppendLine(FormatMapElements(mapElements));
 
         return sb.ToString().TrimEnd();
     }

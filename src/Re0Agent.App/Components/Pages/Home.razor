@@ -12,6 +12,7 @@
 @inject ChatSessionService SessionService
 @inject WorldClockService WorldClock
 @inject WorldTickGovernor TickGovernor
+@inject GenerationInterruptionService InterruptionService
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
@@ -61,6 +62,16 @@
                 </select>
                 <button type="button" class="ghost-btn" title="新建会话（可选择游戏模式）" @onclick="OpenNewSessionDialog">＋ 新会话</button>
             </div>
+            <div class="speed-control" title="世界速度：逻辑世界时间相对现实时间的倍率，不只是界面播放速度">
+                <label class="speed-label">×@WorldSpeedText</label>
+                <input type="range" class="speed-slider" min="0.1" max="5" step="0.1"
+                       value="@WorldSpeedValue" @onchange="OnWorldSpeedChangeAsync"
+                       disabled="@(activeSession is null)" />
+            </div>
+            <button type="button" class="stop-btn" title="取消当前生成与导演计划"
+                    disabled="@(isStopping || activeSession is null)" @onclick="StopGenerationAsync">
+                <span>⏹ 停止</span>
+            </button>
             <button type="button" class="pause-btn @(IsPaused ? "resumed" : "running")" disabled="@(isTogglingPause || activeSession is null)" @onclick="TogglePauseAsync">
                 @if (IsPaused)
                 {
@@ -163,12 +174,10 @@
                     @if (IsTheater)
                     {
                         <span>写给双导演的创作指令</span>
-                        <span class="composer-hint">不是主角台词。指令会作为隐藏 PlayerDirection 保存，场内角色看不到它。</span>
                     }
                     else
                     {
                         <span>主角的行动与话语</span>
-                        <span class="composer-hint">世界不会等你。沉默时其他角色仍会按自己的目标行动。</span>
                     }
                 </div>
                 <div class="composer-row">
@@ -221,6 +230,48 @@
                         {
                             <div class="kv"><span>回归次数</span><b class="loop-count">LOOP @loopCount</b></div>
                         }
+                    </section>
+
+                    @if (IsTheater && pendingDirections.Count > 0)
+                    {
+                        <section class="aside-block">
+                            <h3>导演指令 <span class="count">@pendingDirections.Count 条</span></h3>
+                            <div class="direction-list">
+                                @foreach (var dir in pendingDirections)
+                                {
+                                    <div class="direction-card status-@dir.Status.ToLowerInvariant()">
+                                        <div class="direction-status">
+                                            @DirectionStatusIcon(dir.Status)
+                                            <span class="direction-label">@DirectionStatusLabel(dir.Status)</span>
+                                        </div>
+                                        <div class="direction-text">@ShortenText(dir.Content, 80)</div>
+                                        @if (!string.IsNullOrWhiteSpace(dir.BlockReason))
+                                        {
+                                            <div class="direction-block-reason">阻塞原因：@dir.BlockReason</div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    }
+
+                    <section class="aside-block">
+                        <h3>输入控制</h3>
+                        <div class="input-controls">
+                            <button type="button" class="control-btn @(isSttActive ? "active" : "")"
+                                    disabled="@(activeSession is null)"
+                                    @onclick="ToggleSttAsync"
+                                    title="@(isSttActive ? "结束 STT 活动" : "标记 STT 活动开始")">
+                                @if (isSttActive)
+                                {
+                                    <span>⏺ 结束 STT</span>
+                                }
+                                else
+                                {
+                                    <span>🎤 STT 活动</span>
+                                }
+                            </button>
+                        </div>
                     </section>
 
                     <section class="aside-block">
@@ -466,7 +517,11 @@
     private bool isSwitching;
     private bool isTogglingPause;
     private bool isCreating;
+    private bool isStopping;
+    private bool isSttActive;
     private string? errorMessage;
+
+    private List<PendingDirection> pendingDirections = [];
 
     private bool showNewSessionDialog;
     private string newSessionName = string.Empty;
@@ -775,6 +830,15 @@
                 : await DbContext.WorldRuntimeStates.AsNoTracking()
                     .FirstOrDefaultAsync(item => item.SessionId == activeSession.SessionId, lifetime.Token);
 
+            // Theater 模式加载 PendingDirection 状态：只取未终结的指令。
+            pendingDirections = activeSession is null || activeSession.GameMode != "Theater"
+                ? []
+                : await DbContext.PendingDirections.AsNoTracking()
+                    .Where(item => item.SessionId == activeSession.SessionId)
+                    .OrderByDescending(item => item.DirectionId)
+                    .Take(20)
+                    .ToListAsync(lifetime.Token);
+
             presentCast = BuildCast();
             // 必须在 protagonist 与 pendingRevealIds 都就位之后再算可见集合。
             RebuildVisibleEvents();
@@ -856,6 +920,92 @@
         }
         await ReloadAsync();
     }
+
+    // 立即停止：取消当前前台流式生成和排队计划，使用 GenerationInterruptionService。
+    // 不取消 world_loop，暂停才会挂起世界时钟。
+    private async Task StopGenerationAsync()
+    {
+        if (activeSession is null) return;
+        isStopping = true;
+        await gate.WaitAsync(lifetime.Token);
+        try
+        {
+            await InterruptionService.StopCurrentAsync(activeSession.SessionId, lifetime.Token);
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"停止生成失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+            isStopping = false;
+        }
+        await ReloadAsync();
+    }
+
+    // STT 切换：只负责通知 WorldClockService 启用/停用慢动作，
+    // 不具备实际录音能力（无麦克风权限，无语音识别后端）。
+    // SttStarted/SttEnded 是计划中第 8.3 节规定的运行控制事件类型。
+    private async Task ToggleSttAsync()
+    {
+        if (activeSession is null) return;
+        var startNow = !isSttActive;
+        isSttActive = startNow;
+        var eventType = startNow ? "SttStarted" : "SttEnded";
+        var sessionId = startNow ? activeSession.SessionId : ResolveActivitySessionId() ?? activeSession.SessionId;
+        if (startNow) inputActivitySessionId = sessionId;
+        try
+        {
+            await gate.WaitAsync(lifetime.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+        try
+        {
+            await WorldClock.SetInputActivityAsync(sessionId, startNow, InputSlowFactorValue, eventType, lifetime.Token);
+            if (startNow) inputActive = true;
+            else { inputActive = false; inputActivitySessionId = 0; }
+        }
+        catch (Exception exception)
+        {
+            isSttActive = !startNow;
+            errorMessage = $"STT 状态切换失败：{exception.Message}";
+        }
+        finally
+        {
+            try { gate.Release(); } catch (ObjectDisposedException) { }
+        }
+        await ReloadAsync();
+    }
+
+    // 世界速度滑块变更：调用 WorldClockService.SetTimeScaleAsync 持久化新倍率，
+    // 它直接影响逻辑世界时间推进速度，不只是 UI 播放速度。
+    private async Task OnWorldSpeedChangeAsync(ChangeEventArgs args)
+    {
+        if (activeSession is null) return;
+        if (!double.TryParse(args.Value?.ToString(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var speed)) return;
+        speed = Math.Clamp(speed, 0.1, 5.0);
+        await gate.WaitAsync(lifetime.Token);
+        try
+        {
+            await WorldClock.SetTimeScaleAsync(activeSession.SessionId, speed, lifetime.Token);
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"设置世界速度失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+        }
+        await ReloadAsync();
+    }
+
+    private string WorldSpeedText => (activeSession?.SessionTimeScale ?? 1.0).ToString("0.#");
+    private string WorldSpeedValue => (activeSession?.SessionTimeScale ?? 1.0)
+        .ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 
     private async Task SwitchSessionAsync()
     {
@@ -1032,6 +1182,33 @@
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<update>[\s\S]*?</update>", "");
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"_\.set\(\s*['""].*?['""]\s*,\s*.*?\);?", "");
         return cleaned.Trim();
+    }
+
+    // PendingDirection 状态辅助方法
+    private static string DirectionStatusIcon(string status) => status switch
+    {
+        "Pending" => "⏳",
+        "Realizing" => "🎬",
+        "Completed" => "✓",
+        "Blocked" => "🚫",
+        _ => "?"
+    };
+
+    private static string DirectionStatusLabel(string status) => status switch
+    {
+        "Pending" => "等待铺垫",
+        "Realizing" => "正在实现",
+        "Completed" => "已完成",
+        "Blocked" => "已阻塞",
+        _ => status
+    };
+
+    private static string ShortenText(string? text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        text = text.Trim();
+        if (text.Length <= maxLength) return text;
+        return text[..(maxLength - 1)] + "…";
     }
 
     public async ValueTask DisposeAsync()
