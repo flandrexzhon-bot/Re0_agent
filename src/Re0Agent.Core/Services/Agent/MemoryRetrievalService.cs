@@ -27,6 +27,7 @@ public sealed class MemoryRetrievalService(Re0AgentDbContext dbContext)
             .Where(item => item.OwnerCharacterId == ownerCharacterId
                 && (item.WorldEpoch == worldEpoch || item.RetainOnRewind == 1))
             .OrderByDescending(item => item.RowId).Take(128).ToListAsync(cancellationToken);
+        allowed = allowed.Where(item => IsVisibleToOwner(item, ownerCharacterId)).ToList();
         if (queryVector is null || string.IsNullOrWhiteSpace(modelId)) return allowed.Take(limit).ToList();
         var ids = allowed.Select(item => item.RowId).ToList();
         var vectors = await dbContext.MemoryEmbeddings.AsNoTracking()
@@ -41,22 +42,42 @@ public sealed class MemoryRetrievalService(Re0AgentDbContext dbContext)
 
     public async Task RebuildAsync(IMemoryEmbeddingProvider provider, CancellationToken cancellationToken = default)
     {
-        await dbContext.MemoryEmbeddings.ExecuteDeleteAsync(cancellationToken);
         var memories = await dbContext.CharacterMemory.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken);
+        var existing = await dbContext.MemoryEmbeddings.Where(item => item.ModelId == provider.ModelId).ToDictionaryAsync(item => item.MemoryRowId, cancellationToken);
         foreach (var memory in memories)
         {
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(memory.MemoryText)));
+            if (existing.TryGetValue(memory.RowId, out var current) && current.ContentHash == hash && current.WorldEpoch == memory.WorldEpoch) continue;
             var vector = await provider.EmbedAsync(memory.MemoryText, cancellationToken);
-            dbContext.MemoryEmbeddings.Add(new MemoryEmbedding
+            var embedding = existing.GetValueOrDefault(memory.RowId) ?? new MemoryEmbedding
             {
                 MemoryRowId = memory.RowId,
                 ModelId = provider.ModelId,
-                Dimensions = vector.Length,
-                VectorJson = JsonSerializer.Serialize(vector),
-                ContentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(memory.MemoryText))),
-                CreatedAt = DateTimeOffset.UtcNow.ToString("O")
-            });
+                VectorJson = "[]",
+                ContentHash = "",
+                CreatedAt = ""
+            };
+            embedding.Dimensions = vector.Length;
+            embedding.WorldEpoch = memory.WorldEpoch;
+            embedding.VectorJson = JsonSerializer.Serialize(vector);
+            embedding.ContentHash = hash;
+            embedding.CreatedAt = DateTimeOffset.UtcNow.ToString("O");
+            if (embedding.MemoryRowId == memory.RowId && !existing.ContainsKey(memory.RowId)) dbContext.MemoryEmbeddings.Add(embedding);
         }
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static bool IsVisibleToOwner(CharacterMemory memory, string ownerCharacterId)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(memory.VisibilityScope);
+            if (json.RootElement.ValueKind == JsonValueKind.Array)
+                return json.RootElement.EnumerateArray().Any(item => item.GetString() == ownerCharacterId);
+            return json.RootElement.TryGetProperty("direct", out var direct)
+                && direct.EnumerateArray().Any(item => item.GetString() == ownerCharacterId);
+        }
+        catch (JsonException) { return false; }
     }
 
     private static double Cosine(float[] left, float[] right)

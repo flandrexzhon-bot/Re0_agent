@@ -134,6 +134,13 @@ public sealed class WorldTickGovernor(
             await dbContext.SaveChangesAsync(cancellationToken);
             return new WorldTickResult(clock, payload.CharacterId, action.EventId, null);
         }
+        catch (OperationCanceledException exception)
+        {
+            dueJob.Status = "Interrupted";
+            runtime.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            return new WorldTickResult(clock, payload.CharacterId, null, exception.Message);
+        }
         catch (Exception exception)
         {
             dueJob.Status = "Failed";

@@ -16,7 +16,7 @@ public sealed partial class RuleResolver(DiceEngine diceEngine, EventSingleWrite
             return null;
         }
         var result = await diceEngine.ExecuteAsync(match.Groups["command"].Value, cancellationToken);
-        var observers = await observabilityComputer.ComputeAsync(action.SceneId, action.ActorId, action.TargetId, cancellationToken);
+        var observers = await observabilityComputer.ComputeAsync(action.SceneId, action.ActorId, action.TargetId, cancellationToken, "RuleResolution");
         return await eventWriter.CommitAsync(
             sessionId, "RuleResolution", JsonSerializer.Serialize(result), sceneId: action.SceneId,
             actorId: action.ActorId, targetId: action.TargetId, observers: observers,

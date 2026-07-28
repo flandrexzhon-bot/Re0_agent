@@ -54,14 +54,21 @@ public sealed class PaceGovernor(Re0AgentDbContext dbContext, PacingFeatureExtra
 
     private static PacePhase NextPhase(PacePhase current, int age, double tension)
     {
-        if (age < 2) return current;
+        var minimumAge = current switch
+        {
+            PacePhase.Build => 3,
+            PacePhase.Sustain => 3,
+            PacePhase.Fade => 2,
+            _ => 2
+        };
+        if (age < minimumAge) return current;
         return current switch
         {
-            PacePhase.Relax when tension >= .3 => PacePhase.Build,
-            PacePhase.Build when tension >= .65 => PacePhase.Sustain,
-            PacePhase.Sustain when tension <= .55 => PacePhase.Fade,
-            PacePhase.Fade when tension <= .3 => PacePhase.Relax,
-            PacePhase.Fade when tension >= .7 => PacePhase.Sustain,
+            PacePhase.Relax when tension >= .35 => PacePhase.Build,
+            PacePhase.Build when tension >= .7 => PacePhase.Sustain,
+            PacePhase.Sustain when tension <= .5 => PacePhase.Fade,
+            PacePhase.Fade when tension <= .25 => PacePhase.Relax,
+            PacePhase.Fade when tension >= .75 => PacePhase.Sustain,
             _ => current
         };
     }

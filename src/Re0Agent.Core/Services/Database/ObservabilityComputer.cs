@@ -10,7 +10,8 @@ public sealed class ObservabilityComputer(Re0AgentDbContext dbContext)
         string? sceneId,
         string? actorId,
         string? targetId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? eventType = null)
     {
         var observers = new HashSet<string>(StringComparer.Ordinal);
         if (!string.IsNullOrWhiteSpace(actorId)) observers.Add(actorId);
@@ -38,8 +39,15 @@ public sealed class ObservabilityComputer(Re0AgentDbContext dbContext)
                     join scene in dbContext.SceneStates.AsNoTracking() on agency.SceneId equals scene.SceneId
                     where agency.Status == "Active" && scene.RegionId == regionId
                     select agency.CharacterId).ToListAsync(cancellationToken);
+                var (channel, condition) = eventType switch
+                {
+                    "OffscreenRuleAdvance" => ("regional_report", "after_report_or_encounter"),
+                    "DistantWorldAdvance" => ("rumor", "after_contact_or_investigation"),
+                    "RuleResolution" => ("physical_trace", "after_scene_entry"),
+                    _ => ("regional_report", "after_report_or_encounter")
+                };
                 potential.AddRange(regionalIds.Where(id => !observers.Contains(id)).Distinct(StringComparer.Ordinal)
-                    .Select(id => new PotentialLearner(id, "regional_report", "after_report_or_encounter")));
+                    .Select(id => new PotentialLearner(id, channel, condition)));
             }
         }
 

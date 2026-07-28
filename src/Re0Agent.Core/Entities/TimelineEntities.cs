@@ -347,6 +347,7 @@ public sealed class MemoryEmbedding
     [Key, Column("memory_row_id")] public int MemoryRowId { get; set; }
     [Column("model_id")] public required string ModelId { get; set; }
     [Column("dimensions")] public int Dimensions { get; set; }
+    [Column("world_epoch")] public int WorldEpoch { get; set; }
     [Column("vector_json")] public required string VectorJson { get; set; }
     [Column("content_hash")] public required string ContentHash { get; set; }
     [Column("created_at")] public required string CreatedAt { get; set; }
@@ -369,5 +370,7 @@ public sealed class DirectorPlanVersion
     [Column("source_event_id")] public required string SourceEventId { get; set; }
     [Column("plan_json")] public required string PlanJson { get; set; }
     [Column("reflection_reason")] public required string ReflectionReason { get; set; }
+    [Column("changed_story_thread_id")] public int? ChangedStoryThreadId { get; set; }
+    [Column("change_summary")] public required string ChangeSummary { get; set; } = "no_story_thread_change";
     [Column("created_at")] public required string CreatedAt { get; set; }
 }

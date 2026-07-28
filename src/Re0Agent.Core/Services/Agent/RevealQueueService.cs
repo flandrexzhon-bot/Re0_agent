@@ -80,7 +80,7 @@ public sealed class RevealQueueService(Re0AgentDbContext dbContext, EventSingleW
         var events = await (from eventRecord in dbContext.TimelineEvents
             join branch in dbContext.TimelineBranches on eventRecord.BranchId equals branch.BranchId
             join session in dbContext.ChatSessions on branch.SessionId equals session.SessionId
-            where session.SessionId == sessionId && eventRecord.EventType == "RevealCommitted"
+            where session.SessionId == sessionId
             select eventRecord.RevealedEventCursors).ToListAsync(cancellationToken);
         foreach (var cursorJson in events)
         {

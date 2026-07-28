@@ -407,6 +407,7 @@ public static class DatabaseSchema
           memory_row_id INTEGER PRIMARY KEY REFERENCES character_memory(row_id),
           model_id TEXT NOT NULL,
           dimensions INTEGER NOT NULL,
+          world_epoch INTEGER NOT NULL DEFAULT 1,
           vector_json TEXT NOT NULL,
           content_hash TEXT NOT NULL,
           created_at TEXT NOT NULL
@@ -427,6 +428,8 @@ public static class DatabaseSchema
           source_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
           plan_json TEXT NOT NULL,
           reflection_reason TEXT NOT NULL,
+          changed_story_thread_id INTEGER,
+          change_summary TEXT NOT NULL DEFAULT 'no_story_thread_change',
           created_at TEXT NOT NULL
         );
         """,

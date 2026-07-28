@@ -22,7 +22,7 @@ public sealed class InformationGate(Re0AgentDbContext dbContext, MemoryRetrieval
         var candidates = await dbContext.TimelineEvents.AsNoTracking()
             .Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed")
             .OrderByDescending(item => item.Sequence).Take(128).ToListAsync(cancellationToken);
-        var revealed = candidates.Where(item => item.EventType == "RevealCommitted")
+        var revealed = candidates
             .SelectMany(item => DeserializeIds(item.RevealedEventCursors)).ToHashSet(StringComparer.Ordinal);
         var isProtagonist = characterId.StartsWith("protagonist:", StringComparison.Ordinal);
         var visible = candidates.Where(item => IsDirectObserver(item, characterId) || isProtagonist && revealed.Contains(item.EventId))

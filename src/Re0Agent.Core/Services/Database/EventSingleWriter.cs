@@ -153,5 +153,5 @@ public sealed class EventSingleWriter(
     private static bool IsNonObservable(string eventType) => eventType is
         "InitialProjection" or "WorldRewindCommitted" or "DirectorPlan" or "RuntimeControl" or "ProjectionCheckpoint"
         or "InputActivityStarted" or "InputActivityEnded" or "SttStarted" or "SttEnded" or "PlayerDirection"
-        or "PlayerDirectionRealizing" or "PlayerDirectionCompleted" or "DistantWorldAdvance" or "RevealCommitted" or "InitialSceneProposal";
+        or "PlayerDirectionRealizing" or "PlayerDirectionCompleted" or "DistantWorldAdvance" or "RevealCommitted" or "InitialSceneProposal" or "DirectorReflection";
 }

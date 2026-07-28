@@ -58,6 +58,7 @@ public static class MauiProgram
         builder.Services.AddScoped<PacingFeatureExtractor>();
         builder.Services.AddScoped<SceneDirector>();
         builder.Services.AddScoped<KeplerAgent>();
+        builder.Services.AddScoped<KeplerOutputValidator>();
         builder.Services.AddScoped<RuleResolver>();
         builder.Services.AddScoped<StateProjectionService>();
         builder.Services.AddScoped<RevealQueueService>();

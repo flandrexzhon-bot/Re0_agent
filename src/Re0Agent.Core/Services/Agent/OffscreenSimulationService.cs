@@ -26,7 +26,7 @@ public sealed class OffscreenSimulationService(
             if (!DateTimeOffset.TryParse(agency.NextActionWorldTime, out var scheduled) || scheduled > worldTime) continue;
             if (agency.Fidelity == "regional")
             {
-                var observers = await observabilityComputer.ComputeAsync(agency.SceneId, agency.CharacterId, null, cancellationToken);
+                var observers = await observabilityComputer.ComputeAsync(agency.SceneId, agency.CharacterId, null, cancellationToken, "OffscreenRuleAdvance");
                 await eventWriter.CommitAsync(sessionId, "OffscreenRuleAdvance",
                     $"{{\"characterId\":\"{agency.CharacterId}\",\"goal\":{System.Text.Json.JsonSerializer.Serialize(agency.CurrentGoal)}}}",
                     sceneId: agency.SceneId, actorId: agency.CharacterId, observers: observers,

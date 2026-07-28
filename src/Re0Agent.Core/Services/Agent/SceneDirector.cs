@@ -13,7 +13,8 @@ public sealed class SceneDirector(
     AgentConfigResolver configResolver,
     ILlmClient llmClient,
     PaceGovernor paceGovernor,
-    EventSingleWriter eventWriter)
+    EventSingleWriter eventWriter,
+    WorldAffordanceValidator affordanceValidator)
 {
     public async Task<BeatPlan> CreatePulseAsync(int sessionId, CancellationToken cancellationToken = default)
     {
@@ -50,6 +51,7 @@ public sealed class SceneDirector(
             plan = FallbackPlan(candidates, decision);
         }
         Validate(plan, candidates, decision);
+        await affordanceValidator.ValidateBeatPlanAsync(sessionId, plan, cancellationToken);
         await eventWriter.CommitAsync(sessionId, "DirectorPlan", JsonSerializer.Serialize(plan), triggerCause: "director_reflection", cancellationToken: cancellationToken);
         return plan;
     }

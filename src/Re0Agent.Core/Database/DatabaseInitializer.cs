@@ -38,6 +38,8 @@ public static class DatabaseInitializer
             await EnsureCharacterCardUpgradeColumnsAsync(context, cancellationToken);
             await EnsurePendingDirectionUpgradeColumnsAsync(context, cancellationToken);
             await EnsureWorldRuntimeUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureDirectorPlanUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureMemoryEmbeddingUpgradeColumnsAsync(context, cancellationToken);
             await LorebookConditionImporter.ImportAsync(context, cancellationToken);
         }
         finally
@@ -201,5 +203,24 @@ public static class DatabaseInitializer
         {
             if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE world_runtime_state ADD COLUMN " + name + " " + definition + ";", cancellationToken);
         }
+    }
+
+    private static async Task EnsureDirectorPlanUpgradeColumnsAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "director_plan_versions", cancellationToken)) return;
+        var columns = await ReadColumnNamesAsync(context, "director_plan_versions", cancellationToken);
+        var additions = new[] { ("changed_story_thread_id", "INTEGER"), ("change_summary", "TEXT NOT NULL DEFAULT 'no_story_thread_change'") };
+        foreach (var (name, definition) in additions)
+        {
+            if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE director_plan_versions ADD COLUMN " + name + " " + definition + ";", cancellationToken);
+        }
+    }
+
+    private static async Task EnsureMemoryEmbeddingUpgradeColumnsAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "memory_embeddings", cancellationToken)) return;
+        var columns = await ReadColumnNamesAsync(context, "memory_embeddings", cancellationToken);
+        if (!columns.Contains("world_epoch"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE memory_embeddings ADD COLUMN world_epoch INTEGER NOT NULL DEFAULT 1;", cancellationToken);
     }
 }

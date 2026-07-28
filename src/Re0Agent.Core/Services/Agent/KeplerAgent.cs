@@ -13,7 +13,8 @@ public sealed class KeplerAgent(
     ILlmClient llmClient,
     EventSingleWriter eventWriter,
     ObservabilityComputer observabilityComputer,
-    RevealQueueService revealQueueService)
+    RevealQueueService revealQueueService,
+    KeplerOutputValidator outputValidator)
 {
     public async Task<string> RenderAsync(int sessionId, BeatPlan plan, CancellationToken cancellationToken = default)
     {
@@ -29,9 +30,10 @@ public sealed class KeplerAgent(
             Messages = [LlmMessage.System(config?.SystemPrompt ?? "你是开普勒，只描写已确定事实带来的环境、背景、镜头与转场；不替角色行动或发言。"),
                 LlmMessage.User($"BeatPlan：{JsonSerializer.Serialize(plan)}\n已确定事实：{JsonSerializer.Serialize(facts.Select(f => new { f.EventType, f.Content, f.SceneId }))}")]
         }, cancellationToken);
+        var renderedContent = outputValidator.ValidateOrFallback(response.Content, facts);
         var sceneId = facts.LastOrDefault()?.SceneId;
-        var observers = await observabilityComputer.ComputeAsync(sceneId, null, null, cancellationToken);
-        var narration = await eventWriter.CommitAsync(sessionId, "KeplerNarration", response.Content, sceneId: sceneId, observers: observers, triggerCause: "kepler_render", causalParentEventId: facts.LastOrDefault()?.EventId, revealedEventCursors: facts.Select(item => item.EventId).ToList(), cancellationToken: cancellationToken);
+        var observers = await observabilityComputer.ComputeAsync(sceneId, null, null, cancellationToken, "KeplerNarration");
+        var narration = await eventWriter.CommitAsync(sessionId, "KeplerNarration", renderedContent, sceneId: sceneId, observers: observers, triggerCause: "kepler_render", causalParentEventId: facts.LastOrDefault()?.EventId, revealedEventCursors: facts.Select(item => item.EventId).ToList(), cancellationToken: cancellationToken);
         await revealQueueService.EnqueueAsync(sessionId, narration.EventId, cancellationToken);
         var session = await dbContext.ChatSessions.AsNoTracking().SingleAsync(item => item.SessionId == sessionId, cancellationToken);
         var protagonistId = await dbContext.ProtagonistInfo.AsNoTracking().Select(item => $"protagonist:{item.RowId}").FirstOrDefaultAsync(cancellationToken);
@@ -39,6 +41,6 @@ public sealed class KeplerAgent(
         {
             await revealQueueService.RevealReadyAsync(sessionId, sceneId, cancellationToken);
         }
-        return response.Content;
+        return renderedContent;
     }
 }

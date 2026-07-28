@@ -15,8 +15,12 @@ public sealed class RuntimeLorebookService(Re0AgentDbContext dbContext)
         var active = new List<(int Order, string Position, string Content)>();
         var chapter = await dbContext.GlobalStates.AsNoTracking().Select(item => (int?)item.CurrentChapter)
             .FirstOrDefaultAsync(cancellationToken) ?? 1;
+        var currentLocation = await dbContext.GlobalStates.AsNoTracking().Select(item => item.CurrentLocation)
+            .FirstOrDefaultAsync(cancellationToken);
+        var activeThreads = await dbContext.StoryThreads.AsNoTracking().Where(item => item.Status == "Active")
+            .Select(item => item.Scope).ToListAsync(cancellationToken);
         var conditionalEntries = await dbContext.LorebookConditionEntries.AsNoTracking().OrderBy(item => item.SourceOrder).ToListAsync(cancellationToken);
-        foreach (var entry in conditionalEntries.Where(item => MatchesFactPredicate(item.FactPredicate, chapter)))
+        foreach (var entry in conditionalEntries.Where(item => MatchesFactPredicate(item.FactPredicate, chapter, currentLocation, activeThreads)))
             active.Add((entry.SourceOrder, "before", entry.Content));
         var activationText = query;
         for (var pass = 0; pass < 4; pass++)
@@ -49,15 +53,22 @@ public sealed class RuntimeLorebookService(Re0AgentDbContext dbContext)
             .Take(budgetCharacters).Aggregate(new System.Text.StringBuilder(), (builder, character) => builder.Append(character)).ToString();
     }
 
-    private static bool MatchesFactPredicate(string predicate, int chapter)
+    private static bool MatchesFactPredicate(string predicate, int chapter, string? currentLocation, IReadOnlyCollection<string> activeThreads)
     {
         var match = Regex.Match(predicate, @"legacy\.chapter\s*(?<op><=|>=|==|<|>)\s*(?<value>\d+)", RegexOptions.CultureInvariant);
-        if (!match.Success || !int.TryParse(match.Groups["value"].Value, out var expected)) return false;
-        return match.Groups["op"].Value switch
+        if (match.Success && int.TryParse(match.Groups["value"].Value, out var expected))
         {
-            "<" => chapter < expected, ">" => chapter > expected, "<=" => chapter <= expected,
-            ">=" => chapter >= expected, "==" => chapter == expected, _ => false
-        };
+            return match.Groups["op"].Value switch
+            {
+                "<" => chapter < expected, ">" => chapter > expected, "<=" => chapter <= expected,
+                ">=" => chapter >= expected, "==" => chapter == expected, _ => false
+            };
+        }
+        var locationMatch = Regex.Match(predicate, "global\\.current_location\\s*==\\s*['\"](?<value>[^'\"]+)['\"]", RegexOptions.CultureInvariant);
+        if (locationMatch.Success) return string.Equals(currentLocation, locationMatch.Groups["value"].Value, StringComparison.Ordinal);
+        var threadMatch = Regex.Match(predicate, "story_thread\\.scope\\s*==\\s*['\"](?<value>[^'\"]+)['\"]", RegexOptions.CultureInvariant);
+        if (threadMatch.Success) return activeThreads.Contains(threadMatch.Groups["value"].Value, StringComparer.Ordinal);
+        return false;
     }
 
     private static bool IsActive(JsonElement entry, string query, string sourceKey, int index)
