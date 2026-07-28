@@ -25,7 +25,8 @@ public sealed class WorldTickGovernor(
     OffscreenSimulationService offscreenSimulation,
     DirectorReflectionService directorReflection,
     WorldCandidateBuilder candidateBuilder,
-    WorldCancellationRegistry cancellationRegistry)
+    WorldCancellationRegistry cancellationRegistry,
+    RevealQueueService revealQueueService)
 {
     private const int MaxForegroundActionsPerWindow = 3;
     private static readonly TimeSpan SceneActionDelay = TimeSpan.FromSeconds(20);
@@ -36,9 +37,12 @@ public sealed class WorldTickGovernor(
         TimeSpan monotonicRealDelta,
         CancellationToken cancellationToken = default)
     {
+        cancellationRegistry.ResetPlan(sessionId);
         using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, cancellationRegistry.BackgroundToken(sessionId));
         cancellationToken = linkedCancellation.Token;
+        using var planCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, cancellationRegistry.PlanToken(sessionId));
         var clock = await worldClockService.AdvanceAsync(sessionId, monotonicRealDelta, cancellationToken);
         if (clock.IsPaused || clock.WorldDelta <= TimeSpan.Zero)
         {
@@ -65,7 +69,7 @@ public sealed class WorldTickGovernor(
             {
                 var trigger = await dbContext.TimelineEvents.Where(item => item.BranchId == session.CurrentBranchId && item.EventType == "PlayerDirectionRealizing")
                     .OrderByDescending(item => item.Sequence).FirstOrDefaultAsync(cancellationToken);
-                if (trigger is not null) reflectionPlan = await directorReflection.ReflectIfTriggeredAsync(sessionId, trigger.EventId, trigger.EventType, cancellationToken);
+                if (trigger is not null) reflectionPlan = await directorReflection.ReflectIfTriggeredAsync(sessionId, trigger.EventId, trigger.EventType, planCancellation.Token);
             }
         }
         if (reflectionPlan is null)
@@ -73,7 +77,7 @@ public sealed class WorldTickGovernor(
             var latestEvent = await dbContext.TimelineEvents.Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed")
                 .OrderByDescending(item => item.Sequence).FirstOrDefaultAsync(cancellationToken);
             if (latestEvent is not null)
-                reflectionPlan = await directorReflection.ReflectIfTriggeredAsync(sessionId, latestEvent.EventId, latestEvent.EventType, cancellationToken);
+                reflectionPlan = await directorReflection.ReflectIfTriggeredAsync(sessionId, latestEvent.EventId, latestEvent.EventType, planCancellation.Token);
         }
         await offscreenSimulation.AdvanceDueAsync(sessionId, clock.LogicalWorldTime, cancellationToken);
         var sceneId = await dbContext.GlobalStates.AsNoTracking().Select(item => item.CurrentLocation)
@@ -85,6 +89,12 @@ public sealed class WorldTickGovernor(
 
         var runtime = await dbContext.WorldRuntimeStates.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
         ResetBudgetWindowIfNeeded(runtime);
+        await revealQueueService.RevealMustRevealForSceneAsync(sessionId, sceneId, clock.LogicalWorldTime, cancellationToken);
+        if (session.InputSlowFactor < .999 && runtime.InputEventCount >= runtime.ForegroundAdmissionLimit)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return new WorldTickResult(clock, null, null, null);
+        }
         if (runtime.CurrentSceneBudgetUsed >= MaxForegroundActionsPerWindow)
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -115,10 +125,11 @@ public sealed class WorldTickGovernor(
                 cancellationToken: cancellationToken);
             var action = await agentOrchestrator.RunCharacterActionAsync(
                 payload.CharacterId, opportunity, payload.Opportunity, cancellationToken);
-            var beatPlan = reflectionPlan ?? await sceneDirector.CreatePulseAsync(sessionId, cancellationToken);
+            var beatPlan = reflectionPlan ?? await sceneDirector.CreatePulseAsync(sessionId, planCancellation.Token);
             await keplerAgent.RenderAsync(sessionId, beatPlan, cancellationToken);
             dueJob.Status = "Completed";
             runtime.CurrentSceneBudgetUsed++;
+            if (session.InputSlowFactor < .999) runtime.InputEventCount++;
             runtime.UpdatedAt = DateTimeOffset.UtcNow.ToString("O");
             await dbContext.SaveChangesAsync(cancellationToken);
             return new WorldTickResult(clock, payload.CharacterId, action.EventId, null);

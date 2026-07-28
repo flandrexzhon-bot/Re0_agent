@@ -13,6 +13,10 @@ public sealed class RevealQueueService(Re0AgentDbContext dbContext, EventSingleW
         if (!exists)
         {
             var eventRecord = await dbContext.TimelineEvents.AsNoTracking().SingleAsync(item => item.EventId == eventId, cancellationToken);
+            var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            var protagonistId = protagonist is null ? null : $"protagonist:{protagonist.RowId}";
+            var directObservers = System.Text.Json.JsonSerializer.Deserialize<string[]>(eventRecord.DirectObservers) ?? [];
+            var mustReveal = protagonistId is not null && eventRecord.SceneId == protagonist?.LocationName && directObservers.Contains(protagonistId, StringComparer.Ordinal);
             var now = DateTimeOffset.UtcNow;
             dbContext.RevealQueue.Add(new RevealQueueItem
             {
@@ -24,17 +28,20 @@ public sealed class RevealQueueService(Re0AgentDbContext dbContext, EventSingleW
                 AllowedVisibilityScope = eventRecord.VisibilityScope,
                 CausalDistance = 0,
                 LatestRevealWorldTime = now.AddMinutes(5).ToString("O"),
-                MustReveal = 1,
+                MustReveal = mustReveal ? 1 : 0,
                 CreatedAt = now.ToString("O")
             });
             await dbContext.SaveChangesAsync(cancellationToken);
         }
     }
 
-    public async Task<IReadOnlyList<RevealQueueItem>> RevealReadyAsync(int sessionId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<RevealQueueItem>> RevealReadyAsync(int sessionId, string? sceneId = null, CancellationToken cancellationToken = default)
     {
-        var items = await dbContext.RevealQueue.Where(item => item.SessionId == sessionId && item.Status == "Pending")
-            .OrderBy(item => item.QueueId).ToListAsync(cancellationToken);
+        var items = await (from queue in dbContext.RevealQueue
+            join eventRecord in dbContext.TimelineEvents on queue.EventId equals eventRecord.EventId
+            where queue.SessionId == sessionId && queue.Status == "Pending" && queue.MustReveal == 1
+                && (sceneId == null || eventRecord.SceneId == sceneId)
+            select queue).OrderBy(item => item.QueueId).ToListAsync(cancellationToken);
         if (items.Count == 0) return items;
         await eventWriter.CommitAsync(
             sessionId,
@@ -46,6 +53,46 @@ public sealed class RevealQueueService(Re0AgentDbContext dbContext, EventSingleW
         foreach (var item in items) item.Status = "Revealed";
         await dbContext.SaveChangesAsync(cancellationToken);
         return items;
+    }
+
+    public async Task<IReadOnlyList<RevealQueueItem>> RevealMustRevealForSceneAsync(
+        int sessionId,
+        string sceneId,
+        DateTimeOffset worldTime,
+        CancellationToken cancellationToken = default)
+    {
+        var candidates = await (from queue in dbContext.RevealQueue
+            join eventRecord in dbContext.TimelineEvents on queue.EventId equals eventRecord.EventId
+            where queue.SessionId == sessionId && queue.Status == "Pending" && queue.MustReveal == 1
+                && eventRecord.SceneId == sceneId
+            select queue).OrderBy(item => item.QueueId).ToListAsync(cancellationToken);
+        var items = candidates.Where(item => !DateTimeOffset.TryParse(item.LatestRevealWorldTime, out var deadline) || deadline <= worldTime || item.MustReveal == 1).ToList();
+        if (items.Count == 0) return items;
+        await eventWriter.CommitAsync(sessionId, "RevealCommitted", "{}", triggerCause: "must_reveal_foreground", revealedEventCursors: items.Select(item => item.EventId).ToList(), cancellationToken: cancellationToken);
+        foreach (var item in items) item.Status = "Revealed";
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return items;
+    }
+
+    public async Task RebuildStatusesFromEventsAsync(int sessionId, CancellationToken cancellationToken = default)
+    {
+        var revealedIds = new HashSet<string>(StringComparer.Ordinal);
+        var events = await (from eventRecord in dbContext.TimelineEvents
+            join branch in dbContext.TimelineBranches on eventRecord.BranchId equals branch.BranchId
+            join session in dbContext.ChatSessions on branch.SessionId equals session.SessionId
+            where session.SessionId == sessionId && eventRecord.EventType == "RevealCommitted"
+            select eventRecord.RevealedEventCursors).ToListAsync(cancellationToken);
+        foreach (var cursorJson in events)
+        {
+            try
+            {
+                foreach (var id in System.Text.Json.JsonSerializer.Deserialize<string[]>(cursorJson) ?? []) revealedIds.Add(id);
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
+        var queue = await dbContext.RevealQueue.Where(item => item.SessionId == sessionId).ToListAsync(cancellationToken);
+        foreach (var item in queue) item.Status = revealedIds.Contains(item.EventId) ? "Revealed" : "Pending";
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static double ReadImportance(string? pacingMetadata)

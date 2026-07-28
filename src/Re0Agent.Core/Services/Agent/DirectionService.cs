@@ -15,16 +15,28 @@ public sealed class DirectionService(
     public async Task<PlayerDirection?> RealizeNextAsync(int sessionId, CancellationToken cancellationToken = default)
     {
         var pending = await dbContext.PendingDirections
-            .Where(item => item.SessionId == sessionId && item.Status == "Pending")
+            .Where(item => item.SessionId == sessionId && (item.Status == "Pending" || item.Status == "Realizing"))
             .OrderBy(item => item.DirectionId).FirstOrDefaultAsync(cancellationToken);
         if (pending is null)
         {
             return null;
         }
 
-        pending.Status = "Realizing";
-        await dbContext.SaveChangesAsync(cancellationToken);
         var direction = decomposer.Decompose(pending.DirectionId.ToString(), pending.Content);
+        var session = await dbContext.ChatSessions.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
+        var currentWorldTime = session.WorldClockAnchor ?? DateTimeOffset.UtcNow.ToString("O");
+        if (pending.Status == "Pending")
+        {
+            pending.Status = "Realizing";
+            pending.Preconditions = JsonSerializer.Serialize(direction.Preconditions);
+            pending.EarliestWorldTime = currentWorldTime;
+            pending.CompletionProgress = .5;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            pending.CompletionProgress = 1;
+        }
         await eventWriter.CommitAsync(
             sessionId,
             "PlayerDirectionRealizing",
@@ -36,12 +48,18 @@ public sealed class DirectionService(
         if (direction.Status == "Blocked" || blockedReason is not null)
         {
             pending.Status = "Blocked";
+            pending.BlockReason = blockedReason ?? direction.BlockReason;
             direction = direction with { Status = "Blocked", BlockReason = blockedReason ?? direction.BlockReason };
             await dbContext.SaveChangesAsync(cancellationToken);
             return direction;
         }
 
+        if (pending.CompletionProgress < 1)
+        {
+            return direction with { Status = "Realizing" };
+        }
         pending.Status = "Completed";
+        pending.BlockReason = null;
         await dbContext.SaveChangesAsync(cancellationToken);
         await eventWriter.CommitAsync(
             sessionId,

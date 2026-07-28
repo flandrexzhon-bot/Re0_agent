@@ -30,6 +30,8 @@ public sealed class AgentOrchestrator(
                 SessionId = session.SessionId,
                 SourceEventId = direction.EventId,
                 Content = content,
+                Preconditions = "[]",
+                EarliestWorldTime = session.WorldClockAnchor ?? DateTimeOffset.UtcNow.ToString("O"),
                 Status = "Pending",
                 CreatedAt = DateTimeOffset.UtcNow.ToString("O")
             });

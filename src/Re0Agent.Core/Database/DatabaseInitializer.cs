@@ -36,6 +36,8 @@ public static class DatabaseInitializer
             await EnsureAgentConfigUpgradeColumnsAsync(context, cancellationToken);
             await EnsureRevealQueueUpgradeColumnsAsync(context, cancellationToken);
             await EnsureCharacterCardUpgradeColumnsAsync(context, cancellationToken);
+            await EnsurePendingDirectionUpgradeColumnsAsync(context, cancellationToken);
+            await EnsureWorldRuntimeUpgradeColumnsAsync(context, cancellationToken);
             await LorebookConditionImporter.ImportAsync(context, cancellationToken);
         }
         finally
@@ -168,6 +170,36 @@ public static class DatabaseInitializer
         foreach (var (name, definition) in additions)
         {
             if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE character_card_sources ADD COLUMN " + name + " " + definition + ";", cancellationToken);
+        }
+    }
+
+    private static async Task EnsurePendingDirectionUpgradeColumnsAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "pending_directions", cancellationToken)) return;
+        var columns = await ReadColumnNamesAsync(context, "pending_directions", cancellationToken);
+        var additions = new[]
+        {
+            ("precondition_chain", "TEXT NOT NULL DEFAULT '[]'"), ("earliest_world_time", "TEXT NOT NULL DEFAULT ''"),
+            ("completion_progress", "REAL NOT NULL DEFAULT 0"), ("block_reason", "TEXT")
+        };
+        foreach (var (name, definition) in additions)
+        {
+            if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE pending_directions ADD COLUMN " + name + " " + definition + ";", cancellationToken);
+        }
+    }
+
+    private static async Task EnsureWorldRuntimeUpgradeColumnsAsync(Re0AgentDbContext context, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(context, "world_runtime_state", cancellationToken)) return;
+        var columns = await ReadColumnNamesAsync(context, "world_runtime_state", cancellationToken);
+        var additions = new[]
+        {
+            ("input_activity_started_at", "TEXT"), ("input_event_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("foreground_admission_limit", "INTEGER NOT NULL DEFAULT 1")
+        };
+        foreach (var (name, definition) in additions)
+        {
+            if (!columns.Contains(name)) await context.Database.ExecuteSqlRawAsync("ALTER TABLE world_runtime_state ADD COLUMN " + name + " " + definition + ";", cancellationToken);
         }
     }
 }

@@ -17,11 +17,15 @@ public sealed class SceneDirector(
 {
     public async Task<BeatPlan> CreatePulseAsync(int sessionId, CancellationToken cancellationToken = default)
     {
-        var session = await dbContext.ChatSessions.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
-        var candidates = await dbContext.TimelineEvents.AsNoTracking().Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed" && item.EventType != "DirectorPlan")
-            .OrderByDescending(item => item.Sequence).Take(12).ToListAsync(cancellationToken);
-        var state = await paceGovernor.ExtractAsync(session.CurrentBranchId!, candidates.OrderBy(item => item.Sequence).ToList(), cancellationToken);
-        var decision = paceGovernor.Decide(state);
+        var (candidates, decision) = await LoadCandidatesAsync(sessionId, cancellationToken);
+        var plan = FallbackPlan(candidates, decision);
+        Validate(plan, candidates, decision);
+        return plan;
+    }
+
+    public async Task<BeatPlan> CreateFullPlanAsync(int sessionId, CancellationToken cancellationToken = default)
+    {
+        var (candidates, decision) = await LoadCandidatesAsync(sessionId, cancellationToken);
         var config = await configResolver.FindConfigAsync("Director", "SceneDirector", cancellationToken);
         BeatPlan plan;
         try
@@ -46,8 +50,18 @@ public sealed class SceneDirector(
             plan = FallbackPlan(candidates, decision);
         }
         Validate(plan, candidates, decision);
-        await eventWriter.CommitAsync(sessionId, "DirectorPlan", JsonSerializer.Serialize(plan), triggerCause: "director_pulse", cancellationToken: cancellationToken);
+        await eventWriter.CommitAsync(sessionId, "DirectorPlan", JsonSerializer.Serialize(plan), triggerCause: "director_reflection", cancellationToken: cancellationToken);
         return plan;
+    }
+
+    private async Task<(IReadOnlyList<TimelineEvent> Candidates, PaceDecision Decision)> LoadCandidatesAsync(int sessionId, CancellationToken cancellationToken)
+    {
+        var session = await dbContext.ChatSessions.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
+        var candidates = await dbContext.TimelineEvents.AsNoTracking()
+            .Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed" && item.EventType != "DirectorPlan")
+            .OrderByDescending(item => item.Sequence).Take(12).ToListAsync(cancellationToken);
+        var state = await paceGovernor.ExtractAsync(session.CurrentBranchId!, candidates.OrderBy(item => item.Sequence).ToList(), cancellationToken);
+        return (candidates, paceGovernor.Decide(state));
     }
 
     private static BeatPlan FallbackPlan(IReadOnlyList<TimelineEvent> candidates, PaceDecision decision) => new(

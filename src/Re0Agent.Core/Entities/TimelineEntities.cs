@@ -196,6 +196,15 @@ public sealed class WorldRuntimeState
     [Column("current_scene_budget_used")]
     public int CurrentSceneBudgetUsed { get; set; }
 
+    [Column("input_activity_started_at")]
+    public string? InputActivityStartedAt { get; set; }
+
+    [Column("input_event_count")]
+    public int InputEventCount { get; set; }
+
+    [Column("foreground_admission_limit")]
+    public int ForegroundAdmissionLimit { get; set; } = 1;
+
     [Column("budget_window_started_at")]
     public required string BudgetWindowStartedAt { get; set; }
 
@@ -212,6 +221,10 @@ public sealed class PendingDirection
     [Column("session_id")] public int SessionId { get; set; }
     [Column("source_event_id")] public required string SourceEventId { get; set; }
     [Column("content")] public required string Content { get; set; }
+    [Column("precondition_chain")] public required string Preconditions { get; set; } = "[]";
+    [Column("earliest_world_time")] public required string EarliestWorldTime { get; set; }
+    [Column("completion_progress")] public double CompletionProgress { get; set; }
+    [Column("block_reason")] public string? BlockReason { get; set; }
     [Column("status")] public required string Status { get; set; } = "Pending";
     [Column("created_at")] public required string CreatedAt { get; set; }
 }

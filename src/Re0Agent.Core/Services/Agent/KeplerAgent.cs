@@ -37,7 +37,7 @@ public sealed class KeplerAgent(
         var protagonistId = await dbContext.ProtagonistInfo.AsNoTracking().Select(item => $"protagonist:{item.RowId}").FirstOrDefaultAsync(cancellationToken);
         if (session.GameMode == "Theater" || protagonistId is not null && observers.DirectObserverIds.Contains(protagonistId, StringComparer.Ordinal))
         {
-            await revealQueueService.RevealReadyAsync(sessionId, cancellationToken);
+            await revealQueueService.RevealReadyAsync(sessionId, sceneId, cancellationToken);
         }
         return response.Content;
     }

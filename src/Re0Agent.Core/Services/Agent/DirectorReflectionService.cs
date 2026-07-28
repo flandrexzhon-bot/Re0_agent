@@ -20,7 +20,7 @@ public sealed class DirectorReflectionService(
         var shouldReflect = triggerType is "PlayerDirectionRealizing" or "WorldRewindCommitted" or "InitialProjection";
         var hasVersion = await dbContext.DirectorPlanVersions.AnyAsync(item => item.BranchId == session.CurrentBranchId, cancellationToken);
         if (hasVersion && !shouldReflect) return null;
-        var plan = await sceneDirector.CreatePulseAsync(sessionId, cancellationToken);
+        var plan = await sceneDirector.CreateFullPlanAsync(sessionId, cancellationToken);
         dbContext.DirectorPlanVersions.Add(new Re0Agent.Core.Entities.DirectorPlanVersion
         {
             BranchId = session.CurrentBranchId,

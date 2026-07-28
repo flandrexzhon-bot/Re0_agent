@@ -291,6 +291,9 @@ public static class DatabaseSchema
           foreground_pending_count INTEGER NOT NULL DEFAULT 0,
           foreground_lag_seconds REAL NOT NULL DEFAULT 0,
           current_scene_budget_used INTEGER NOT NULL DEFAULT 0,
+          input_activity_started_at TEXT,
+          input_event_count INTEGER NOT NULL DEFAULT 0,
+          foreground_admission_limit INTEGER NOT NULL DEFAULT 1,
           budget_window_started_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         );
@@ -301,6 +304,10 @@ public static class DatabaseSchema
           session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
           source_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
           content TEXT NOT NULL,
+          precondition_chain TEXT NOT NULL DEFAULT '[]',
+          earliest_world_time TEXT NOT NULL DEFAULT '',
+          completion_progress REAL NOT NULL DEFAULT 0,
+          block_reason TEXT,
           status TEXT NOT NULL DEFAULT 'Pending',
           created_at TEXT NOT NULL
         );

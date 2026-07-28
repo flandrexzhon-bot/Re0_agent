@@ -15,6 +15,11 @@ public sealed class WorldAffordanceValidator(Re0AgentDbContext dbContext)
         {
             return;
         }
+        var sceneExists = await dbContext.SceneStates.AsNoTracking().AnyAsync(item => item.SceneId == actorBrief.SceneId, cancellationToken);
+        if (!sceneExists && actorBrief.SceneId != await dbContext.GlobalStates.AsNoTracking().Select(item => item.CurrentLocation).FirstOrDefaultAsync(cancellationToken))
+        {
+            throw new InvalidOperationException("行动机会引用了尚未成立的场景。");
+        }
         var location = profile.CharacterId.StartsWith("protagonist:", StringComparison.Ordinal)
             ? await dbContext.ProtagonistInfo.AsNoTracking().Select(item => item.LocationName).FirstOrDefaultAsync(cancellationToken)
             : await dbContext.ImportantNpcs.AsNoTracking()
@@ -23,6 +28,18 @@ public sealed class WorldAffordanceValidator(Re0AgentDbContext dbContext)
         if (!string.Equals(location, actorBrief.SceneId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("角色不在当前场景，不能获得当前镜头行动机会。");
+        }
+        if (!string.IsNullOrWhiteSpace(actorBrief.ContextEvent.TargetId))
+        {
+            var targetExists = actorBrief.ContextEvent.TargetId.StartsWith("npc:", StringComparison.Ordinal)
+                ? await dbContext.ImportantNpcs.AnyAsync(item => $"npc:{item.RowId}" == actorBrief.ContextEvent.TargetId, cancellationToken)
+                : actorBrief.ContextEvent.TargetId.StartsWith("protagonist:", StringComparison.Ordinal)
+                    && await dbContext.ProtagonistInfo.AnyAsync(item => $"protagonist:{item.RowId}" == actorBrief.ContextEvent.TargetId, cancellationToken);
+            if (!targetExists) throw new InvalidOperationException("行动机会引用了不存在的目标。");
+        }
+        if (string.IsNullOrWhiteSpace(actorBrief.Opportunity))
+        {
+            throw new InvalidOperationException("行动机会缺少可验证的动机。");
         }
     }
 }

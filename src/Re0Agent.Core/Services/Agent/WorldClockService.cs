@@ -62,7 +62,10 @@ public sealed class WorldClockService(Re0AgentDbContext dbContext, EventSingleWr
             throw new ArgumentOutOfRangeException(nameof(activeSlowFactor));
         }
         var session = await dbContext.ChatSessions.SingleAsync(item => item.SessionId == sessionId, cancellationToken);
+        var runtime = await GetOrCreateRuntimeStateAsync(sessionId, cancellationToken);
         session.InputSlowFactor = isActive ? activeSlowFactor : 1.0;
+        runtime.InputActivityStartedAt = isActive ? DateTimeOffset.UtcNow.ToString("O") : null;
+        runtime.InputEventCount = 0;
         await dbContext.SaveChangesAsync(cancellationToken);
         await eventWriter.CommitAsync(
             sessionId,

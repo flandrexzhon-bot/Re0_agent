@@ -8,7 +8,8 @@ public sealed class ChatSessionService(
     Re0AgentDbContext dbContext,
     ProtagonistTemplateService templateService,
     ProjectionReplayer projectionReplayer,
-    EventSingleWriter eventWriter)
+    EventSingleWriter eventWriter,
+    Re0Agent.Core.Services.Agent.RevealQueueService revealQueueService)
 {
     public async Task EnsureDefaultSessionAsync(CancellationToken cancellationToken = default)
     {
@@ -133,6 +134,7 @@ public sealed class ChatSessionService(
         {
             await projectionReplayer.ReplayToEventAsync(target.CurrentBranchId, cursor, cancellationToken);
         }
+        await revealQueueService.RebuildStatusesFromEventsAsync(targetSessionId, cancellationToken);
     }
 
     public async Task<int> BranchSessionAsync(
