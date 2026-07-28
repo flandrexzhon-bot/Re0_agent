@@ -6,1406 +6,1052 @@
 @using Re0Agent.Core.Database
 @using Re0Agent.Core.Services.Database
 @using System.Text.Json
-@using System.Text.Encodings.Web
+@using System.Diagnostics
 @inject AgentOrchestrator Orchestrator
 @inject Re0AgentDbContext DbContext
-@inject ProtagonistTemplateService TemplateService
 @inject ChatSessionService SessionService
-@inject GameProgressService Progress
+@inject WorldClockService WorldClock
+@inject WorldTickGovernor TickGovernor
 @inject IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 
+<PageTitle>命运长卷 - Re:Zero 连续世界</PageTitle>
 
-<PageTitle>命运之卷 - Re:Zero RPG</PageTitle>
+<div class="world-shell @(IsTheater ? "mode-theater" : "mode-rp")">
 
-<!-- 死亡回归 Glitch 动画遮罩 -->
-<div class="death-glitch-overlay @(showDeathGlitch ? "active" : "")">
-    <div class="death-glitch-text">死 亡 回 归</div>
-</div>
-
-
-@if (isInitializingGame)
-{
-    <div class="game-init-wizard-container">
-        <div class="wizard-box">
-            @if (initStep == 1)
-            {
-                <!-- Step 1: Welcome -->
-                <div class="wizard-step step-welcome">
-                    <h1 class="wizard-title">Re:Zero AI Agent RPG</h1>
-                    <h2 class="wizard-subtitle">—— 命 运 编 织 与 轮 回 之 轴 ——</h2>
-                    <div class="wizard-divider"></div>
-                    <p class="wizard-intro-text">
-                        这是一个由 AI 驱动的 Re:Zero 桌面角色扮演（TRPG）与互动小说系统。<br />
-                        在这里，您将扮演主角，在 GM 与 NPC 智能体的交织演绎下推进剧情，挑战死亡，探索宿命。
-                    </p>
-                    <button class="wizard-btn-start" @onclick="GoToStep2">开始游戏</button>
-                </div>
-            }
-            else if (initStep == 2)
-            {
-                <!-- Step 2: Select or Create Protagonist -->
-                <div class="wizard-step step-protagonist">
-                    <h3 class="wizard-step-title">第一步：选择或定制主角</h3>
-                    
-                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; justify-content: center;">
-                        <button type="button" class="btn-custom @(!isCustomProtagonist ? "primary-action" : "")" @onclick="() => ToggleCustomProtagonist(false)" style="font-size: 0.85rem; padding: 0.35rem 1rem;">选择预设主角模板</button>
-                        <button type="button" class="btn-custom @(isCustomProtagonist ? "primary-action" : "")" @onclick="() => ToggleCustomProtagonist(true)" style="font-size: 0.85rem; padding: 0.35rem 1rem;">定制专属角色</button>
-                    </div>
-
-                    @if (!isCustomProtagonist)
-                    {
-                        <div class="template-selector" style="width: 100%; margin-bottom: 1.5rem;">
-                            <h4 class="sub-section-title">选择预设模板</h4>
-                            <div class="template-list-scroll" style="max-height: 250px;">
-                                @foreach (var tpl in templates)
-                                {
-                                    <div class="template-card @(selectedTemplateId == tpl.TemplateId ? "selected" : "")" @onclick="() => SelectTemplate(tpl)">
-                                        <div class="template-name">@tpl.TemplateName</div>
-                                        <div class="template-desc">@GetTemplateBrief(tpl)</div>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="template-creator" style="width: 100%; margin-bottom: 1.5rem;">
-                            <h4 class="sub-section-title">定制专属角色</h4>
-                            <div class="creator-form" style="max-height: 280px;">
-                                <div class="form-row">
-                                    <label>姓名：</label>
-                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.Name" placeholder="例如：菜月昴" />
-                                </div>
-                                <div class="form-row-group">
-                                    <div class="form-row">
-                                        <label>性别：</label>
-                                        <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.Gender" placeholder="男" />
-                                    </div>
-                                    <div class="form-row">
-                                        <label>年龄：</label>
-                                        <input type="number" class="wizard-input" @bind="Progress.CustomProtagonist.Age" />
-                                    </div>
-                                </div>
-                                <div class="form-row">
-                                    <label>初始位置：</label>
-                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.LocationName" placeholder="例如：王都 / 罗兹瓦尔宅邸" />
-                                </div>
-                                <div class="form-row">
-                                    <label>外貌特征：</label>
-                                    <textarea class="wizard-input-area" @bind="Progress.CustomProtagonist.Appearance" placeholder="外貌服饰特征描述"></textarea>
-                                </div>
-                                <div class="form-row">
-                                    <label>身份背景：</label>
-                                    <textarea class="wizard-input-area" @bind="Progress.CustomProtagonist.IdentityText" placeholder="主角身世、身份 and 能力简介"></textarea>
-                                </div>
-                                <div class="form-row">
-                                    <label>基础属性：</label>
-                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.BaseAttributes" placeholder="体质:45; 敏捷:55; 感知:60; 意志:70" />
-                                </div>
-                                <div class="form-row">
-                                    <label>特异属性：</label>
-                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.SpecialAttributes" placeholder="例如：死亡回归:特殊" />
-                                </div>
-                                <div class="form-row">
-                                    <label>随身资源：</label>
-                                    <input type="text" class="wizard-input" @bind="Progress.CustomProtagonist.ResourcesText" placeholder="例如：手机; 方便面" />
-                                </div>
-                                <div class="form-row checkbox-row">
-                                    <input type="checkbox" id="includeSubaru" @bind="Progress.IncludeSubaruAsNpc" style="cursor: pointer; width: 16px; height: 16px;" />
-                                    <label for="includeSubaru" style="margin-left: 0.5rem;">若不使用菜月昴为主体，是否将菜月昴保留为在场 NPC？</label>
-                                </div>
-                            </div>
-                        </div>
-                    }
-
-                    <div class="wizard-actions">
-                        <button class="wizard-btn-secondary" @onclick="GoToStep1">返回</button>
-                        <button class="wizard-btn-primary" @onclick="GoToStep3" disabled="@(!IsValidProtagonist())">下一步：选择初始章节</button>
-                    </div>
-                </div>
-            }
-            else if (initStep == 3)
-            {
-                <!-- Step 3: Select Chapter -->
-                <div class="wizard-step step-chapter">
-                    <h3 class="wizard-step-title">第二步：选择初始章节</h3>
-                    
-                    <div class="chapter-selection-list">
-                        @foreach (var ch in availableChapters)
-                        {
-                            <div class="chapter-card @(Progress.SelectedChapter == ch.Number ? "selected" : "")" @onclick="() => SelectChapter(ch.Number)">
-                                <div class="chapter-num">第 @ch.Number 章</div>
-                                <div class="chapter-title">@ch.Title</div>
-                                <div class="chapter-desc">@ch.Desc</div>
-                                @if (autoSelectedChapter == ch.Number)
-                                {
-                                    <span class="chapter-recommend-tag">✨ 推荐（基于主角初始位置）</span>
-                                }
-                            </div>
-                        }
-                    </div>
-
-                    <div class="wizard-actions">
-                        <button class="wizard-btn-secondary" @onclick="GoToStep2">上一步</button>
-                        <button class="wizard-btn-primary" @onclick="GoToStep4">下一步：自定义开场白</button>
-                    </div>
-                </div>
-            }
-            else if (initStep == 4)
-            {
-                <!-- Step 4: Custom Opening Message -->
-                <div class="wizard-step step-custom-opening">
-                    <h3 class="wizard-step-title">第三步：自定义开场白（可以空着）</h3>
-                    
-                    <div class="custom-opening-input-box" style="width: 100%; margin-bottom: 1.5rem;">
-                        <p class="wizard-intro-text" style="font-size: 0.85rem; margin-bottom: 0.5rem; text-align: left;">
-                            您可以输入本局游戏的自定义开场白（当前正在发生的事）。如果留空，系统将自动由 GM 生成。
-                        </p>
-                        <textarea class="wizard-input-area" @bind="Progress.CustomOpeningMessage" rows="6" 
-                                  placeholder="留空则由 GM 自动安排开场，亦可在此输入如：'你从一片黑暗中醒来，耳边传来水果摊贩的吆喝声...'"></textarea>
-                    </div>
-
-                    <div class="wizard-actions">
-                        <button class="wizard-btn-secondary" @onclick="GoToStep3">上一步</button>
-                        <button class="wizard-btn-primary wizard-btn-embark" @onclick="EmbarkOnAdventure">开启宿命之路</button>
-                    </div>
-                </div>
-            }
-        </div>
-    </div>
-}
-else
-{
-    <div class="novel-layout-container">
-    <div class="fate-book fate-book--novel">
-        <!-- 顶部状态面板 -->
-        <div class="novel-header-bar">
-            <div class="novel-header-badge chapter">章节 @currentChapter</div>
-            @if (loopCount > 0)
-            {
-                <div class="novel-header-badge loop-badge">LOOP @loopCount</div>
-            }
-        </div>
-
-        <!-- 命运之卷编年史日志 -->
-        <section class="work-surface grimoire-log" id="grimoireLogScroll">
-            <h2>编年史 / 命运之卷</h2>
-
-            <!-- 跨 session 持久历史纪要 -->
-            @foreach (var entry in chronicles)
-            {
-                <div class="grimoire-entry gm-narrative">
-                    <div class="entry-header">
-                        @if (entry.CodeIndex == "AM0000")
-                        {
-                            <span>前序故事</span>
-                        }
-                        else
-                        {
-                            <span>@entry.CodeIndex (@entry.TimeSpan)</span>
-                        }
-                    </div>
-                    <div class="entry-body">@((MarkupString)CleanEjsText(entry.ChronicleText))</div>
-                </div>
-            }
-
-            <!-- 本次会话内已进行/进行中的回合（保留气泡与检定卡片）。仅显示最近 3 个回合，更早的由上方编年史(AM)覆盖。 -->
-            @{
-                var visibleRounds = sessionRounds.Count > 3 ? sessionRounds.Skip(sessionRounds.Count - 3).ToList() : sessionRounds;
-                var latestRound = sessionRounds.LastOrDefault();
-            }
-            @foreach (var round in visibleRounds)
-            {
-                var isLatest = ReferenceEquals(round, latestRound);
-                // 仅在「非运行段」显示 swipe/重 roll（运行中 1/3/4/5/6 不显示）。
-                // 用段位判定而非 round.CompletedAt——否则 swipe 到「只含开场」的历史变体（CompletedAt=null）
-                // 会让 canSwipe 变 false，swipe 按钮消失、用户被困在裸开场无法切回。
-                var isRunningPhase = phase == RoundPhase.GmOpening || phase == RoundPhase.ProtagonistActing
-                    || phase == RoundPhase.NpcDispatching || phase == RoundPhase.NpcResponding
-                    || phase == RoundPhase.Finalizing;
-                var canSwipe = isLatest && Progress.CanReRoll && !isRunningPhase;
-
-                <div class="system-event-log" style="display: flex; align-items: center; justify-content: center; gap: 0.6rem;">
-                    <span>─── 命运分歧点：@round.RoundIndex ───</span>
-                    @if (!isBusy)
-                    {
-                        <button type="button" title="分支：从此处复制一条独立故事线（新会话，父会话保留）" disabled="@isBusy"
-                                style="background: none; border: none; cursor: pointer; color: var(--color-purple-glow); font-size: 1rem; padding: 0 0.2rem;"
-                                @onclick="() => BranchFrom(round)">⑂</button>
-                    }
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(round.GmOpening))
-                {
-                    <div class="grimoire-entry gm-narrative">
-                        <div class="entry-header">
-                            <span>GM 引入叙事</span>
-                            @if (canSwipe)
-                            {
-                                <span class="reroll-swipe" style="display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; font-size: 0.8rem;">
-                                    <button type="button" title="上一个版本" disabled="@(Progress.ActiveVariantIndex <= 0)"
-                                            class="swipe-btn" @onclick="() => SelectVariant(Progress.ActiveVariantIndex - 1)">&lt;</button>
-                                    <span style="color: var(--color-text-secondary);">@(Progress.ActiveVariantIndex + 1)/@Progress.CurrentVariantCount</span>
-                                    @if (Progress.ActiveVariantIndex < Progress.CurrentVariantCount - 1)
-                                    {
-                                        <button type="button" title="下一个版本" class="swipe-btn" @onclick="() => SelectVariant(Progress.ActiveVariantIndex + 1)">&gt;</button>
-                                    }
-                                    else if (phase == RoundPhase.AwaitingPlayer)
-                                    {
-                                        <button type="button" title="重新生成开场" class="swipe-btn" @onclick="RegenerateOpening">&gt;</button>
-                                    }
-                                    else
-                                    {
-                                        <button type="button" title="重 roll 整个大回合（全部重来，需重新书写主角抉择）" class="swipe-btn" @onclick="RestartLatestRound">&gt;</button>
-                                    }
-                                </span>
-                            }
-                        </div>
-                        <div class="entry-body">@((MarkupString)CleanEjsText(round.GmOpening))</div>
-                    </div>
-                }
-
-                @for (int ti = 0; ti < round.CharacterTurns.Count; ti++)
-                {
-                    var turn = round.CharacterTurns[ti];
-                    var turnIndex = ti;
-                    <div class="grimoire-entry">
-                        <div class="character-speech-bubble @(turn.IsPlayerControlled ? "player-bubble" : "npc-bubble")">
-                            <div class="bubble-avatar">@turn.CharacterName.Substring(0, 1)</div>
-                            <div class="bubble-content">
-                                <span class="bubble-sender">
-                                    @turn.CharacterName
-                                    @if (canSwipe)
-                                    {
-                                        <button type="button" title="从这一格起级联重 roll（其后角色一并重跑）" class="swipe-btn"
-                                                style="margin-left: 0.4rem; font-size: 0.75rem;"
-                                                @onclick="() => ReRoll(turnIndex, false)">↻</button>
-                                    }
-                                </span>
-                                <div class="bubble-text">@((MarkupString)CleanEjsText(turn.ActionText))</div>
-                                @if (!turn.Skipped && turn.DiceResult is not null)
-                                {
-                                    <div class="bubble-details">
-                                        @if (!string.IsNullOrWhiteSpace(turn.GmJudgement))
-                                        {
-                                            <div class="bubble-judgement">GM 行为判定: @((MarkupString)CleanEjsText(turn.GmJudgement))</div>
-                                        }
-                                        <div class="dice-result-card @GetDiceSuccessClass(turn.DiceResult.SuccessLevel)">
-                                            <span class="dice-icon">🎲</span>
-                                            <span>@FormatDiceResult(turn.DiceResult)</span>
-                                        </div>
-                                        @if (!string.IsNullOrWhiteSpace(turn.ResultResponse))
-                                        {
-                                            <div class="bubble-text" style="margin-top: 0.35rem; font-style: italic; color: var(--color-text-secondary);">@((MarkupString)CleanEjsText(turn.ResultResponse))</div>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                }
-
-                @foreach (var systemMsg in round.Events.Where(e => e.StartsWith("填表Agent") || e.StartsWith("自动存档") || e.StartsWith("死亡回归")))
-                {
-                    <div class="system-event-log">🔮 @systemMsg</div>
-                }
-            }
-
-            @if (phase == RoundPhase.GmOpening)
-            {
-                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>GM 开场中...</span></div>
-                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>GM 正在铺陈本回合的开场...</span>
-                    </div>
-                </div>
-            }
-            else if (phase == RoundPhase.ProtagonistActing)
-            {
-                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>主角行动中...</span></div>
-                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>主角正在依抉择行动，GM 裁定结果...</span>
-                    </div>
-                </div>
-            }
-            else if (phase == RoundPhase.NpcDispatching)
-            {
-                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>调度在场角色...</span></div>
-                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>泉此方正在安排在场角色的行动顺序...</span>
-                    </div>
-                </div>
-            }
-            else if (phase == RoundPhase.NpcResponding)
-            {
-                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>角色响应中...</span></div>
-                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>在场 NPC 正在依次回应，请稍候...</span>
-                    </div>
-                </div>
-            }
-            else if (phase == RoundPhase.Finalizing)
-            {
-                <div class="grimoire-entry gm-narrative" style="opacity: 0.85;">
-                    <div class="entry-header"><span>填表/存档中...</span></div>
-                    <div class="entry-body" style="font-size: 0.95rem; display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
-                        <div class="spinner-border text-warning" role="status" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
-                        <span>GM 正在编织世界线并刻入编年史...</span>
-                    </div>
-                </div>
-            }
-        </section>
-
-        <!--CONSOLE_PLACEHOLDER-->
-        <section class="work-surface round-console-surface">
-            @if (!hasProtagonist)
-            {
-                <h2>缔造命运的主角</h2>
-                <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
-                    当前世界线尚未铭刻主角。请先在右侧状态栏中选择或配置一个主角模板，开启起始于零的异世界旅程。
-                </p>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
-                    @foreach (var tpl in templates)
-                    {
-                        <button class="btn-custom @(tpl.IsDefault == 1 ? "primary-action" : "")" type="button"
-                                disabled="@isBusy" @onclick="() => ApplyTemplateAsync(tpl.TemplateId)">
-                            @(tpl.IsDefault == 1 ? "★ " : "")@tpl.TemplateName
-                        </button>
-                    }
-                </div>
-            }
-            else if (phase == RoundPhase.AwaitingPlayer)
-            {
-                <h2>书写主角的抉择</h2>
-                <div class="round-console">
-                    <p style="color: var(--color-text-secondary); margin: 0 0 0.5rem;">
-                        GM 已铺陈开场，请先书写主角的抉择；落笔后主角将率先行动，随后在场角色依次回应。
-                    </p>
-                    <textarea @bind="playerInput" @bind:event="oninput" @bind:after="PersistDraft" rows="3"
-                              placeholder="@(skipPlayerTurn ? "旁观模式：主角将保持沉默。" : "在此书写主角的动作、语言或决策...")"></textarea>
-                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 0.5rem;">
-                        <label class="inline-toggle">
-                            <input type="checkbox" @bind="skipPlayerTurn" />
-                            <span>旁观模式（跳过主角本回合行动）</span>
-                        </label>
-                        <label class="inline-toggle">
-                            <input type="checkbox" @bind="directPlayerOutput" />
-                            <span>直接输出（不经过角色agent）</span>
-                        </label>
-                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="SubmitPlayerTurnAsync">
-                            @(isBusy ? "命运编制中..." : "落笔 (提交主角行动)")
-                        </button>
-                    </div>
-                </div>
-            }
-            else if (phase == RoundPhase.Interrupted)
-            {
-                <h2>命运暂歇</h2>
-                <div class="round-console">
-                    <p style="color: var(--color-text-secondary); margin: 0 0 0.75rem;">
-                        本回合已手动停止。可点「继续」从断点恢复并跑完结算，或对上方任意一格点 ↻ 重 roll。
-                    </p>
-                    <div style="display: flex; justify-content: flex-end;">
-                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="ResumeRoundAsync">
-                            ▶ 继续
-                        </button>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <h2>纺织新的命运线</h2>
-                <p style="color: var(--color-text-secondary); margin-bottom: 1rem;">
-                    点击「开始大回合」，GM 将先铺陈开场场景；随后由你书写主角的抉择，主角率先行动，在场角色再依次回应。
-                </p>
-                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
-                    @if (phase == RoundPhase.GmOpening || phase == RoundPhase.ProtagonistActing || phase == RoundPhase.NpcDispatching || phase == RoundPhase.NpcResponding || phase == RoundPhase.Finalizing)
-                    {
-                        <button class="primary-action" type="button" style="background: var(--color-danger, #b03a3a); border-color: var(--color-danger, #b03a3a);" @onclick="StopRound">
-                            ⏹ 停止
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="primary-action" type="button" disabled="@isBusy" @onclick="BeginRoundAsync">
-                            ▶ 开始大回合
-                        </button>
-                    }
-                </div>
-            }
-        </section>
-    </div>
-
-    <!-- 右侧可收缩状态栏 -->
-    <div class="novel-sidebar @(sidebarExpanded ? "expanded" : "collapsed")">
-        <button type="button" class="sidebar-toggle-btn" @onclick="() => sidebarExpanded = !sidebarExpanded">
-            @if (sidebarExpanded)
-            {
-                <span>关闭状态栏 ▶</span>
-            }
-            else
-            {
-                <span>◀ 展开状态栏</span>
-            }
-        </button>
-
-        @if (sidebarExpanded)
-        {
-            <div class="sidebar-header">
-                🛡️ 冒险者状态栏
+    <!-- ══ 世界状态条 ══ -->
+    <header class="world-bar">
+        <div class="world-bar-left">
+            <span class="world-sigil">@(IsTheater ? "❖" : "✧")</span>
+            <div class="world-bar-title">
+                <span class="world-name">命运长卷</span>
+                <span class="world-mode @(IsTheater ? "tag-theater" : "tag-rp")">
+                    @(IsTheater ? "剧场模式 · 全知观看" : "RP 模式 · 主角视角")
+                    <span class="mode-lock" title="模式在会话创建时锁定，无法更改">锁定</span>
+                </span>
             </div>
-            <div class="sidebar-content">
-                <!-- 0. 聊天会话管理 -->
-                <div class="sidebar-section">
-                    <div class="sidebar-section-title" style="display: flex; justify-content: space-between; align-items: center;">
-                        <span>📁 聊天会话</span>
-                    </div>
-                    <div class="sidebar-section-body" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.85rem;">
-                        <!-- 会话下拉选择 -->
-                        <div style="display: flex; gap: 0.25rem; align-items: center;">
-                            <select class="form-select parchment-input" @bind="activeSessionId" @bind:after="OnSessionChangedAsync" style="flex: 1; font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                @foreach (var s in chatSessions)
-                                {
-                                    var parentName = s.ParentSessionId is int pid
-                                        ? chatSessions.FirstOrDefault(p => p.SessionId == pid)?.SessionName
-                                        : null;
-                                    <option value="@s.SessionId" title="@(parentName is null ? null : $"分支自：{parentName}")">@(s.IsActive == 1 ? "★ " : "")@(parentName is null ? "" : "↰ ")@s.SessionName (@s.CreatedAt)</option>
-                                }
-                            </select>
-                            <button type="button" class="btn btn-sm danger-action p-0" style="width: 24px; height: 24px; line-height: 22px; cursor: pointer; border-radius: 4px;" title="删除此会话" @onclick="DeleteCurrentSessionAsync" disabled="@(chatSessions.Count <= 1)">
-                                🗑️
-                            </button>
-                        </div>
-                        
-                        <!-- 新建会话 -->
-                        <div style="display: flex; gap: 0.25rem; align-items: center; border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.25rem;">
-                            <input type="text" class="form-control parchment-input" placeholder="新会话名称" @bind="newSessionName" style="flex: 1; font-size: 0.75rem; padding: 0.2rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);" />
-                            <button type="button" class="primary-action" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; margin: 0; line-height: 1.2;" @onclick="CreateSessionAsync">
-                                新建
-                            </button>
-                        </div>
-                        </div>
-                </div>
+        </div>
 
-                @if (protagonistInfo is not null)
+        <div class="world-bar-clock">
+            <div class="clock-face">
+                <span class="clock-label">世界时刻</span>
+                <span class="clock-value">@WorldClockText</span>
+            </div>
+            <div class="clock-rate @(IsPaused ? "rate-halted" : "") @(IsInputSlowed ? "rate-slowed" : "")">
+                <span>×@EffectiveScaleText</span>
+                @if (IsInputSlowed)
                 {
-                    <!-- 1. 当前主角状态 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">
-                            👤 冒险者状态
-                        </div>
-                        <div class="sidebar-section-body">
-                            <div><span class="attr-label">主角名字:</span> @protagonistInfo.Name</div>
-                            <div><span class="attr-label">性别/年龄:</span> @protagonistInfo.Gender / @(protagonistInfo.Age)岁</div>
-                            <div><span class="attr-label">身处地点:</span> <span style="color: var(--color-gold);">@protagonistInfo.LocationName</span></div>
-                            @if (!string.IsNullOrEmpty(locationRegion))
-                            {
-                                <div style="font-size: 0.8rem; font-style: italic; color: #a98b64; padding-left: 0.5rem;">@locationRegion</div>
-                            }
-                            @if (!string.IsNullOrEmpty(locationDescription))
-                            {
-                                <div style="font-size: 0.8rem; color: var(--color-text-secondary); background: rgba(0,0,0,0.15); padding: 0.35rem; border-radius: 4px; border: 1px solid rgba(207,168,107,0.05); margin-top: 0.25rem;">@locationDescription</div>
-                            }
-                            <div><span class="attr-label">身份:</span> @protagonistInfo.IdentityText</div>
-                            <div><span class="attr-label">当前状态:</span> <span class="badge bg-dark-vintage text-gold border-vintage">@protagonistInfo.SelfStatus</span></div>
-                            @if (!string.IsNullOrEmpty(currentGameTime))
-                            {
-                                <div><span class="attr-label">当前时间:</span> <span style="color: var(--color-gold);">🕐 @currentGameTime</span></div>
-                            }
+                    @* 慢动作是你按键换来的，不是设置失效：说清楚它作用在整个世界上。 *@
+                    <span class="rate-note" title="你正在组织输入，当前场景与离屏世界同步进入慢动作">输入慢动作 ×@InputSlowFactorText</span>
+                }
+                @if (BackpressureFactor < 0.999)
+                {
+                    <span class="rate-note" title="前台生成积压导致的系统背压，不是你的设置被忽略">背压 ×@BackpressureFactor.ToString("0.00")</span>
+                }
+            </div>
+        </div>
 
-                            <!-- 生命/魔法/体力 三条资源条 -->
-                            <div class="stat-bars">
-                                <div class="stat-bar-row">
-                                    <span class="stat-bar-label">❤️ 生命</span>
-                                    <div class="stat-bar-track">
-                                        <div class="stat-bar-fill stat-hp" style="width: @StatPercent(protagonistInfo.Hp, protagonistInfo.MaxHp)%;"></div>
-                                    </div>
-                                    <span class="stat-bar-value">@protagonistInfo.Hp/@protagonistInfo.MaxHp</span>
-                                </div>
-                                <div class="stat-bar-row">
-                                    <span class="stat-bar-label">🔷 魔法</span>
-                                    <div class="stat-bar-track">
-                                        <div class="stat-bar-fill stat-mp" style="width: @StatPercent(protagonistInfo.Mp, protagonistInfo.MaxMp)%;"></div>
-                                    </div>
-                                    <span class="stat-bar-value">@protagonistInfo.Mp/@protagonistInfo.MaxMp</span>
-                                </div>
-                                <div class="stat-bar-row">
-                                    <span class="stat-bar-label">⚡ 体力</span>
-                                    <div class="stat-bar-track">
-                                        <div class="stat-bar-fill stat-stamina" style="width: @StatPercent(protagonistInfo.Stamina, protagonistInfo.MaxStamina)%;"></div>
-                                    </div>
-                                    <span class="stat-bar-value">@protagonistInfo.Stamina/@protagonistInfo.MaxStamina</span>
-                                </div>
-                            </div>
-
-                            <!-- 六维属性 -->
-                            <div class="mt-2"><span class="attr-label">六维属性：</span><span style="font-size: 0.75rem; color: var(--color-text-secondary);">（护甲 @protagonistInfo.Armor）</span></div>
-                            <div class="attr-grid">
-                                @if (!string.IsNullOrEmpty(protagonistInfo.BaseAttributes))
-                                {
-                                    @foreach (var attr in protagonistInfo.BaseAttributes.Split(';', StringSplitOptions.RemoveEmptyEntries))
-                                    {
-                                        var parts = attr.Split(':');
-                                        if (parts.Length == 2)
-                                        {
-                                            <div class="attr-item">
-                                                <span class="attr-label">@parts[0].Trim()</span>
-                                                <span class="attr-value">@parts[1].Trim()</span>
-                                            </div>
-                                        }
-                                    }
-                                }
-                            </div>
-
-                            <!-- 技能列表 -->
-                            <div class="mt-2"><span class="attr-label">技能：</span></div>
-                            @{
-                                var skills = SkillsSerializer.Parse(protagonistInfo.SkillsJson);
-                            }
-                            @if (skills.Count == 0)
-                            {
-                                <div style="font-size: 0.8rem; font-style: italic; color: var(--color-text-secondary);">暂无技能</div>
-                            }
-                            else
-                            {
-                                <div class="skill-list">
-                                    @foreach (var skill in skills)
-                                    {
-                                        <div class="skill-pill @(skill.Available ? "" : "skill-disabled")" title="@skill.Description">
-                                            <span class="skill-name">@skill.Name</span>
-                                            <span class="skill-cost">
-                                                @if (skill.ManaCost > 0)
-                                                {
-                                                    <span class="skill-mp">魔@(skill.ManaCost)</span>
-                                                }
-                                                @if (skill.StaminaCost > 0)
-                                                {
-                                                    <span class="skill-sp">体@(skill.StaminaCost)</span>
-                                                }
-                                                @if (!skill.Available)
-                                                {
-                                                    <span class="skill-unavailable">不可用</span>
-                                                }
-                                            </span>
-                                        </div>
-                                    }
-                                </div>
-                            }
-
-                            <div class="mt-2"><span class="attr-label">权能/加护:</span> @(string.IsNullOrEmpty(protagonistInfo.SpecialAttributes) ? "无" : protagonistInfo.SpecialAttributes)</div>
-                            <div class="mt-1"><span class="attr-label">携带物资:</span> @(string.IsNullOrEmpty(protagonistInfo.ResourcesText) ? "无" : protagonistInfo.ResourcesText)</div>
-                        </div>
-                    </div>
-
-                    <!-- 2. 装备栏 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">
-                            ⚔️ 装备栏
-                        </div>
-                        <div class="sidebar-section-body">
-                            <div class="equip-slots">
-                                @foreach (var slot in EquipmentSlots)
-                                {
-                                    var eq = FindEquippedBySlot(slot.Key);
-                                    <div class="equip-slot @(eq is null ? "equip-empty" : "")">
-                                        <div class="equip-slot-icon">@slot.Icon</div>
-                                        <div class="equip-slot-body">
-                                            <div class="equip-slot-head">
-                                                <span class="equip-slot-label">@slot.Label</span>
-                                                @if (eq is not null)
-                                                {
-                                                    <span class="equip-slot-name quality-@eq.Quality.ToLower()">@eq.EquipmentName</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="equip-slot-name equip-empty-text">未装备</span>
-                                                }
-                                            </div>
-                                            @if (eq is not null && !string.IsNullOrWhiteSpace(eq.Description))
-                                            {
-                                                <div class="equip-slot-desc" title="@eq.Description">@eq.Description</div>
-                                            }
-                                        </div>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 3. 任务委派 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">
-                            📜 任务委派 (@quests.Count)
-                        </div>
-                        <div class="sidebar-section-body">
-                            @if (quests.Count == 0)
-                            {
-                                <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
-                                    暂无任务
-                                </div>
-                            }
-                            else
-                            {
-                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                    @foreach (var q in quests)
-                                    {
-                                        <div style="background: rgba(0,0,0,0.2); border: 1px solid var(--border-vintage); padding: 0.5rem; border-radius: 4px;">
-                                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                                <span style="font-weight: bold; color: var(--color-gold);">@q.QuestName</span>
-                                                <span class="badge" style="font-size: 0.7rem; background: rgba(207,168,107,0.15); color: var(--color-gold-glow);">@q.StatusTag</span>
-                                            </div>
-                                            <div style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.25rem;">@q.QuestType · @q.PriorityLevel</div>
-                                            @if (!string.IsNullOrWhiteSpace(q.TargetDesc))
-                                            {
-                                                <div style="font-size: 0.78rem; color: var(--color-text-primary); margin-top: 0.25rem; line-height: 1.3;">@q.TargetDesc</div>
-                                            }
-                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.35rem;">
-                                                <span style="font-size: 0.7rem; color: var(--color-text-secondary);">进度 @q.ProgressText</span>
-                                                @if (!string.IsNullOrWhiteSpace(q.RewardText))
-                                                {
-                                                    <span style="font-size: 0.7rem; color: var(--color-gold);">🏆 @q.RewardText</span>
-                                                }
-                                            </div>
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-
-                    <!-- 4. 随身包裹 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">
-                            🎒 随身包裹 (@inventories.Count)
-                        </div>
-                        <div class="sidebar-section-body">
-                            @if (inventories.Count == 0)
-                            {
-                                <div class="text-center py-2" style="font-style: italic; color: var(--color-text-secondary);">
-                                    包裹空空如也
-                                </div>
-                            }
-                            else
-                            {
-                                <div class="item-list">
-                                    @foreach (var item in inventories)
-                                    {
-                                        <div class="item-badge quality-@item.Quality.ToLower()" title="@item.Description">
-                                            <span class="item-badge-name">@item.ItemName</span>
-                                            <span class="item-badge-qty">数量: @item.Quantity</span>
-                                        </div>
-                                    }
-                                </div>
-                            }
-                        </div>
-                    </div>
-
-                    <!-- 4. 模型配置 -->
-                    <div class="sidebar-section">
-                        <div class="sidebar-section-title">
-                            ⚙️ 模型配置
-                        </div>
-                        <div class="sidebar-section-body" style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem;">
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">GM 默认：</label>
-                                <select class="form-select parchment-input" @bind="selectedGmPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (默认首个) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">NPC 执笔：</label>
-                                <select class="form-select parchment-input" @bind="selectedNpcPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (默认首个) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">投骰GM (裁判)：</label>
-                                <select class="form-select parchment-input" @bind="selectedDicePreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (默认首个) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">判定延迟 (s)：@delaySeconds 秒</label>
-                                <input type="range" min="0" max="5" step="0.5" @bind="delaySeconds" style="width: 100%;" />
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">Memory (填表)：</label>
-                                <select class="form-select parchment-input" @bind="selectedMemoryPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (默认首个) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">任务接力 (角色调度)：</label>
-                                <select class="form-select parchment-input" @bind="selectedCharacterSubPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (回退 GM) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-gold" style="font-size: 0.8rem; display: block; margin-bottom: 0.2rem;">章节切换 (帕秋莉)：</label>
-                                <select class="form-select parchment-input" @bind="selectedChapterSwitchPreset" style="font-size: 0.85rem; padding: 0.25rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                    <option value="">-- 未选择 (回退 GM) --</option>
-                                    @foreach (var p in agentConfigs)
-                                    {
-                                        <option value="@p.AgentName">@p.AgentName</option>
-                                    }
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="inline-toggle" style="font-size: 0.8rem;">
-                                    <input type="checkbox" @bind="streamingEnabled" @bind:after="SaveStreamingAsync" />
-                                    <span>开启流式传输</span>
-                                </label>
-                            </div>
-
-                            <div>
-                                <label class="inline-toggle" style="font-size: 0.8rem;">
-                                    <input type="checkbox" @bind="autoRetryEnabled" @bind:after="SaveAutoRetryAsync" />
-                                    <span>输出为空或报错时自动重复请求（最多 3 次）</span>
-                                </label>
-                            </div>
-
-                            <!-- 角色与模型绑定 -->
-                            <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                                    <span class="text-gold" style="font-weight: bold; font-size: 0.8rem;">角色与模型绑定：</span>
-                                    <button type="button" class="btn btn-link text-gold p-0 btn-sm" @onclick="AddCharacterBinding" style="text-decoration: none; font-size: 0.75rem;">＋ 新增</button>
-                                </div>
-                                @foreach (var b in characterBindings)
-                                {
-                                    <div style="display: flex; gap: 0.25rem; align-items: center; margin-bottom: 0.25rem;">
-                                        <select class="form-select parchment-input" @bind="b.CharacterName" style="flex: 1; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                            <option value="">-- 角色 --</option>
-                                            @foreach (var name in allCharacterNames)
-                                            {
-                                                <option value="@name">@name</option>
-                                            }
-                                        </select>
-                                        <span style="color: var(--color-gold);">➔</span>
-                                        <select class="form-select parchment-input" @bind="b.PresetName" style="flex: 1.2; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                            <option value="">-- 模型 --</option>
-                                            @foreach (var p in agentConfigs)
-                                            {
-                                                <option value="@p.AgentName">@p.AgentName</option>
-                                            }
-                                        </select>
-                                        <button type="button" class="btn btn-sm btn-outline-danger p-0" style="width: 18px; height: 18px; line-height: 16px; border: 1px solid var(--color-crimson); color: var(--color-crimson); background: transparent; cursor: pointer;" @onclick="() => RemoveCharacterBinding(b)">×</button>
-                                    </div>
-                                }
-                            </div>
-
-                            <!-- 临时 NPC 绑定 -->
-                            <div style="border-top: 1px solid rgba(207,168,107,0.1); padding-top: 0.5rem; margin-top: 0.5rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-                                    <span class="text-gold" style="font-weight: bold; font-size: 0.8rem;">临时 NPC 绑定：</span>
-                                    <button type="button" class="btn btn-link text-gold p-0 btn-sm" @onclick="AddTempNpcBinding" style="text-decoration: none; font-size: 0.75rem;">＋ 新增</button>
-                                </div>
-                                @foreach (var b in tempNpcBindings)
-                                {
-                                    <div style="display: flex; gap: 0.25rem; align-items: center; margin-bottom: 0.25rem;">
-                                        <input type="text" class="form-control parchment-input" placeholder="NPC 姓名" @bind="b.NpcName" style="flex: 1; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);" />
-                                        <span style="color: var(--color-gold);">➔</span>
-                                        <select class="form-select parchment-input" @bind="b.PresetName" style="flex: 1.2; font-size: 0.75rem; padding: 0.15rem; background: var(--bg-surface); border: 1px solid var(--border-vintage); color: var(--color-text);">
-                                            <option value="">-- 模型 --</option>
-                                            @foreach (var p in agentConfigs)
-                                            {
-                                                <option value="@p.AgentName">@p.AgentName</option>
-                                            }
-                                        </select>
-                                        <button type="button" class="btn btn-sm btn-outline-danger p-0" style="width: 18px; height: 18px; line-height: 16px; border: 1px solid var(--color-crimson); color: var(--color-crimson); background: transparent; cursor: pointer;" @onclick="() => RemoveTempNpcBinding(b)">×</button>
-                                    </div>
-                                }
-                            </div>
-
-                            <button type="button" class="primary-action" style="width: 100%; font-size: 0.8rem; margin: 0.5rem 0 0 0; padding: 0.35rem;" @onclick="SaveRoutingConfigAsync">
-                                保存配置契约
-                            </button>
-                        </div>
-                    </div>
+        <div class="world-bar-right">
+            <div class="session-picker">
+                <select class="session-select" @bind="selectedSessionId" @bind:after="SwitchSessionAsync" disabled="@isSwitching">
+                    @foreach (var s in sessions)
+                    {
+                        <option value="@s.SessionId">@(s.IsActive == 1 ? "▸ " : "")@s.SessionName · @(s.GameMode == "Theater" ? "剧场" : "RP")</option>
+                    }
+                </select>
+                <button type="button" class="ghost-btn" title="新建会话（可选择游戏模式）" @onclick="OpenNewSessionDialog">＋ 新会话</button>
+            </div>
+            <button type="button" class="pause-btn @(IsPaused ? "resumed" : "running")" disabled="@(isTogglingPause || activeSession is null)" @onclick="TogglePauseAsync">
+                @if (IsPaused)
+                {
+                    <span>▶ 恢复世界</span>
                 }
                 else
                 {
-                    <div class="text-center py-4 text-gold">
-                        ⚠️ 暂无主角属性，请在左侧应用模板，或在上方新建聊天会话。
+                    <span>⏸ 暂停世界</span>
+                }
+            </button>
+        </div>
+    </header>
+
+    @if (IsPaused)
+    {
+        <div class="halt-ribbon">世界已暂停 · 逻辑时间停止推进，不再调度事件或发起新的生成</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(tickError))
+    {
+        <div class="tick-ribbon" role="status">
+            <span>世界推进遇到问题：@tickError</span>
+            <span class="tick-note">节拍仍在继续，下一拍会重试。</span>
+        </div>
+    }
+
+    <div class="world-body">
+
+        <!-- ══ 连续事件长卷 ══ -->
+        <main class="timeline-column">
+            <div class="timeline-head">
+                <h2>事件长卷</h2>
+                <div class="timeline-head-tools">
+                    @if (CanShowWorldLog)
+                    {
+                        <span class="event-count">@VisibleCount 条已呈现 / 共 @timeline.Count</span>
+                        <label class="switch-inline" title="显示导演计划、行动机会、状态提交等世界内部事件">
+                            <input type="checkbox" @bind="showWorldLog" @bind:after="RebuildVisibleEvents" />
+                            <span>世界内部层</span>
+                        </label>
+                    }
+                    else
+                    {
+                        @* RP 模式只报你亲历的条数：任何离屏总量都不出现在界面上。 *@
+                        <span class="event-count">@VisibleCount 段亲历</span>
+                    }
+                </div>
+            </div>
+
+            <div class="timeline-scroll" id="timelineScroll">
+                <div class="timeline-spine"></div>
+
+                @if (VisibleCount == 0)
+                {
+                    <div class="timeline-empty">
+                        <div class="empty-mark">∅</div>
+                        <p>@(IsTheater ? "这条世界线还没有任何已提交事件。" : "你还没有亲历任何事情。")</p>
+                        <p class="empty-hint">
+                            @(IsTheater
+                                ? "写下第一条导演指令，双导演会把它转化为世界中可实现的铺垫。"
+                                : "写下主角的第一个动作，世界会从那一刻开始自行运转。")
+                        </p>
                     </div>
                 }
+
+                @foreach (var (item, ordinal) in VisibleWithOrdinal)
+                {
+                    var visual = Describe(item);
+                    <article class="event-node kind-@visual.Kind">
+                        <div class="node-dot" aria-hidden="true">@visual.Icon</div>
+                        <div class="node-card">
+                            <div class="node-meta">
+                                <span class="node-actor">@visual.Label</span>
+                                @if (!string.IsNullOrWhiteSpace(item.SceneId))
+                                {
+                                    <span class="node-scene">@item.SceneId</span>
+                                }
+                                <span class="node-time">@ShortWorldTime(item.WorldTime)</span>
+                                @if (item.Status == "Interrupted")
+                                {
+                                    <span class="node-flag flag-interrupted" title="被玩家插话打断，只有已显示的部分是事实">被打断</span>
+                                }
+                                @if (item.WorldEpoch != CurrentEpoch)
+                                {
+                                    <span class="node-flag flag-epoch" title="属于被回滚的世界纪元">纪元 @item.WorldEpoch</span>
+                                }
+                                @* 剧场模式显示真实 sequence；RP 模式只显示本地连续编号，
+                                   否则序号断层会暴露有多少离屏事件被隐藏。 *@
+                                <span class="node-seq">#@(IsTheater ? item.Sequence?.ToString() ?? "-" : ordinal.ToString())</span>
+                            </div>
+                            <div class="node-body">@((MarkupString)RenderContent(item))</div>
+                        </div>
+                    </article>
+                }
             </div>
-        }
-        else
-        {
-            <div class="sidebar-collapsed-content" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem; color: var(--color-gold); opacity: 0.8; font-family: var(--font-heading); writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 4px; font-size: 0.95rem;">
-                🛡️ 冒险者状态栏
+
+            <!-- ══ 输入 ══ -->
+            <div class="composer @(IsTheater ? "composer-theater" : "composer-rp")">
+                <div class="composer-label">
+                    @if (IsTheater)
+                    {
+                        <span>写给双导演的创作指令</span>
+                        <span class="composer-hint">不是主角台词。指令会作为隐藏 PlayerDirection 保存，场内角色看不到它。</span>
+                    }
+                    else
+                    {
+                        <span>主角的行动与话语</span>
+                        <span class="composer-hint">世界不会等你。沉默时其他角色仍会按自己的目标行动。</span>
+                    }
+                </div>
+                <div class="composer-row">
+                    @* 键盘活动即输入活动：每次击键都刷新活动信号，让核心把整个世界放慢。
+                       草稿文本本身只留在界面上，不作为任何事实或提示词。 *@
+                    <textarea class="composer-input" rows="3" @bind="playerInput" @bind:event="oninput"
+                              @bind:after="OnComposerInputAsync"
+                              @onkeydown="OnComposerKeyDownAsync"
+                              @onblur="OnComposerBlurAsync"
+                              placeholder="@(IsTheater ? "例如：让拉姆在下一次合适的时机主动提起宅邸的异常……" : "例如：我把手伸进口袋，慢慢退向巷口。")"
+                              disabled="@(isSubmitting || activeSession is null)"></textarea>
+                    <button type="button" class="send-btn" disabled="@(isSubmitting || string.IsNullOrWhiteSpace(playerInput) || activeSession is null)" @onclick="SubmitAsync">
+                        @if (isSubmitting)
+                        {
+                            <span class="send-spin"></span><span>提交中</span>
+                        }
+                        else
+                        {
+                            <span>@(IsTheater ? "递交指令" : "落笔")</span>
+                        }
+                    </button>
+                </div>
             </div>
-        }
+        </main>
+
+        <!-- ══ 世界与角色面板 ══ -->
+        <aside class="world-aside @(asideOpen ? "open" : "closed")">
+            <button type="button" class="aside-toggle" @onclick="() => asideOpen = !asideOpen">
+                @(asideOpen ? "收起 ▸" : "◂ 世界")
+            </button>
+
+            @if (asideOpen)
+            {
+                <div class="aside-scroll">
+                    <section class="aside-block">
+                        <h3>此刻的世界</h3>
+                        @if (globalState is not null)
+                        {
+                            @* RP 模式锚定主角所在；剧场模式才显示镜头当前所在场景。 *@
+                            <div class="kv"><span>@(IsTheater ? "镜头" : "你所在")</span><b>@ViewpointSceneLabel</b></div>
+                            <div class="kv"><span>区域</span><b>@globalState.CurrentMinorRegion · @globalState.CurrentMajorRegion</b></div>
+                            <div class="kv"><span>世界内时间</span><b>@globalState.CurTime</b></div>
+                            <div class="kv"><span>章节标签</span><b class="soft-tag" title="章节只是软叙事标签，不覆盖已提交事实">第 @globalState.CurrentChapter 章</b></div>
+                        }
+                        else
+                        {
+                            <p class="aside-empty">世界投影尚未建立。</p>
+                        }
+                        @if (loopCount > 0)
+                        {
+                            <div class="kv"><span>回归次数</span><b class="loop-count">LOOP @loopCount</b></div>
+                        }
+                    </section>
+
+                    <section class="aside-block">
+                        <h3>在场角色 <span class="count">@presentCast.Count</span></h3>
+                        @if (presentCast.Count == 0)
+                        {
+                            <p class="aside-empty">当前场景没有已登记的角色。</p>
+                        }
+                        else
+                        {
+                            <div class="cast-list">
+                                @foreach (var member in presentCast)
+                                {
+                                    <div class="cast-card @(member.IsViewpoint ? "viewpoint" : "")">
+                                        <div class="cast-avatar">@member.Name.Substring(0, 1)</div>
+                                        <div class="cast-text">
+                                            <div class="cast-name">
+                                                @member.Name
+                                                @if (member.IsViewpoint)
+                                                {
+                                                    <span class="cast-badge">@(IsTheater ? "有自主 Agent" : "由你操作")</span>
+                                                }
+                                            </div>
+                                            <div class="cast-note">@member.Note</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </section>
+
+                    @if (protagonist is not null)
+                    {
+                        <section class="aside-block">
+                            <h3>@protagonist.Name</h3>
+                            <div class="bars">
+                                <div class="bar-row">
+                                    <span class="bar-name">生命</span>
+                                    <div class="bar-track"><div class="bar-fill fill-hp" style="width: @Pct(protagonist.Hp, protagonist.MaxHp)%;"></div></div>
+                                    <span class="bar-num">@protagonist.Hp/@protagonist.MaxHp</span>
+                                </div>
+                                <div class="bar-row">
+                                    <span class="bar-name">魔力</span>
+                                    <div class="bar-track"><div class="bar-fill fill-mp" style="width: @Pct(protagonist.Mp, protagonist.MaxMp)%;"></div></div>
+                                    <span class="bar-num">@protagonist.Mp/@protagonist.MaxMp</span>
+                                </div>
+                                <div class="bar-row">
+                                    <span class="bar-name">体力</span>
+                                    <div class="bar-track"><div class="bar-fill fill-sp" style="width: @Pct(protagonist.Stamina, protagonist.MaxStamina)%;"></div></div>
+                                    <span class="bar-num">@protagonist.Stamina/@protagonist.MaxStamina</span>
+                                </div>
+                            </div>
+                            <div class="kv"><span>状态</span><b>@protagonist.SelfStatus</b></div>
+                            <div class="kv"><span>所在</span><b>@protagonist.LocationName</b></div>
+                            <div class="attr-row">
+                                @foreach (var attr in ParseAttributes(protagonist.BaseAttributes))
+                                {
+                                    <span class="attr-chip"><i>@attr.Key</i>@attr.Value</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(protagonist.SpecialAttributes))
+                            {
+                                <div class="kv"><span>权能</span><b class="special">@protagonist.SpecialAttributes</b></div>
+                            }
+                        </section>
+
+                        <details class="aside-fold">
+                            <summary>技能 <span class="count">@skills.Count</span></summary>
+                            @if (skills.Count == 0)
+                            {
+                                <p class="aside-empty">暂无技能。</p>
+                            }
+                            else
+                            {
+                                <div class="chip-wrap">
+                                    @foreach (var skill in skills)
+                                    {
+                                        <span class="chip @(skill.Available ? "" : "chip-off")" title="@skill.Description">@skill.Name</span>
+                                    }
+                                </div>
+                            }
+                        </details>
+
+                        <details class="aside-fold">
+                            <summary>随身 <span class="count">@inventories.Count</span></summary>
+                            @if (inventories.Count == 0)
+                            {
+                                <p class="aside-empty">空无一物。</p>
+                            }
+                            else
+                            {
+                                <div class="chip-wrap">
+                                    @foreach (var item in inventories)
+                                    {
+                                        <span class="chip" title="@item.Description">@item.ItemName ×@item.Quantity</span>
+                                    }
+                                </div>
+                            }
+                        </details>
+
+                        <details class="aside-fold">
+                            <summary>任务 <span class="count">@quests.Count</span></summary>
+                            @if (quests.Count == 0)
+                            {
+                                <p class="aside-empty">没有进行中的委派。</p>
+                            }
+                            else
+                            {
+                                <div class="quest-list">
+                                    @foreach (var quest in quests)
+                                    {
+                                        <div class="quest-item">
+                                            <div class="quest-top"><b>@quest.QuestName</b><span>@quest.StatusTag</span></div>
+                                            <div class="quest-desc">@quest.TargetDesc</div>
+                                            <div class="quest-progress">@quest.ProgressText</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </details>
+                    }
+                </div>
+            }
+        </aside>
     </div>
-    </div>
-}
-<!--MODALS_PLACEHOLDER-->
-@if (!string.IsNullOrWhiteSpace(errorMessage))
+</div>
+
+@if (showNewSessionDialog)
 {
-    <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 1001; display: flex; align-items: center; justify-content: center;">
-        <div class="work-surface error-panel" style="max-width: 500px; padding: 1.5rem; border-color: var(--color-crimson);">
-            <h2 style="color: var(--color-crimson-glow); display: flex; align-items: center; gap: 0.5rem;">⚠️ 魔力失控 (错误)</h2>
-            <p style="margin-top: 1rem; line-height: 1.5; color: var(--color-text-primary);">@errorMessage</p>
-            <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem; border-top: 1px solid rgba(166, 36, 36, 0.3); padding-top: 1rem;">
-                <button type="button" class="btn-custom danger-action" @onclick="DismissError">确认</button>
+    <div class="modal-veil" @onclick="CloseNewSessionDialog">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            <h2>开启新的世界线</h2>
+            <p class="modal-lead">游戏模式在创建时确定并永久锁定。想换模式，只能新建会话。</p>
+
+            <label class="field-label">会话名称</label>
+            <input type="text" class="field-input" placeholder="例如：王都的第一日" @bind="newSessionName" />
+
+            <label class="field-label">游戏模式</label>
+            <div class="mode-choices">
+                <button type="button" class="mode-choice @(newSessionMode == "RP" ? "picked" : "")" @onclick="@(() => newSessionMode = "RP")">
+                    <span class="choice-title">RP 模式</span>
+                    <span class="choice-desc">你只操作主角。系统绝不替主角说话或行动，离屏世界照常运转，但只能通过目击、传闻、调查得知。</span>
+                </button>
+                <button type="button" class="mode-choice @(newSessionMode == "Theater" ? "picked" : "")" @onclick="@(() => newSessionMode = "Theater")">
+                    <span class="choice-title">剧场模式</span>
+                    <span class="choice-desc">主角也有自主 Agent。你的输入是给双导演的创作指令，并获得全知观看视角与离屏镜头。</span>
+                </button>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="ghost-btn" @onclick="CloseNewSessionDialog">取消</button>
+                <button type="button" class="send-btn" disabled="@(isCreating || string.IsNullOrWhiteSpace(newSessionName))" @onclick="CreateSessionAsync">
+                    @(isCreating ? "创建中…" : "创建并进入")
+                </button>
             </div>
         </div>
     </div>
 }
 
-
-
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="modal-veil">
+        <div class="modal-card error">
+            <h2>魔力失控</h2>
+            <p class="error-text">@errorMessage</p>
+            <div class="modal-actions">
+                <button type="button" class="send-btn" @onclick="() => errorMessage = null">确认</button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
+    // 前台事件：两种模式都可以出现在长卷上的类型。
+    private static readonly string[] ForegroundTypes =
+    [
+        "PlayerInput", "CharacterAction", "KeplerNarration", "ImportedGreeting",
+        "RuleResolution", "WorldRewindCommitted", "RuntimeControl"
+    ];
+
+    // RP 模式下不需要目击者即可显示的类型：它们是玩家自己的操作或系统告知，
+    // 不携带任何离屏世界事实。其余类型必须通过主角目击判定。
+    private static readonly string[] PlayerFacingTypes =
+    [
+        "PlayerInput", "RuntimeControl", "WorldRewindCommitted", "ImportedGreeting"
+    ];
+
+    private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan MaxTickElapsed = TimeSpan.FromSeconds(30);
+
+    // 输入慢动作倍率：必须大于 0 且不超过 1，核心会校验。
+    // 它同步作用于当前场景与离屏世界，不是界面动画速度。确切数值属于待校准的实验参数。
+    private const double InputSlowFactorValue = 0.25;
+
+    // 键盘静默多久算"停止输入"。草稿非空时不会因为静默而恢复原速。
+    private static readonly TimeSpan InputIdleTimeout = TimeSpan.FromSeconds(3);
+
+    // 静默看门狗的检查频率，比超时更密一些，让恢复原速不至于迟一整个周期。
+    private static readonly TimeSpan IdleCheckInterval = TimeSpan.FromSeconds(1);
+
+    private readonly SemaphoreSlim gate = new(1, 1);
+    private readonly CancellationTokenSource lifetime = new();
+    private PeriodicTimer? worldTimer;
+
+    // 用单调时钟量取真实经过时间：系统时间被改动或轮询被拖慢时，世界推进量依然正确。
+    private long lastTickStamp;
+    private string? tickError;
+
+    private List<ChatSession> sessions = [];
+    private ChatSession? activeSession;
+    private int selectedSessionId;
+
+    private List<TimelineEvent> timeline = [];
+    private List<TimelineEvent> visibleEvents = [];
+    private long lastRenderedSequence = -1;
+
+    // RP 模式的信息封印：只有已离开 RevealQueue（即已揭示）的事件才允许进入长卷。
+    private HashSet<string> pendingRevealIds = [];
+
+    private GlobalState? globalState;
+    private ProtagonistInfo? protagonist;
+    private List<ImportantNpc> npcs = [];
+    private List<InventoryItem> inventories = [];
+    private List<Quest> quests = [];
+    private IReadOnlyList<CharacterSkill> skills = [];
+    private List<CastMember> presentCast = [];
+    private WorldRuntimeState? runtime;
+    private int loopCount;
 
     private string playerInput = string.Empty;
-    private bool skipPlayerTurn;
-    private bool directPlayerOutput = true;
+    private bool showWorldLog;
+    private bool asideOpen = true;
+
+    // 输入活动信号：UI 只负责"玩家现在正在组织输入"这一事实，
+    // 逻辑时间怎么换算完全由 WorldClockService 决定。
+    private bool inputActive;
+    private long lastKeystrokeStamp;
+    private PeriodicTimer? idleTimer;
+    // 草稿内容、按键和中间结果绝不进入时间线或任何 Agent 上下文，只用作调度控制信号。
+    private int inputActivitySessionId;
+
+    private bool isSubmitting;
+    private bool isSwitching;
+    private bool isTogglingPause;
+    private bool isCreating;
     private string? errorMessage;
 
-
-    private Re0Agent.Core.Models.RoundPhase phase = Re0Agent.Core.Models.RoundPhase.Idle;
-    private bool isBusy;
-    private GameRound? activeRound;
-    private readonly List<GameRound> sessionRounds = new();
-
-    private List<ChatSession> chatSessions = new();
-    private int activeSessionId;
+    private bool showNewSessionDialog;
     private string newSessionName = string.Empty;
+    private string newSessionMode = "RP";
 
-    private int currentChapter = 1;
-    private int loopCount = 0;
-    private int miasmaLevel = 0;
-    private bool showDeathGlitch = false;
-    private bool hasProtagonist = false;
-    private List<ChronicleEntry> chronicles = new();
-    private IReadOnlyList<ProtagonistTemplate> templates = new List<ProtagonistTemplate>();
+    private bool IsTheater => activeSession?.GameMode == "Theater";
+    private bool IsPaused => activeSession?.IsPaused == 1;
+    private int CurrentEpoch => activeSession?.CurrentWorldEpoch ?? 1;
+    private double BackpressureFactor => runtime?.GenerationBackpressureFactor ?? 1.0;
 
-    private bool sidebarExpanded = true;
+    // 以库里持久化的 input_slow_factor 为准，而不是本地 inputActive 标记：
+    // 界面显示的必须是世界真正在用的倍率。
+    private bool IsInputSlowed =>
+        activeSession is not null && !IsPaused && activeSession.InputSlowFactor < 0.999;
 
-    private ProtagonistInfo? protagonistInfo;
-    private List<InventoryItem> inventories = new();
-    private List<EquipmentItem> equipments = new();
-    private string? locationDescription;
-    private string? locationRegion;
-    private string? currentGameTime;
+    private string InputSlowFactorText =>
+        (activeSession?.InputSlowFactor ?? 1.0).ToString("0.00");
 
-    // Model configuration parameters
-    private List<ImportantNpc> allNpcs = new();
-    private List<Quest> quests = new();
-    private List<string> allCharacterNames = new();
-    private List<Re0Agent.Core.Entities.AgentConfig> agentConfigs = new();
-
-    private string selectedGmPreset = string.Empty;
-    private string selectedNpcPreset = string.Empty;
-    private string selectedDicePreset = string.Empty;
-    private string selectedMemoryPreset = string.Empty;
-    private string selectedCharacterSubPreset = string.Empty;
-    private string selectedChapterSwitchPreset = string.Empty;
-    private double delaySeconds = 0.0;
-    private bool autoRetryEnabled = true;
-    private bool streamingEnabled = false;
-
-    private List<GameProgressService.CharacterBinding> characterBindings = new();
-    private List<GameProgressService.TempNpcBinding> tempNpcBindings = new();
-
-    private void AddCharacterBinding()
+    private string EffectiveScaleText
     {
-        Progress.AddCharacterBinding();
+        get
+        {
+            if (activeSession is null) return "0";
+            if (IsPaused) return "0";
+            var scale = activeSession.SessionTimeScale * activeSession.InputSlowFactor * BackpressureFactor;
+            return scale.ToString("0.##");
+        }
     }
 
-    private void RemoveCharacterBinding(GameProgressService.CharacterBinding b)
+    private string WorldClockText =>
+        DateTimeOffset.TryParse(activeSession?.WorldClockAnchor, out var anchor)
+            ? anchor.ToLocalTime().ToString("MM-dd HH:mm:ss")
+            : "—";
+
+    private string? ProtagonistActorId => protagonist is null ? null : $"protagonist:{protagonist.RowId}";
+
+    // 视点场景：剧场模式跟随镜头，RP 模式永远锚定主角自己所在的地方。
+    private string? ViewpointScene => IsTheater
+        ? globalState?.CurrentLocation
+        : protagonist?.LocationName;
+
+    private string ViewpointSceneLabel =>
+        string.IsNullOrWhiteSpace(ViewpointScene) ? "未知之地" : ViewpointScene;
+
+    // 世界内部层只属于剧场模式的全知视角。RP 模式下这个开关不渲染、也不参与过滤。
+    private bool CanShowWorldLog => IsTheater;
+
+    private int VisibleCount => visibleEvents.Count;
+
+    // RP 模式用本地连续序号渲染，剧场模式用真实 sequence。
+    private IEnumerable<(TimelineEvent Item, int Ordinal)> VisibleWithOrdinal =>
+        visibleEvents.Select((item, index) => (item, index + 1));
+
+    // 过滤一次就缓存：一次渲染要读三遍可见集合，没必要每次都重算。
+    private void RebuildVisibleEvents() =>
+        visibleEvents = IsTheater
+            ? (showWorldLog ? timeline : timeline.Where(IsForeground).ToList())
+            : timeline.Where(IsRevealedToProtagonist).ToList();
+
+    private static bool IsForeground(TimelineEvent item) =>
+        ForegroundTypes.Contains(item.EventType, StringComparer.Ordinal);
+
+    // RP 可见性的三重条件：必须是前台类型；必须已离开 RevealQueue；
+    // 且除玩家自身操作与系统告知外，必须由主角亲自目击（direct_observers 命中）。
+    private bool IsRevealedToProtagonist(TimelineEvent item)
     {
-        Progress.RemoveCharacterBinding(b);
+        if (!IsForeground(item)) return false;
+        if (pendingRevealIds.Contains(item.EventId)) return false;
+        if (PlayerFacingTypes.Contains(item.EventType, StringComparer.Ordinal)) return true;
+        var self = ProtagonistActorId;
+        return self is not null && DirectObserverIds(item).Contains(self, StringComparer.Ordinal);
     }
 
-    private void AddTempNpcBinding()
+    private static IReadOnlyList<string> DirectObserverIds(TimelineEvent item)
     {
-        Progress.AddTempNpcBinding();
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(item.DirectObservers) ?? [];
+        }
+        catch (JsonException)
+        {
+            // 数据损坏时按"看不见"处理：宁可少显示，也不能泄露离屏事实。
+            return [];
+        }
     }
 
-    private void RemoveTempNpcBinding(GameProgressService.TempNpcBinding b)
-    {
-        Progress.RemoveTempNpcBinding(b);
-    }
+    private sealed record CastMember(string Name, string Note, bool IsViewpoint);
 
-    // ── 重 roll / 变体切换 / fork ──
-    private async Task ReRoll(int fromTurnIndex, bool regenerateOpening)
-    {
-        await Progress.ReRollAsync(fromTurnIndex, regenerateOpening);
-    }
-
-    // 重 roll 整个大回合：全部重来。服务端回档到回合起点、丢弃旧变体、重生成开场，
-    // 并把上次玩家输入存为草稿、回到 AwaitingPlayer。SyncState 会据草稿预填输入框。
-    private async Task RestartLatestRound()
-    {
-        await Progress.RestartLatestRoundAsync();
-    }
-
-    private async Task SelectVariant(int index)
-    {
-        await Progress.SelectVariant(index);
-    }
-
-    private async Task RegenerateOpening()
-    {
-        await Progress.RegenerateOpeningAsync();
-    }
-
-    // 关闭错误弹窗：必须同时清掉服务里的 ErrorMessage，否则下一次 SyncState（点箭头/切标签触发
-    // NotifyStateChanged）会把它重新拷回本地，弹窗反复出现。
-    private void DismissError()
-    {
-        errorMessage = null;
-        Progress.ClearErrorMessage();
-    }
-
-    private async Task BranchFrom(GameRound round)
-    {
-        await Progress.BranchFromAsync(round);
-    }
+    private sealed record EventVisual(string Icon, string Label, string Kind);
 
     protected override async Task OnInitializedAsync()
     {
-        Progress.OnStateChanged += SyncState;
-        if (!Progress.IsBusy)
-        {
-            await Progress.LoadDatabaseStateAsync();
-        }
-        SyncState();
+        await ReloadAsync();
+        StartWorldPolling();
+        StartInputIdleWatchdog();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // 切回主页面时编年史容器首次渲染后自动滚到底部，定位到最新内容方便玩家操作。
-        if (firstRender)
+        var newest = timeline.Count == 0 ? -1 : timeline[^1].Sequence ?? -1;
+        if (firstRender || newest != lastRenderedSequence)
         {
-            try { await JS.InvokeVoidAsync("scrollElementToBottom", "grimoireLogScroll"); }
-            catch { /* JS 尚未就绪时忽略 */ }
+            lastRenderedSequence = newest;
+            try { await JS.InvokeVoidAsync("scrollElementToBottom", "timelineScroll"); }
+            catch { /* JS 尚未就绪 */ }
         }
     }
 
-    public void Dispose()
+    // 连续世界不等待玩家：界面按固定节拍驱动世界推进，再拉取已提交事件。
+    // 暂停时仍然保持节拍，让核心自己判定跳过，并让恢复能立即被反映。
+    private void StartWorldPolling()
     {
-        Progress.OnStateChanged -= SyncState;
-    }
-
-    private void SyncState()
-    {
-        InvokeAsync(() =>
+        lastTickStamp = Stopwatch.GetTimestamp();
+        worldTimer = new PeriodicTimer(TickInterval);
+        _ = Task.Run(async () =>
         {
-            phase = Progress.Phase;
-            isBusy = Progress.IsBusy;
-            activeRound = Progress.ActiveRound;
-            
-            sessionRounds.Clear();
-            lock (Progress.SessionRounds)
+            try
             {
-                sessionRounds.AddRange(Progress.SessionRounds);
+                while (await worldTimer.WaitForNextTickAsync(lifetime.Token))
+                {
+                    await AdvanceWorldAsync();
+                    await ReloadAsync();
+                    await InvokeAsync(StateHasChanged);
+                }
             }
-            
-            chatSessions = Progress.ChatSessions;
-            activeSessionId = Progress.ActiveSessionId;
-            playerInput = Progress.GetPlayerInputDraft(Progress.ActiveSessionId);
-            currentChapter = Progress.CurrentChapter;
-            loopCount = Progress.LoopCount;
-            miasmaLevel = Progress.MiasmaLevel;
-            showDeathGlitch = Progress.ShowDeathGlitch;
-            hasProtagonist = Progress.HasProtagonist;
-            chronicles = Progress.Chronicles;
-            templates = Progress.Templates;
-            protagonistInfo = Progress.Protagonist;
-            
-            inventories.Clear();
-            inventories.AddRange(Progress.Inventories);
-            
-            equipments.Clear();
-            equipments.AddRange(Progress.Equipments);
-            
-            locationDescription = Progress.LocationDescription;
-            locationRegion = Progress.LocationRegion;
-            currentGameTime = Progress.CurrentGameTime;
-            allNpcs = Progress.AllNpcs;
-            quests = Progress.Quests;
-            allCharacterNames = Progress.AllCharacterNames;
-            agentConfigs = Progress.AgentConfigs;
-            
-            // Sync wizard states
-            isInitializingGame = Progress.IsInitializingGame;
-            isStartingAdventure = Progress.IsStartingAdventure;
-            initStep = Progress.InitStep;
-            isPrologueStage = Progress.IsPrologueStage;
-            
-            selectedGmPreset = Progress.SelectedGmPreset;
-            selectedNpcPreset = Progress.SelectedNpcPreset;
-            selectedDicePreset = Progress.SelectedDicePreset;
-            selectedMemoryPreset = Progress.SelectedMemoryPreset;
-            selectedCharacterSubPreset = Progress.SelectedCharacterSubPreset;
-            selectedChapterSwitchPreset = Progress.SelectedChapterSwitchPreset;
-            delaySeconds = Progress.DelaySeconds;
-            autoRetryEnabled = Progress.AutoRetryEnabled;
-            streamingEnabled = Progress.StreamingEnabled;
-            
-            characterBindings = Progress.CharacterBindings;
-            tempNpcBindings = Progress.TempNpcBindings;
-            
-            customOpeningMessage = Progress.CustomOpeningMessage;
-            includeSubaruAsNpc = Progress.IncludeSubaruAsNpc;
-            customProtagonist = Progress.CustomProtagonist;
-            isCustomProtagonist = Progress.IsCustomProtagonist;
-            selectedTemplate = Progress.SelectedTemplate;
-            selectedTemplateId = Progress.SelectedTemplateId;
-            selectedTemplateProtagonist = Progress.SelectedTemplateProtagonist;
-            selectedChapter = Progress.SelectedChapter;
-            autoSelectedChapter = Progress.AutoSelectedChapter;
-            errorMessage = Progress.ErrorMessage;
-
-            StateHasChanged();
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
         });
     }
 
-    private async Task BeginRoundAsync()
+    // 把真实经过时间交给核心：逻辑时间换算、暂停跳过、预算与背压全部由 WorldTickGovernor 决定，
+    // UI 只负责提供单调的 elapsed 并串行化对 DbContext 的访问。
+    private async Task AdvanceWorldAsync()
     {
-        await Progress.BeginRoundAsync();
+        var sessionId = activeSession?.SessionId;
+        if (sessionId is null) return;
+
+        try
+        {
+            await gate.WaitAsync(lifetime.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+
+        try
+        {
+            // 只在真正 tick 成功后重置基准，避免被别的操作占用时丢失这段真实时间。
+            var elapsed = Stopwatch.GetElapsedTime(lastTickStamp);
+            if (elapsed <= TimeSpan.Zero) return;
+            // 机器休眠/挂起后 elapsed 可能非常大，截断以免世界一次跳跃过远。
+            if (elapsed > MaxTickElapsed) elapsed = MaxTickElapsed;
+
+            var result = await TickGovernor.TickAsync(sessionId.Value, elapsed, lifetime.Token);
+            lastTickStamp = Stopwatch.GetTimestamp();
+            tickError = result.Error;
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception exception)
+        {
+            // 单次推进失败不能停掉整条世界节拍：记录下来，下一拍继续。
+            tickError = exception.Message;
+            lastTickStamp = Stopwatch.GetTimestamp();
+        }
+        finally
+        {
+            try { gate.Release(); } catch (ObjectDisposedException) { }
+        }
     }
 
-    private void StopRound()
+    // 键盘停下来之后世界要自己恢复原速：草稿框失焦、玩家走开、忘了提交都算。
+    // 草稿非空时不恢复 —— 玩家还在想怎么写，世界应该继续保持慢动作。
+    private void StartInputIdleWatchdog()
     {
-        Progress.StopRound();
+        idleTimer = new PeriodicTimer(IdleCheckInterval);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await idleTimer.WaitForNextTickAsync(lifetime.Token))
+                {
+                    if (!inputActive) continue;
+                    if (!string.IsNullOrEmpty(playerInput)) continue;
+                    if (Stopwatch.GetElapsedTime(lastKeystrokeStamp) < InputIdleTimeout) continue;
+
+                    await SetInputActivityAsync(false, "InputActivityEnded");
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (ObjectDisposedException) { }
+        });
     }
 
-    private async Task ResumeRoundAsync()
+    // 每次按键都刷新静默基准；只在状态真正翻转时才通知核心，避免每个字符一次写库。
+    private async Task OnDraftKeystrokeAsync()
     {
-        await Progress.ResumeRoundAsync();
+        lastKeystrokeStamp = Stopwatch.GetTimestamp();
+        if (!inputActive)
+        {
+            await SetInputActivityAsync(true, "InputActivityStarted");
+        }
     }
 
+    // 内容变化（含输入法上屏、粘贴）走这里。
+    private Task OnComposerInputAsync() => OnDraftKeystrokeAsync();
 
+    // 按键补上不改变内容的操作：方向键移动光标、退格到空串，也都算在组织输入里。
+    private Task OnComposerKeyDownAsync(KeyboardEventArgs args) => OnDraftKeystrokeAsync();
 
-    private async Task SubmitPlayerTurnAsync()
+    // 离开输入框且草稿为空，说明玩家放弃了这次输入，不必等静默超时就恢复原速。
+    private async Task OnComposerBlurAsync()
     {
-        var input = playerInput;
-        playerInput = string.Empty;
-        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, string.Empty);
-        await Progress.SubmitPlayerTurnAsync(input, skipPlayerTurn, directPlayerOutput);
+        if (inputActive && string.IsNullOrEmpty(playerInput))
+        {
+            await SetInputActivityAsync(false, "InputActivityEnded");
+        }
     }
 
-    private void PersistDraft()
+    // 只有确实处于活动状态才发结束信号，避免重复写入无意义的运行控制事件。
+    private Task EndInputActivityIfActiveAsync() =>
+        inputActive ? SetInputActivityAsync(false, "InputActivityEnded") : Task.CompletedTask;
+
+    // UI 只上报活动信号，倍率语义交给核心：SetInputActivityAsync 自己写运行控制事件、
+    // 校验倍率范围并更新 input_slow_factor。这里不碰世界时钟。
+    private async Task SetInputActivityAsync(bool isActive, string controlEventType)
     {
-        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, playerInput);
+        var sessionId = isActive ? activeSession?.SessionId : ResolveActivitySessionId();
+        if (sessionId is null or 0) return;
+
+        // 先翻转本地标记，避免连续按键在 await 期间重复触发同一次状态变更。
+        inputActive = isActive;
+        inputActivitySessionId = isActive ? sessionId.Value : 0;
+
+        try
+        {
+            await gate.WaitAsync(lifetime.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+
+        try
+        {
+            await WorldClock.SetInputActivityAsync(
+                sessionId.Value, isActive, InputSlowFactorValue, controlEventType, lifetime.Token);
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception exception)
+        {
+            // 慢动作是体验优化，不是正确性前提：失败就回滚本地标记，世界继续按原速跑。
+            inputActive = !isActive;
+            errorMessage = $"更新输入活动状态失败：{exception.Message}";
+        }
+        finally
+        {
+            try { gate.Release(); } catch (ObjectDisposedException) { }
+        }
     }
 
+    // 结束活动要回到"当初开始活动的那个会话"，否则切换会话后旧会话会被永久锁在慢动作里。
+    private int? ResolveActivitySessionId() =>
+        inputActivitySessionId != 0 ? inputActivitySessionId : activeSession?.SessionId;
 
-    private async Task ApplyTemplateAsync(int templateId)
+    private async Task ReloadAsync()
     {
-        await Progress.ApplyTemplateAsync(templateId);
+        if (!await gate.WaitAsync(0, lifetime.Token))
+        {
+            return;
+        }
+        try
+        {
+            sessions = (await SessionService.ListSessionsAsync(lifetime.Token)).ToList();
+            activeSession = await SessionService.GetActiveSessionAsync(lifetime.Token);
+            selectedSessionId = activeSession?.SessionId ?? sessions.FirstOrDefault()?.SessionId ?? 0;
+
+            timeline = activeSession?.CurrentBranchId is string branchId
+                ? (await DbContext.TimelineEvents.AsNoTracking()
+                    .Where(item => item.BranchId == branchId && item.Status != "Draft" && item.Sequence != null)
+                    .OrderByDescending(item => item.Sequence)
+                    .Take(150)
+                    .ToListAsync(lifetime.Token))
+                    .OrderBy(item => item.Sequence)
+                    .ToList()
+                : [];
+
+            // RevealQueue 中仍为 Pending 的事件是「已提交但尚未择机呈现」的世界事实。
+            // RP 模式绝不能提前显示它们；剧场模式的全知视角不受此限制。
+            pendingRevealIds = activeSession is null
+                ? []
+                : (await DbContext.RevealQueue.AsNoTracking()
+                    .Where(item => item.SessionId == activeSession.SessionId && item.Status == "Pending")
+                    .Select(item => item.EventId)
+                    .ToListAsync(lifetime.Token))
+                    .ToHashSet(StringComparer.Ordinal);
+
+            globalState = await DbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(lifetime.Token);
+            protagonist = await DbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(lifetime.Token);
+            npcs = await DbContext.ImportantNpcs.AsNoTracking().ToListAsync(lifetime.Token);
+            inventories = await DbContext.Inventory.AsNoTracking().ToListAsync(lifetime.Token);
+            quests = await DbContext.Quests.AsNoTracking().ToListAsync(lifetime.Token);
+            skills = SkillsSerializer.Parse(protagonist?.SkillsJson);
+            loopCount = await DbContext.DeathReturnLog.AsNoTracking().CountAsync(lifetime.Token);
+            runtime = activeSession is null
+                ? null
+                : await DbContext.WorldRuntimeStates.AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.SessionId == activeSession.SessionId, lifetime.Token);
+
+            presentCast = BuildCast();
+            // 必须在 protagonist 与 pendingRevealIds 都就位之后再算可见集合。
+            RebuildVisibleEvents();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception exception)
+        {
+            errorMessage = $"读取世界状态失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
-    private async Task OnSessionChangedAsync()
+    // 在场角色也是信息面：剧场模式锚定当前镜头，RP 模式锚定主角自己所在的地方，
+    // 且场景未知时返回空列表 —— 绝不退化成「列出世界上所有角色」。
+    private List<CastMember> BuildCast()
     {
-        // @bind 已把 activeSessionId 改成目标会话，但 Progress.ActiveSessionId 此刻仍是
-        // 即将离开的旧会话——先把当前输入存到旧会话名下，再切换、再恢复目标会话的草稿。
-        Progress.SavePlayerInputDraft(Progress.ActiveSessionId, playerInput);
-        await Progress.SwitchSessionAsync(activeSessionId);
-        activeSessionId = Progress.ActiveSessionId;
-        playerInput = Progress.GetPlayerInputDraft(Progress.ActiveSessionId);
+        var scene = ViewpointScene;
+        if (string.IsNullOrWhiteSpace(scene)) return [];
+
+        var cast = new List<CastMember>();
+        foreach (var npc in npcs.Where(item => item.LocationName == scene))
+        {
+            cast.Add(new CastMember(npc.Name, string.IsNullOrWhiteSpace(npc.BriefIntro) ? npc.IdentityText : npc.BriefIntro, false));
+        }
+        if (protagonist is not null && protagonist.LocationName == scene)
+        {
+            cast.Insert(0, new CastMember(protagonist.Name, protagonist.IdentityText, true));
+        }
+        return cast;
     }
+
+    private async Task SubmitAsync()
+    {
+        var content = playerInput.Trim();
+        if (string.IsNullOrWhiteSpace(content) || activeSession is null) return;
+
+        isSubmitting = true;
+        await gate.WaitAsync(lifetime.Token);
+        try
+        {
+            await Orchestrator.SubmitPlayerInputAsync(content, lifetime.Token);
+            playerInput = string.Empty;
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"提交失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+            isSubmitting = false;
+        }
+        // 提交即结束这次输入活动：草稿已清空，世界必须立刻回到原速，
+        // 不能让玩家提交完还白拿几秒慢动作。放在 gate 之外，因为它自己要取 gate。
+        await EndInputActivityIfActiveAsync();
+        await ReloadAsync();
+    }
+
+    private async Task TogglePauseAsync()
+    {
+        if (activeSession is null) return;
+        isTogglingPause = true;
+        await gate.WaitAsync(lifetime.Token);
+        try
+        {
+            await WorldClock.SetPausedAsync(activeSession.SessionId, activeSession.IsPaused != 1, lifetime.Token);
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"切换暂停状态失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+            isTogglingPause = false;
+        }
+        await ReloadAsync();
+    }
+
+    private async Task SwitchSessionAsync()
+    {
+        if (activeSession is not null && selectedSessionId == activeSession.SessionId) return;
+
+        // 切走之前先把旧会话的慢动作解除，否则它会被永久留在 input_slow_factor < 1 的状态。
+        // 必须在取 gate 之前调用：SetInputActivityAsync 自己要拿同一把锁。
+        await EndInputActivityIfActiveAsync();
+
+        isSwitching = true;
+        await gate.WaitAsync(lifetime.Token);
+        try
+        {
+            await SessionService.SwitchSessionAsync(selectedSessionId, lifetime.Token);
+            playerInput = string.Empty;
+            lastRenderedSequence = -1;
+            // 切换期间累积的真实时间不属于新会话，重置基准并清掉上一条世界线的推进错误。
+            lastTickStamp = Stopwatch.GetTimestamp();
+            tickError = null;
+        }
+        catch (Exception exception)
+        {
+            errorMessage = $"切换会话失败：{exception.Message}";
+        }
+        finally
+        {
+            gate.Release();
+            isSwitching = false;
+        }
+        await ReloadAsync();
+    }
+
+    private void OpenNewSessionDialog()
+    {
+        newSessionName = string.Empty;
+        newSessionMode = activeSession?.GameMode ?? "RP";
+        showNewSessionDialog = true;
+    }
+
+    private void CloseNewSessionDialog() => showNewSessionDialog = false;
 
     private async Task CreateSessionAsync()
     {
-        if (string.IsNullOrWhiteSpace(newSessionName))
+        if (string.IsNullOrWhiteSpace(newSessionName)) return;
+        isCreating = true;
+        await gate.WaitAsync(lifetime.Token);
+        try
         {
-            errorMessage = "会话名称不能为空。";
-            return;
+            await SessionService.CreateNewSessionAsync(newSessionName.Trim(), newSessionMode, lifetime.Token);
+            showNewSessionDialog = false;
+            playerInput = string.Empty;
+            lastRenderedSequence = -1;
+            // 新世界线从零开始计时，不继承创建前累积的真实时间。
+            lastTickStamp = Stopwatch.GetTimestamp();
+            tickError = null;
         }
-        await Progress.CreateSessionAsync(newSessionName);
-        newSessionName = string.Empty;
-    }
-
-    private async Task DeleteCurrentSessionAsync()
-    {
-        await Progress.DeleteCurrentSessionAsync(activeSessionId);
-    }
-
-    private async Task LoadDatabaseStateAsync()
-    {
-        await Progress.LoadDatabaseStateAsync();
-        SyncState();
-    }
-
-
-    private async Task SaveRoutingConfigAsync()
-    {
-        Progress.SelectedGmPreset = selectedGmPreset;
-        Progress.SelectedNpcPreset = selectedNpcPreset;
-        Progress.SelectedDicePreset = selectedDicePreset;
-        Progress.SelectedMemoryPreset = selectedMemoryPreset;
-        Progress.SelectedCharacterSubPreset = selectedCharacterSubPreset;
-        Progress.SelectedChapterSwitchPreset = selectedChapterSwitchPreset;
-        Progress.DelaySeconds = delaySeconds;
-        Progress.AutoRetryEnabled = autoRetryEnabled;
-        Progress.StreamingEnabled = streamingEnabled;
-
-        await Progress.SaveRoutingConfigAsync();
-    }
-
-    private async Task SaveAutoRetryAsync()
-    {
-        Progress.AutoRetryEnabled = autoRetryEnabled;
-        await Progress.SaveRoutingConfigAsync();
-    }
-
-    private async Task SaveStreamingAsync()
-    {
-        Progress.StreamingEnabled = streamingEnabled;
-        await Progress.SaveRoutingConfigAsync();
-    }
-
-
-    private string GetDiceSuccessClass(string? successLevel)
-    {
-        if (string.IsNullOrWhiteSpace(successLevel)) return "";
-        var sl = successLevel.ToLower();
-        if (sl.Contains("大成功") || sl.Contains("极难成功") || sl.Contains("困难成功") || sl.Contains("成功"))
+        catch (Exception exception)
         {
-            return "success-level-great";
+            errorMessage = $"创建会话失败：{exception.Message}";
         }
-        if (sl.Contains("大失败") || sl.Contains("失败"))
+        finally
         {
-            return "success-level-fail";
+            gate.Release();
+            isCreating = false;
         }
-        return "";
+        await ReloadAsync();
     }
 
-    private string FormatDiceResult(DiceResult? result)
+    private EventVisual Describe(TimelineEvent item) => item.EventType switch
     {
-        if (result is null) return "未执行";
-        var outcomeText = result.Outcome == result.SuccessLevel
-            ? result.Outcome
-            : $"{result.Outcome}/{result.SuccessLevel}";
-        var rollText = result.Roll is null
-            ? string.Empty
-            : $"，骰值{result.Roll}/{result.TargetAfterModifiers ?? result.Target}";
-        var detail = string.IsNullOrWhiteSpace(result.Detail) ? string.Empty : $"，{result.Detail}";
-        return $"{result.Command} => {outcomeText}{rollText}{detail}";
-    }
-
-    private static int StatPercent(int current, int max)
-    {
-        if (max <= 0) return 0;
-        return Math.Clamp((int)Math.Round(current * 100.0 / max), 0, 100);
-    }
-
-    private record EquipSlot(string Key, string Label, string Icon, string[] Keywords);
-
-    private static readonly EquipSlot[] EquipmentSlots =
-    [
-        new("weapon", "武器", "🗡️", ["武器", "weapon", "剑", "刀", "杖", "弓", "枪", "锤", "锁链"]),
-        new("body", "上身", "🛡️", ["上身", "身体", "护甲", "甲", "袍", "衣", "armor", "body", "胸"]),
-        new("legs", "下身", "👢", ["下身", "腿", "鞋", "靴", "裤", "legs", "boots", "足"]),
-        new("accessory", "饰品", "💍", ["饰品", "饰", "戒指", "项链", "护符", "吊坠", "accessory", "ring"]),
-    ];
-
-    private EquipmentItem? FindEquippedBySlot(string slotKey)
-    {
-        var slot = EquipmentSlots.First(s => s.Key == slotKey);
-        // 只看"已装备"的装备；按 equipment_type 关键字匹配槽位。
-        var equipped = equipments.Where(e => e.StatusText == "已装备").ToList();
-
-        var matched = equipped.FirstOrDefault(e =>
-            slot.Keywords.Any(k =>
-                e.EquipmentType.Contains(k, StringComparison.OrdinalIgnoreCase)
-                || e.EquipmentName.Contains(k, StringComparison.OrdinalIgnoreCase)));
-
-        if (matched is not null) return matched;
-
-        // 饰品槽兜底：未归入前三类的已装备物品落到饰品槽。
-        if (slotKey == "accessory")
-        {
-            return equipped.FirstOrDefault(e => !EquipmentSlots
-                .Where(s => s.Key != "accessory")
-                .Any(s => s.Keywords.Any(k =>
-                    e.EquipmentType.Contains(k, StringComparison.OrdinalIgnoreCase)
-                    || e.EquipmentName.Contains(k, StringComparison.OrdinalIgnoreCase))));
-        }
-
-        return null;
-    }
-
-    private bool isInitializingGame = false;
-    private bool isPrologueStage = false;
-    private bool isStartingAdventure = false;
-    private int initStep = 1;
-    private string customOpeningMessage = string.Empty;
-
-    public record ChapterInfo(int Number, string Title, string Desc);
-    private readonly List<ChapterInfo> availableChapters = new()
-    {
-        new(1, "开始的结束 (王都的一日)", "从水果摊开始的异世界之旅，遭遇银发半精灵与猎肠者艾尔莎。"),
-        new(7, "自觉的感情 (宅邸的一周)", "罗兹瓦尔豪宅的日常与暗藏的魔兽诅咒，在鬼族女仆拉姆蕾姆身边开始的死斗。"),
-        new(18, "再访王都", "返回王都参加王选，与爱蜜莉雅决裂后的绝望循环，白鲸狩猎与怠惰大罪司教的袭来。"),
-        new(53, "千辛万苦抵达的地方 (圣域的试炼与强欲魔女)", "来到圣域解除结界，面对多娜的强欲茶会与圣域试炼，罗兹瓦尔的真正阴谋展现。"),
-        new(82, "开头总由来访者开始 (水门都市的抗战)", "受邀造访水门都市普利斯特拉，数个大罪司教同时突袭，前所未有的都市防卫战打响。")
+        "KeplerNarration" => new EventVisual("✦", "开普勒 · 场景叙述", "narration"),
+        "ImportedGreeting" => new EventVisual("❖", "序章 · 原样呈现", "narration"),
+        "CharacterAction" => new EventVisual("◈", ResolveActorName(item.ActorId) ?? "在场角色", "actor"),
+        "PlayerInput" => IsTheater
+            ? new EventVisual("✎", "你的导演指令", "direction")
+            : new EventVisual("✎", ResolveActorName(item.ActorId) ?? "主角", "player"),
+        "RuleResolution" => new EventVisual("⚄", "规则结算", "rule"),
+        "WorldRewindCommitted" => new EventVisual("↺", "死亡回归 · 世界回滚", "rewind"),
+        "RuntimeControl" => new EventVisual("⏱", "运行控制", "runtime"),
+        "SceneOpportunity" => new EventVisual("◦", "行动机会", "world"),
+        "DirectorPlan" => new EventVisual("▚", "隐藏导演 · 节拍计划", "world"),
+        "StateChangeCommitted" => new EventVisual("⛁", "世界状态提交", "world"),
+        "InitialProjection" => new EventVisual("⌂", "世界初始化", "world"),
+        _ => new EventVisual("•", item.EventType, "world")
     };
-    private int selectedChapter = 1;
-    private int autoSelectedChapter = 1;
 
-    private ProtagonistInfo customProtagonist = new()
+    private string? ResolveActorName(string? actorId)
     {
-        Name = "",
-        Gender = "男",
-        Age = 17,
-        Appearance = "黑发眼眸，身着运动服",
-        IdentityText = "被召唤至异世界的少年",
-        SelfStatus = "正常",
-        LocationName = "王都",
-        BaseAttributes = "体质:45; 敏捷:55; 感知:60; 意志:70",
-        SpecialAttributes = "死亡回归:特殊",
-        ResourcesText = "手机; 方便面; 薯片"
-    };
-    private bool isCustomProtagonist = false;
-    private ProtagonistTemplate? selectedTemplate;
-    private ProtagonistInfo? selectedTemplateProtagonist;
-    private bool includeSubaruAsNpc = true;
-    private int selectedTemplateId = 0;
-
-    private void StartNewGameWizard()
-    {
-        Progress.StartNewGameWizard();
+        if (string.IsNullOrWhiteSpace(actorId)) return null;
+        var parts = actorId.Split(':', 2);
+        if (parts.Length != 2 || !int.TryParse(parts[1], out var rowId)) return actorId;
+        return parts[0] switch
+        {
+            "protagonist" => protagonist?.RowId == rowId ? protagonist.Name : "主角",
+            "npc" => npcs.FirstOrDefault(item => item.RowId == rowId)?.Name ?? actorId,
+            _ => actorId
+        };
     }
 
-    private void GoToStep1()
+    private string RenderContent(TimelineEvent item)
     {
-        Progress.GoToStep1();
+        var raw = item.EventType switch
+        {
+            "RuleResolution" => FormatJsonSummary(item.Content, ["command", "outcome", "successLevel", "roll", "detail"]),
+            "RuntimeControl" => item.Content.Contains("pause", StringComparison.OrdinalIgnoreCase) ? "世界暂停" : "世界恢复运转",
+            "DirectorPlan" => FormatJsonSummary(item.Content, ["beatKind", "narrationNeed", "cameraAction", "requestedIntensity"]),
+            "SceneOpportunity" => "调度器给出一次行动机会。",
+            "InitialProjection" => "世界初始投影已提交。",
+            "StateChangeCommitted" => "结构化状态变更已写入投影。",
+            _ => CleanText(item.Content)
+        };
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            raw = "（无正文）";
+        }
+        return System.Net.WebUtility.HtmlEncode(raw).Replace("\n", "<br />");
     }
 
-    private void GoToStep2()
-    {
-        Progress.GoToStep2();
-    }
-
-    private void GoToStep3()
-    {
-        Progress.IsCustomProtagonist = isCustomProtagonist;
-        Progress.CustomProtagonist = customProtagonist;
-        Progress.SelectedTemplateProtagonist = selectedTemplateProtagonist;
-        Progress.GoToStep3();
-    }
-
-    private void GoToStep4()
-    {
-        Progress.GoToStep4();
-    }
-
-    private void SelectChapter(int chapterNum)
-    {
-        Progress.SelectedChapter = chapterNum;
-        selectedChapter = chapterNum;
-    }
-
-    private void SelectTemplate(ProtagonistTemplate tpl)
-    {
-        Progress.SelectTemplate(tpl);
-    }
-
-    private void ToggleCustomProtagonist(bool custom)
-    {
-        Progress.ToggleCustomProtagonist(custom);
-    }
-
-    private ProtagonistInfo ReadTemplateProtagonist(string baseData)
-    {
-        using var document = JsonDocument.Parse(baseData);
-        var element = document.RootElement.TryGetProperty("protagonist", out var protagonistElement)
-            ? protagonistElement
-            : document.RootElement;
-
-        return element.Deserialize<ProtagonistInfo>(JsonOptions)
-            ?? new ProtagonistInfo { Name = "", Gender = "男", Age = 17, Appearance = "", IdentityText = "", SelfStatus = "正常", LocationName = "王都", BaseAttributes = "" };
-    }
-
-    private string GetTemplateBrief(ProtagonistTemplate tpl)
+    private static string FormatJsonSummary(string content, string[] keys)
     {
         try
         {
-            var p = ReadTemplateProtagonist(tpl.BaseData);
-            return $"{p.Gender} / {p.Age}岁 / 初始位置：{p.LocationName}\n{p.IdentityText}";
+            using var document = JsonDocument.Parse(content);
+            var pieces = new List<string>();
+            foreach (var key in keys)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if (!string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase)) continue;
+                    var text = property.Value.ValueKind == JsonValueKind.String
+                        ? property.Value.GetString()
+                        : property.Value.ToString();
+                    if (!string.IsNullOrWhiteSpace(text)) pieces.Add(text!);
+                }
+            }
+            return pieces.Count > 0 ? string.Join(" · ", pieces) : content;
         }
-        catch
+        catch (JsonException)
         {
-            return "模板数据解析失败";
+            return content;
         }
     }
 
-    private bool IsValidProtagonist()
+    private static string ShortWorldTime(string? worldTime) =>
+        DateTimeOffset.TryParse(worldTime, out var time) ? time.ToLocalTime().ToString("HH:mm") : "--:--";
+
+    private static int Pct(int current, int max) =>
+        max <= 0 ? 0 : Math.Clamp((int)Math.Round(current * 100.0 / max), 0, 100);
+
+    private static IEnumerable<KeyValuePair<string, string>> ParseAttributes(string? attributes)
     {
-        return Progress.IsValidProtagonist();
+        if (string.IsNullOrWhiteSpace(attributes)) yield break;
+        foreach (var chunk in attributes.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = chunk.Split(':', 2);
+            if (pair.Length == 2)
+            {
+                yield return new KeyValuePair<string, string>(pair[0].Trim(), pair[1].Trim());
+            }
+        }
     }
 
-    private async Task EmbarkOnAdventure()
-    {
-        await Progress.EmbarkOnAdventureAsync();
-    }
-
-
-    private string CleanEjsText(string? text)
+    // 去掉模型的思考块与遗留模板指令，只留可展示正文。
+    private static string CleanText(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-
-        // 0. Remove <think>/<thought> reasoning blocks (including stray opening/closing tags)
         var cleaned = System.Text.RegularExpressions.Regex.Replace(text, @"<think>[\s\S]*?</think>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<thought>[\s\S]*?</thought>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        // 0b. Drop any unmatched <think>/<thought> opener and everything after it, or a leftover closer
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<think>[\s\S]*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<thought>[\s\S]*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?think>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?thought>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        // 0c. Unwrap <content>...</content> so only the narrative body shows
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?(think|thought)>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         var contentMatch = System.Text.RegularExpressions.Regex.Match(cleaned, @"<content>([\s\S]*?)</content>", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         if (contentMatch.Success) cleaned = contentMatch.Groups[1].Value;
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"</?content>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        // 1. Remove <update>...</update> blocks (including the tags themselves)
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"<update>[\s\S]*?</update>", "");
-
-        // 2. Remove any individual _.set(...) statements (like _.set('chapter', X); or _.set('chapter', 'location'))
         cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"_\.set\(\s*['""].*?['""]\s*,\s*.*?\);?", "");
+        return cleaned.Trim();
+    }
 
-        // 3. Trim extra newlines or spaces left behind
-        cleaned = cleaned.Trim();
+    public async ValueTask DisposeAsync()
+    {
+        // input_slow_factor 是持久化字段。离开页面时若还停在慢动作，下次打开世界会莫名以四分之一速度跑，
+        // 所以先尽力恢复原速，再取消节拍。用 None 是因为 lifetime 马上就要被取消。
+        if (inputActive && inputActivitySessionId != 0)
+        {
+            try
+            {
+                await WorldClock.SetInputActivityAsync(
+                    inputActivitySessionId, false, InputSlowFactorValue, "InputActivityEnded", CancellationToken.None);
+            }
+            catch { /* 页面正在销毁，作用域可能已经关闭；恢复失败不影响退出 */ }
+        }
 
-        return cleaned;
+        await lifetime.CancelAsync();
+        worldTimer?.Dispose();
+        idleTimer?.Dispose();
+        lifetime.Dispose();
+        gate.Dispose();
     }
 }

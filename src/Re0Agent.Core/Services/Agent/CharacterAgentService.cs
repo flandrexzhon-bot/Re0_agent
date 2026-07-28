@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
+using Re0Agent.Core.Entities;
 using Re0Agent.Core.Models;
 using Re0Agent.Core.Services.Llm;
 using Re0Agent.Core.Services.Settings;
@@ -11,160 +12,75 @@ public sealed class CharacterAgentService(
     AgentConfigResolver configResolver,
     PromptComposer promptComposer,
     ILlmClient llmClient,
-    IRagService ragService)
+    IRagService ragService,
+    RuntimeLorebookService runtimeLorebook)
 {
     public async Task<IReadOnlyList<CharacterAgentProfile>> LoadActiveProfilesAsync(
+        bool includeProtagonistAgent = true,
         CancellationToken cancellationToken = default)
     {
         var profiles = new List<CharacterAgentProfile>();
         var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-
-        profiles.Add(new CharacterAgentProfile
-        {
-            CharacterName = protagonist?.Name ?? "菜月昴",
-            IsPlayerControlled = true,
-            CurrentStateReference = protagonist is null ? "protagonist_info:missing" : "protagonist_info:1",
-            WorldBookEntryKey = protagonist?.Name ?? "菜月昴"
-        });
-
-        var npcs = await dbContext.ImportantNpcs
-            .AsNoTracking()
-            .OrderBy(npc => npc.RowId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var npc in npcs)
+        if (includeProtagonistAgent && protagonist is not null)
         {
             profiles.Add(new CharacterAgentProfile
             {
-                CharacterName = npc.Name,
+                CharacterId = $"protagonist:{protagonist.RowId}",
+                CharacterName = protagonist.Name,
                 IsPlayerControlled = false,
-                CurrentStateReference = $"important_npc:{npc.RowId}",
-                WorldBookEntryKey = npc.Name
+                CurrentStateReference = "protagonist_info:1",
+                WorldBookEntryKey = protagonist.Name
             });
         }
 
-        // NPC 先行动，主角最后行动。
-        return profiles
-            .Where(profile => !profile.IsPlayerControlled)
-            .Concat(profiles.Where(profile => profile.IsPlayerControlled))
-            .ToList();
+        var npcs = await dbContext.ImportantNpcs.AsNoTracking().OrderBy(item => item.RowId).ToListAsync(cancellationToken);
+        profiles.AddRange(npcs.Select(npc => new CharacterAgentProfile
+        {
+            CharacterId = $"npc:{npc.RowId}",
+            CharacterName = npc.Name,
+            IsPlayerControlled = false,
+            CurrentStateReference = $"important_npc:{npc.RowId}",
+            WorldBookEntryKey = npc.Name
+        }));
+        return profiles;
     }
 
-    public async Task<string> RunTurnAsync(
-        GameRound round,
+    public async Task<string> GenerateActionAsync(
+        ActorBrief actorBrief,
         CharacterAgentProfile profile,
-        string? playerInstruction,
         CancellationToken cancellationToken = default)
     {
         var config = await configResolver.FindConfigAsync("Character", profile.CharacterName, cancellationToken);
-        var memories = await dbContext.CharacterMemory
-            .AsNoTracking()
-            .Where(memory => memory.CharacterName == profile.CharacterName)
-            .OrderByDescending(memory => memory.RowId)
-            .Take(8)
-            .ToListAsync(cancellationToken);
-
-        var allowedCategories = await BuildAllowedCategoriesAsync(profile, cancellationToken);
-        var ragContext = await ragService.QueryAsync(
-            new RagQuery
-            {
-                Text = string.Join(' ', allowedCategories.Where(k => k.Contains(':')).Select(k => k[(k.IndexOf(':') + 1)..])),
-                Chapter = round.Chapter,
-                MaxNonConstantEntries = 8,
-                MaxCharacters = 8_000,
-                IncludeChapterEntries = false,
-                AllowedCategories = allowedCategories
-            },
-            cancellationToken);
-
-        // 历史上下文（深度注入）：与本角色相关的编年史(最近5+关键词) + 本回合原版上文，
-        // 作为独立消息紧贴生成点，权重高于世界书设定。
-        var chronicleKeywords = new[] { profile.CharacterName };
-        var selectedChronicle = await ChronicleSelector.SelectAsync(dbContext, chronicleKeywords, cancellationToken);
-        var history = RoundContextBuilder.BuildHistory(round, selectedChronicle);
-
-        // 角色 Agent 只能看【受限视角】的数据库：全局状态栏 + 世界地图点 + 地图元素 + 自己的那一栏。
-        // 其余表（在册NPC全表、势力、物品、装备、任务、他人记忆等）对角色不可见。
-        var dbSummary = await DbSummaryBuilder.BuildForCharacterAsync(
-            dbContext, profile.CharacterName, profile.IsPlayerControlled, cancellationToken);
-
-        var response = await llmClient.SendChatAsync(
-            new LlmRequest
-            {
-                AgentName = profile.CharacterName,
-                Options = AgentConfigResolver.ToLlmOptions(config),
-                Messages =
-                [
-                    LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的专属角色Agent。"),
-                    LlmMessage.User(promptComposer.ComposeCharacterTurn(profile, round, memories, playerInstruction, ragContext, dbSummary)),
-                    LlmMessage.User(promptComposer.ComposeHistoryInjection(history)),
-                    LlmMessage.User(promptComposer.ComposeCharacterTurnThoughtGuide()),
-                    LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
-                ]
-            },
-            cancellationToken);
-
+        var ragContext = await ragService.QueryAsync(new RagQuery
+        {
+            Text = $"{profile.CharacterName} {actorBrief.ContextEvent.Content}",
+            Chapter = await ReadChapterAsync(cancellationToken),
+            MaxNonConstantEntries = 8,
+            IncludeChapterEntries = false
+        }, cancellationToken);
+        var importedLore = await runtimeLorebook.ActivateAsync($"{profile.CharacterName}\n{actorBrief.ContextEvent.Content}", cancellationToken: cancellationToken);
+        if (!string.IsNullOrWhiteSpace(importedLore))
+        {
+            ragContext = new RagContext { Matches = ragContext.Matches, Content = ragContext.Content + "\n\n" + importedLore };
+        }
+        var summary = await DbSummaryBuilder.BuildForCharacterAsync(
+            dbContext, profile.CharacterName, isPlayerControlled: profile.CharacterId.StartsWith("protagonist:", StringComparison.Ordinal), cancellationToken);
+        var response = await llmClient.SendChatAsync(new LlmRequest
+        {
+            AgentName = profile.CharacterName,
+            Options = AgentConfigResolver.ToLlmOptions(config),
+            Messages =
+            [
+                LlmMessage.System(config?.SystemPrompt ?? $"你是{profile.CharacterName}的角色 Agent。"),
+                LlmMessage.User(promptComposer.ComposeCharacterAction(profile, actorBrief.ContextEvent, actorBrief.PrivateMemories, actorBrief.Opportunity, ragContext, summary)),
+                LlmMessage.User(promptComposer.ComposeCharacterTurnThoughtGuide()),
+                LlmMessage.Assistant(PromptComposer.ThoughtPrefill)
+            ]
+        }, cancellationToken);
         return response.Content;
     }
 
-    private async Task<IReadOnlyList<string>> BuildAllowedCategoriesAsync(
-        CharacterAgentProfile profile,
-        CancellationToken cancellationToken)
-    {
-        var categories = new List<string> { "world_settings" };
-
-        // 角色自身
-        var characterKey = profile.WorldBookEntryKey ?? profile.CharacterName;
-        if (!string.IsNullOrWhiteSpace(characterKey))
-        {
-            categories.AddRange(
-                (await ragService.ListAllEntriesAsync(cancellationToken))
-                    .Select(WorldBookCategory.GetKey)
-                    .Where(k => k.StartsWith("characters:", StringComparison.Ordinal)
-                        && MatchesTerm(k["characters:".Length..], characterKey))
-                    .Distinct(StringComparer.Ordinal));
-        }
-
-        // 所在地点
-        var locationTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var state = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        AddTerm(locationTerms, state?.CurrentLocation);
-        AddTerm(locationTerms, state?.CurrentMinorRegion);
-        AddTerm(locationTerms, state?.CurrentMajorRegion);
-
-        if (profile.IsPlayerControlled)
-        {
-            var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-            AddTerm(locationTerms, protagonist?.LocationName);
-        }
-        else
-        {
-            var npcLocation = await dbContext.ImportantNpcs.AsNoTracking()
-                .Where(npc => npc.Name == profile.CharacterName)
-                .Select(npc => npc.LocationName)
-                .FirstOrDefaultAsync(cancellationToken);
-            AddTerm(locationTerms, npcLocation);
-        }
-
-        if (locationTerms.Count > 0)
-        {
-            categories.AddRange(
-                (await ragService.ListAllEntriesAsync(cancellationToken))
-                    .Select(WorldBookCategory.GetKey)
-                    .Where(k => k.StartsWith("locations:", StringComparison.Ordinal)
-                        && locationTerms.Any(t => MatchesTerm(k["locations:".Length..], t)))
-                    .Distinct(StringComparer.Ordinal));
-        }
-
-        return categories;
-    }
-
-    private static bool MatchesTerm(string subject, string term) =>
-        subject.Contains(term, StringComparison.OrdinalIgnoreCase)
-        || term.Contains(subject, StringComparison.OrdinalIgnoreCase);
-
-    private static void AddTerm(HashSet<string> terms, string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value)) terms.Add(value.Trim());
-    }
+    private async Task<int> ReadChapterAsync(CancellationToken cancellationToken) =>
+        await dbContext.GlobalStates.AsNoTracking().Select(item => (int?)item.CurrentChapter)
+            .FirstOrDefaultAsync(cancellationToken) ?? 1;
 }

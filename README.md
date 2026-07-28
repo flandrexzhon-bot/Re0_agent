@@ -14,19 +14,19 @@
 
 ## 这是什么
 
-「命运全书」是一个运行在 Windows 桌面上的单机文字冒险 / 跑团游戏。你扮演穿越到异世界的主角，由多个大语言模型（LLM）智能体分别扮演 **游戏主持人（GM）**、**世界中的各个 NPC 角色**，围绕你的抉择推进剧情。系统内建 Re:Zero 世界观设定书、角色属性、骰子判定与「死亡回归」机制，把原作的核心体验做成了可反复游玩的沙盒。
+「命运全书」是一个运行在 Windows 桌面上的单机连续世界文字冒险 / 跑团游戏。你扮演穿越到异世界的主角；角色会在你沉默时依据自己的目标、关系、日程和已知事实继续行动。开普勒负责可见的环境、背景与镜头，隐藏的 SceneDirector 负责节奏和候选事实选择。系统内建 Re:Zero 世界观设定书、角色属性、骰子判定与「死亡回归」机制。
 
 一句话：一本会自己写下去的、可以存档回溯、可以「死了重来」的异世界命运之书。
 
 ## 核心玩法
 
-- **六段式大回合**：每个大回合按固定流程推进 —— GM 开场 → 等你落笔抉择 → 主角行动 → 调度 NPC → NPC 依序回应 → 填表结算存档。状态机持久化到数据库，关掉软件再打开能精确从断点继续。
-- **重 roll / swipe（变体）**：对任何一段不满意都能重新生成，像 SillyTavern 那样左右滑动切换变体。开场、NPC 回复、填表记录的全部 roll 记录都会长期保留。
-- **Fork / 分支时间线**：从任意历史回合分叉出平行存档，探索「如果当时那样选会怎样」。
+- **连续事件世界**：时间线由追加式事件组成，不向玩家暴露固定回合或六段状态机；暂停、恢复、输入慢动作和世界自动推进均以事件和逻辑时钟协调。
+- **去主角中心**：在场角色可以彼此交谈、主动行动和询问主角，玩家输入不是世界推进的唯一触发器。
+- **分支时间线**：从事件游标创建独立分支，父时间线事实不被覆盖。
 - **死亡回归**：主角死亡后回到之前的存档点，保留元记忆，重走命运 —— 原作的核心设定。
 - **骰子判定与战斗**：内建骰子表格（`骰子表格SQL_v4.1.json`）+ 角色属性系统，行动与战斗以掷骰结算。
 - **世界观 RAG**：内置 4MB+ 的 Re:Zero 设定书（`re0从零开始的异世界生活.json`），按场景检索相关词条注入提示词，让 NPC 言行贴合原作。
-- **章节切换**：随剧情推进在原作关键章节（1 / 7 / 18 / 53 / 82 等）间切换世界状态。
+- **角色卡与世界书**：支持 SillyTavern JSON/PNG 角色卡、独立或内嵌世界书，以及原样保留的 `first_mes` 和备用问候。
 
 ## 技术架构
 
@@ -41,29 +41,16 @@ Re0Agent.sln
 - **持久化**：EF Core + SQLite。数据库建在用户可写目录 `%LOCALAPPDATA%`（`FileSystem.AppDataDirectory\re0agent.db`），因此装到 `Program Files` 只读目录也不影响读写。
 - **LLM 接入**：OpenAI 兼容接口（`AgentLlmClient` → `OpenAiCompatibleLlmClient`），支持 SSE 流式输出、自动重试、思考 / reasoning 模式。每个智能体可独立配置端点、密钥、模型、温度、思考强度。
 
-### 多智能体回合状态机
+### 连续事件架构
 
-回合流程由 `GameProgressService` + `AgentOrchestrator` 驱动，段位编号 1–6（见 `RoundPhase.cs`）：
-
-| 段 | 状态 | 说明 |
-|----|------|------|
-| — | `Idle` | 无进行中回合，显示「▶ 开始大回合」 |
-| 1 | `GmOpening` | GM 开场叙事 |
-| 2 | `AwaitingPlayer` | 等玩家书写主角的抉择 |
-| 3 | `ProtagonistActing` | 主角行动（消费玩家输入） |
-| 4 | `NpcDispatching` | 调度本回合出场的 NPC（排位号） |
-| 5 | `NpcResponding` | NPC 依位号依次回应 |
-| 6 | `Finalizing` | 填表 / 结算 / 存档 |
-| — | `Interrupted` | 3–6 段被手动停止，等待「继续」从断点恢复 |
-
-段位与断点编号算法化持久到 `chat_sessions.current_round_phase` / `interrupted_step`，重开 App 不靠猜。
+`WorldTickGovernor` 按逻辑时钟唤醒在场角色；`EventSingleWriter` 为每个分支分配单调序号，并在同一事务中提交事件与 `StateChangeSet`。`ProjectionReplayer` 可从事件游标重建投影，`SavePoint` 是不可变事件书签。
 
 ### 主要参与者
 
-- **GmAgent** —— 游戏主持人，负责开场与世界描述。
-- **CharacterSubAgent / CharacterAgentService** —— 扮演各 NPC 角色。
-- **ChapterSwitchAgent** —— 章节 / 世界状态切换。
-- **FormAgent + FormAgentSqlExecutor** —— 结算阶段把剧情落地为数据库更新（经 `SqlSafetyValidator` 校验的受限 SQL）。
+- **SceneDirector** —— 隐藏导演，只规划候选事实、节奏和揭示边界。
+- **KeplerAgent** —— 可见导演，只呈现已确定事实，不替角色行动。
+- **CharacterAgentService** —— 依据角色私有记忆和 `ActorBrief` 自主行动。
+- **FormAgent + StateChangeSetValidator** —— 只提出结构化状态变更，由事件单写者验证并提交，绝不执行自由 SQL。
 - **DiceEngine / CombatResolver** —— 骰子与战斗判定。
 - **BlackTeaRagService** —— 世界观设定书检索。
 
@@ -71,7 +58,7 @@ Re0Agent.sln
 
 | 路由 | 页面 | 作用 |
 |------|------|------|
-| `/` | Home | 主游戏界面：回合推进、抉择输入、变体切换 |
+| `/` | Home | 连续事件流、会话、暂停和输入 |
 | `/database` | DatabaseView | 查看当前世界 / 主角 / NPC / 物品等数据库状态 |
 | `/agents` | AgentConfig（契约之书） | 配置各 LLM 智能体的端点 / 密钥 / 模型 / 参数 |
 | `/world-codex` | WorldCodexView | 浏览世界观设定书 |

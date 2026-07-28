@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Encodings.Web;
+using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
@@ -15,8 +16,7 @@ public sealed record TemplateApplyResult(
     int SavePointId);
 
 public sealed class ProtagonistTemplateService(
-    Re0AgentDbContext dbContext,
-    SaveSystem saveSystem)
+    Re0AgentDbContext dbContext)
 {
     private const string SubaruName = "菜月昴";
 
@@ -75,14 +75,7 @@ public sealed class ProtagonistTemplateService(
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<TemplateApplyResult> ApplyTemplateAsync(
-        int templateId,
-        CancellationToken cancellationToken)
-    {
-        return await ApplyTemplateAsync(templateId, 1, cancellationToken);
-    }
-
-    public async Task<TemplateApplyResult> ApplyTemplateAsync(
+    public async Task<StateChangeSet> CreateInitialStateChangeSetAsync(
         int templateId,
         int startingChapter = 1,
         CancellationToken cancellationToken = default)
@@ -100,53 +93,16 @@ public sealed class ProtagonistTemplateService(
         protagonist.LocationName = string.Empty;
         protagonist = GameStateTextNormalizer.NormalizeProtagonist(protagonist);
 
-        var addedSubaruNpc = false;
-        var transaction = dbContext.Database.CurrentTransaction is null
-            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        try
+        var commands = new List<StateChangeCommand>
         {
-            dbContext.ChangeTracker.Clear();
-
-            await EnsureMinimumWorldStateAsync(protagonist, startingChapter, cancellationToken);
-
-            await dbContext.ProtagonistInfo.ExecuteDeleteAsync(cancellationToken);
-            dbContext.ProtagonistInfo.Add(protagonist);
-
-            if (template.IncludesSubaru == 1 && !string.Equals(protagonist.Name, SubaruName, StringComparison.Ordinal))
-            {
-                await UpsertSubaruNpcAsync(protagonist, cancellationToken);
-                addedSubaruNpc = true;
-            }
-            else
-            {
-                await dbContext.ImportantNpcs
-                    .Where(npc => npc.Name == SubaruName)
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-            }
-        }
-        catch
+            CreateInsertCommand("global_state", "1", CreateInitialGlobalState(startingChapter)),
+            CreateInsertCommand("protagonist_info", "1", protagonist)
+        };
+        if (template.IncludesSubaru == 1 && !string.Equals(protagonist.Name, SubaruName, StringComparison.Ordinal))
         {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
-            throw;
+            commands.Add(CreateInsertCommand("important_npc", "1", CreateSubaruNpc(protagonist, 1)));
         }
-
-        var savePoint = await saveSystem.CreateSavePointAsync("initial_template", cancellationToken);
-        return new TemplateApplyResult(
-            template.TemplateId,
-            template.TemplateName,
-            protagonist.Name,
-            addedSubaruNpc,
-            savePoint.SaveId);
+        return new StateChangeSet(commands);
     }
 
     public async Task CreateTemplateFromProtagonistAsync(
@@ -191,26 +147,9 @@ public sealed class ProtagonistTemplateService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task EnsureMinimumWorldStateAsync(
-        ProtagonistInfo protagonist,
-        int startingChapter,
-        CancellationToken cancellationToken)
+    private static GlobalState CreateInitialGlobalState(int startingChapter)
     {
-        // Clear old state tables so a new game start resets everything correctly
-        await dbContext.GlobalStates.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.WorldMapPoints.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.MapElements.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Factions.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Inventory.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Equipment.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Quests.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Chronicle.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.CharacterMemory.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.DeathReturnLog.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.SavePoints.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.ImportantNpcs.ExecuteDeleteAsync(cancellationToken);
-
-        dbContext.GlobalStates.Add(new GlobalState
+        return new GlobalState
         {
             RowId = 1,
             CurrentLocation = string.Empty,
@@ -220,10 +159,7 @@ public sealed class ProtagonistTemplateService(
             CurTime = GetInitialCurTime(startingChapter),
             CurrentChapter = startingChapter,
             IsLewd = "否"
-        });
-
-        // 不再硬编码任何初始地点：world_map_points 与 global_state 地点字段均留空，
-        // 由填表 Agent 在首回合按世界书生成（含主角所在地点）。
+        };
     }
 
     private static string GetInitialCurTime(int startingChapter)
@@ -244,17 +180,11 @@ public sealed class ProtagonistTemplateService(
         };
     }
 
-    private async Task UpsertSubaruNpcAsync(
-        ProtagonistInfo protagonist,
-        CancellationToken cancellationToken)
+    private static ImportantNpc CreateSubaruNpc(ProtagonistInfo protagonist, int rowId)
     {
-        await dbContext.ImportantNpcs
-            .Where(npc => npc.Name == SubaruName)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        dbContext.ImportantNpcs.Add(new ImportantNpc
+        return new ImportantNpc
         {
-            RowId = await NextRowIdAsync(dbContext.ImportantNpcs, cancellationToken),
+            RowId = rowId,
             CharId = SubaruCharId,
             Name = SubaruName,
             Gender = "男",
@@ -276,7 +206,18 @@ public sealed class ProtagonistTemplateService(
             MaxStamina = 104,
             Armor = 0,
             SkillsJson = SubaruSkillsJson
-        });
+        };
+    }
+
+    private static StateChangeCommand CreateInsertCommand(string projection, string entityId, object entity)
+    {
+        var fields = entity.GetType().GetProperties()
+            .Select(property => (Property: property, Column: property.GetCustomAttributes(typeof(ColumnAttribute), inherit: true)
+                .OfType<ColumnAttribute>().SingleOrDefault()?.Name))
+            .Where(item => item.Column is not null && item.Column != "row_id")
+            .ToDictionary(item => item.Column!, item => JsonSerializer.SerializeToElement(item.Property.GetValue(entity)), StringComparer.Ordinal);
+        return new StateChangeCommand(
+            Guid.NewGuid().ToString("N"), projection, entityId, "insert", 0, fields, "template_initialization");
     }
 
     private static ProtagonistInfo ReadTemplateProtagonist(string baseData)
@@ -315,16 +256,6 @@ public sealed class ProtagonistTemplateService(
             Armor = 0,
             SkillsJson = SubaruSkillsJson
         };
-    }
-
-    private static async Task<int> NextRowIdAsync<TEntity>(
-        DbSet<TEntity> set,
-        CancellationToken cancellationToken)
-        where TEntity : class
-    {
-        return await set.Select(entity => EF.Property<int>(entity, "RowId"))
-            .DefaultIfEmpty()
-            .MaxAsync(cancellationToken) + 1;
     }
 
 }
