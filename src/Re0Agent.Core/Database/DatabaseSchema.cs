@@ -15,7 +15,26 @@ public static class DatabaseSchema
         "quests",
         "chronicle",
         "character_memory",
+        "timeline_branches",
+        "timeline_events",
         "save_points",
+        "projection_checkpoints",
+        "projection_entity_versions",
+        "projection_command_log",
+        "world_scheduler_jobs",
+        "world_runtime_state",
+        "pending_directions",
+        "reveal_queue",
+        "lorebook_condition_entries",
+        "character_card_sources",
+        "lorebook_sources",
+        "scene_states",
+        "character_agency_states",
+        "story_threads",
+        "memory_embeddings",
+        "pacing_state_cache",
+        "director_plan_versions",
+        "director_pulses",
         "death_return_log",
         "agent_config",
         "protagonist_templates",
@@ -167,31 +186,280 @@ public static class DatabaseSchema
         """
         CREATE TABLE IF NOT EXISTS character_memory (
           row_id INTEGER PRIMARY KEY,
-          character_name TEXT NOT NULL,
-          round_index TEXT NOT NULL,
-          memory_text TEXT NOT NULL CHECK(LENGTH(memory_text) <= 400),
+          owner_character_id TEXT NOT NULL,
+          source_event_id TEXT NOT NULL,
+          world_time TEXT NOT NULL,
+          world_epoch INTEGER NOT NULL,
+          observation_channel TEXT,
+          confidence TEXT NOT NULL DEFAULT '确知',
+          visibility_scope TEXT NOT NULL,
+          memory_type TEXT NOT NULL,
+          retain_on_rewind INTEGER NOT NULL DEFAULT 0 CHECK(retain_on_rewind IN (0, 1)),
+          memory_text TEXT NOT NULL,
           emotional_state TEXT,
           created_at TEXT NOT NULL
         );
         """,
         """
-        CREATE TABLE IF NOT EXISTS save_points (
-          save_id INTEGER PRIMARY KEY,
-          chapter INT NOT NULL,
-          trigger_reason TEXT NOT NULL,
-          global_state_snapshot TEXT NOT NULL,
-          protagonist_snapshot TEXT NOT NULL,
-          world_map_snapshot TEXT NOT NULL DEFAULT '[]',
-          map_elements_snapshot TEXT NOT NULL DEFAULT '[]',
-          factions_snapshot TEXT NOT NULL DEFAULT '[]',
-          npc_snapshot TEXT NOT NULL,
-          inventory_snapshot TEXT NOT NULL,
-          equipment_snapshot TEXT NOT NULL,
-          quest_snapshot TEXT NOT NULL,
-          chronicle_snapshot TEXT,
-          character_memory_snapshot TEXT,
+        CREATE TABLE IF NOT EXISTS timeline_branches (
+          branch_id TEXT PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          parent_branch_id TEXT REFERENCES timeline_branches(branch_id),
+          parent_event_id TEXT,
+          branch_reason TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS timeline_events (
+          event_id TEXT PRIMARY KEY,
+          branch_id TEXT NOT NULL REFERENCES timeline_branches(branch_id),
+          parent_event_id TEXT REFERENCES timeline_events(event_id),
+          sequence INTEGER,
+          world_epoch INTEGER NOT NULL,
+          scene_id TEXT,
+          actor_id TEXT,
+          target_id TEXT,
+          event_type TEXT NOT NULL,
+          content TEXT NOT NULL,
+          state_change_set TEXT,
+          direct_observers TEXT NOT NULL DEFAULT '[]',
+          potential_learners TEXT NOT NULL DEFAULT '[]',
+          observability_computed INTEGER NOT NULL DEFAULT 0 CHECK(observability_computed IN (0, 1)),
+          visibility_scope TEXT NOT NULL DEFAULT '[]',
+          revealed_event_cursors TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'Draft' CHECK(status IN ('Draft', 'Committed', 'Interrupted', 'Superseded')),
+          pacing_metadata TEXT,
+          trigger_cause TEXT,
+          causal_parent_event_id TEXT,
+          real_created_at TEXT NOT NULL,
+          world_time TEXT NOT NULL,
+          UNIQUE(branch_id, sequence)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS save_points (
+          save_id INTEGER PRIMARY KEY,
+          branch_id TEXT NOT NULL REFERENCES timeline_branches(branch_id),
+          event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          world_epoch INTEGER NOT NULL,
+          trigger_reason TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS projection_checkpoints (
+          checkpoint_id INTEGER PRIMARY KEY,
+          branch_id TEXT NOT NULL REFERENCES timeline_branches(branch_id),
+          event_sequence INTEGER NOT NULL,
+          world_epoch INTEGER NOT NULL,
+          projection_data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          UNIQUE(branch_id, event_sequence, world_epoch)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS projection_entity_versions (
+          version_id INTEGER PRIMARY KEY,
+          projection TEXT NOT NULL,
+          entity_id TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          UNIQUE(projection, entity_id)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS projection_command_log (
+          command_id TEXT PRIMARY KEY,
+          event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          applied_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS world_scheduler_jobs (
+          job_id INTEGER PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          job_type TEXT NOT NULL,
+          scheduled_world_time TEXT NOT NULL,
+          payload TEXT,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS world_runtime_state (
+          session_id INTEGER PRIMARY KEY REFERENCES chat_sessions(session_id),
+          generation_backpressure_factor REAL NOT NULL DEFAULT 1.0 CHECK(generation_backpressure_factor > 0 AND generation_backpressure_factor <= 1),
+          foreground_pending_count INTEGER NOT NULL DEFAULT 0,
+          foreground_lag_seconds REAL NOT NULL DEFAULT 0,
+          current_scene_budget_used INTEGER NOT NULL DEFAULT 0,
+          input_activity_started_at TEXT,
+          input_event_count INTEGER NOT NULL DEFAULT 0,
+          foreground_admission_limit INTEGER NOT NULL DEFAULT 1,
+          budget_window_started_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS pending_directions (
+          direction_id INTEGER PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          source_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          content TEXT NOT NULL,
+          precondition_chain TEXT NOT NULL DEFAULT '[]',
+          earliest_world_time TEXT NOT NULL DEFAULT '',
+          completion_progress REAL NOT NULL DEFAULT 0,
+          block_reason TEXT,
+          status TEXT NOT NULL DEFAULT 'Pending',
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS reveal_queue (
+          queue_id INTEGER PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          status TEXT NOT NULL DEFAULT 'Pending',
+          occurred_world_time TEXT NOT NULL,
+          importance REAL NOT NULL DEFAULT 0,
+          story_thread_id INTEGER,
+          allowed_visibility_scope TEXT NOT NULL DEFAULT '[]',
+          causal_distance INTEGER NOT NULL DEFAULT 0,
+          latest_reveal_world_time TEXT NOT NULL,
+          must_reveal INTEGER NOT NULL DEFAULT 0 CHECK(must_reveal IN (0, 1)),
+          coalesced_event_ids TEXT NOT NULL DEFAULT '[]',
+          merge_category TEXT NOT NULL DEFAULT 'other',
+          created_at TEXT NOT NULL,
+          UNIQUE(session_id, event_id)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lorebook_condition_entries (
+          entry_id INTEGER PRIMARY KEY,
+          source_key TEXT NOT NULL,
+          source_order INTEGER NOT NULL,
+          legacy_condition TEXT NOT NULL,
+          fact_predicate TEXT NOT NULL,
+          content TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          UNIQUE(source_key, source_order, legacy_condition, content)
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS character_card_sources (
+          source_id INTEGER PRIMARY KEY,
+          source_key TEXT NOT NULL UNIQUE,
+          format TEXT NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          personality TEXT,
+          scenario TEXT,
+          system_prompt TEXT,
+          post_history_instructions TEXT,
+          example_dialogues TEXT,
+          creator TEXT,
+          character_version TEXT,
+          tags TEXT,
+          first_mes TEXT,
+          alternate_greetings TEXT NOT NULL DEFAULT '[]',
+          character_book TEXT,
+          extensions TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS lorebook_sources (
+          source_id INTEGER PRIMARY KEY,
+          source_key TEXT NOT NULL UNIQUE,
+          format TEXT NOT NULL,
+          entries TEXT NOT NULL,
+          extensions TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS scene_states (
+          scene_id TEXT PRIMARY KEY,
+          region_id TEXT,
+          is_foreground INTEGER NOT NULL DEFAULT 0,
+          summary TEXT NOT NULL DEFAULT '{}',
+          last_world_time TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS character_agency_states (
+          character_id TEXT PRIMARY KEY,
+          scene_id TEXT,
+          current_goal TEXT,
+          next_action_world_time TEXT NOT NULL,
+          fidelity TEXT NOT NULL DEFAULT 'foreground',
+          status TEXT NOT NULL DEFAULT 'Active'
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS story_threads (
+          thread_id INTEGER PRIMARY KEY,
+          scope TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'Active',
+          urgency REAL NOT NULL DEFAULT 0,
+          prerequisites TEXT NOT NULL DEFAULT '[]',
+          updated_world_time TEXT NOT NULL,
+          last_plan_version_id INTEGER,
+          modified_count INTEGER NOT NULL DEFAULT 0
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+          memory_row_id INTEGER PRIMARY KEY REFERENCES character_memory(row_id),
+          model_id TEXT NOT NULL,
+          dimensions INTEGER NOT NULL,
+          world_epoch INTEGER NOT NULL DEFAULT 1,
+          vector_json TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS pacing_state_cache (
+          branch_id TEXT PRIMARY KEY REFERENCES timeline_branches(branch_id),
+          event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          state_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS director_plan_versions (
+          version_id INTEGER PRIMARY KEY,
+          branch_id TEXT NOT NULL REFERENCES timeline_branches(branch_id),
+          source_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          plan_json TEXT NOT NULL,
+          reflection_reason TEXT NOT NULL,
+          changed_story_thread_id INTEGER,
+          change_summary TEXT NOT NULL DEFAULT 'no_story_thread_change',
+          pace_phase TEXT,
+          created_at TEXT NOT NULL
+        );
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS director_pulses (
+          pulse_id TEXT PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES chat_sessions(session_id),
+          trigger_event_id TEXT NOT NULL REFERENCES timeline_events(event_id),
+          plan_version_id INTEGER NOT NULL DEFAULT 0,
+          status TEXT NOT NULL CHECK(status IN ('Pending','Running','Completed','Shadowed','Consumed','Stale','Failed')),
+          suggestion_json TEXT,
+          baseline_json TEXT,
+          is_shadow INTEGER NOT NULL DEFAULT 1 CHECK(is_shadow IN (0,1)),
+          benefit_score REAL,
+          expires_at TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          completed_at TEXT,
+          consumed_at TEXT,
+          error TEXT
+        );
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_director_pulses_session_status
+        ON director_pulses(session_id, status);
         """,
         """
         CREATE TABLE IF NOT EXISTS death_return_log (
@@ -207,7 +475,7 @@ public static class DatabaseSchema
         """
         CREATE TABLE IF NOT EXISTS agent_config (
           config_id INTEGER PRIMARY KEY,
-          agent_type TEXT NOT NULL CHECK(agent_type IN ('GM', 'Character', 'Form')),
+          agent_type TEXT NOT NULL CHECK(agent_type IN ('Kepler', 'Director', 'Character', 'RuleResolver', 'Form')),
           agent_name TEXT NOT NULL UNIQUE,
           api_endpoint TEXT NOT NULL,
           api_key TEXT NOT NULL,
@@ -243,35 +511,15 @@ public static class DatabaseSchema
           session_id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_name TEXT NOT NULL,
           is_active INTEGER DEFAULT 0 CHECK(is_active IN (0, 1)),
-          parent_session_id INTEGER,
           created_at TEXT NOT NULL,
-          global_state_snapshot TEXT NOT NULL DEFAULT '{{}}',
-          protagonist_snapshot TEXT NOT NULL DEFAULT '{{}}',
-          world_map_snapshot TEXT NOT NULL DEFAULT '[]',
-          map_elements_snapshot TEXT NOT NULL DEFAULT '[]',
-          factions_snapshot TEXT NOT NULL DEFAULT '[]',
-          npc_snapshot TEXT NOT NULL DEFAULT '[]',
-          inventory_snapshot TEXT NOT NULL DEFAULT '[]',
-          equipment_snapshot TEXT NOT NULL DEFAULT '[]',
-          quest_snapshot TEXT NOT NULL DEFAULT '[]',
-          chronicle_snapshot TEXT NOT NULL DEFAULT '[]',
-          character_memory_snapshot TEXT NOT NULL DEFAULT '[]',
-          death_return_log_snapshot TEXT NOT NULL DEFAULT '[]',
-          save_points_snapshot TEXT NOT NULL DEFAULT '[]',
-          detailed_rounds_snapshot TEXT NOT NULL DEFAULT '[]',
-          round_variants_snapshot TEXT NOT NULL DEFAULT '{{}}',
-          current_round_phase TEXT NOT NULL DEFAULT 'Idle',
-          interrupted_step INTEGER NOT NULL DEFAULT 0
+          game_mode TEXT NOT NULL CHECK(game_mode IN ('RP', 'Theater')),
+          session_time_scale REAL NOT NULL DEFAULT 1.0 CHECK(session_time_scale > 0),
+          input_slow_factor REAL NOT NULL DEFAULT 1.0 CHECK(input_slow_factor > 0 AND input_slow_factor <= 1),
+          world_clock_anchor TEXT,
+          is_paused INTEGER NOT NULL DEFAULT 0 CHECK(is_paused IN (0, 1)),
+          current_branch_id TEXT,
+          current_world_epoch INTEGER NOT NULL DEFAULT 1
         );
         """
-    ];
-
-    public static readonly (string Name, string Definition)[] SavePointUpgradeColumns =
-    [
-        ("world_map_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
-        ("map_elements_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
-        ("factions_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
-        ("chronicle_snapshot", "TEXT"),
-        ("character_memory_snapshot", "TEXT")
     ];
 }

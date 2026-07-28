@@ -3,8 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Re0Agent.Core.Services.Settings;
 
-public sealed class BlackTeaRagService(
-    ChapterVariantRenderer chapterVariantRenderer) : IRagService
+public sealed class BlackTeaRagService : IRagService
 {
     public Task<RagContext> QueryAsync(RagQuery query, CancellationToken cancellationToken = default)
     {
@@ -102,7 +101,8 @@ public sealed class BlackTeaRagService(
             Entry = entry,
             Score = score,
             MatchedKeys = matchedKeys,
-            RenderedContent = chapterVariantRenderer.Render(entry.Content, chapter).Trim()
+            // 章节条件已经迁移到 lorebook_condition_entries；旧模板不能在 RAG 中直接执行。
+            RenderedContent = entry.Content.Contains("<%", StringComparison.Ordinal) ? string.Empty : entry.Content.Trim()
         };
     }
 

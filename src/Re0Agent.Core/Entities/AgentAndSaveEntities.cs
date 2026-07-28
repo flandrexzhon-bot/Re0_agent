@@ -10,11 +10,32 @@ public sealed class CharacterMemory
     [Column("row_id")]
     public int RowId { get; set; }
 
-    [Column("character_name")]
-    public required string CharacterName { get; set; }
+    [Column("owner_character_id")]
+    public required string OwnerCharacterId { get; set; }
 
-    [Column("round_index")]
-    public required string RoundIndex { get; set; }
+    [Column("source_event_id")]
+    public required string SourceEventId { get; set; }
+
+    [Column("world_time")]
+    public required string WorldTime { get; set; }
+
+    [Column("world_epoch")]
+    public int WorldEpoch { get; set; }
+
+    [Column("observation_channel")]
+    public string? ObservationChannel { get; set; }
+
+    [Column("confidence")]
+    public required string Confidence { get; set; } = "确知";
+
+    [Column("visibility_scope")]
+    public required string VisibilityScope { get; set; }
+
+    [Column("memory_type")]
+    public required string MemoryType { get; set; }
+
+    [Column("retain_on_rewind")]
+    public int RetainOnRewind { get; set; }
 
     [Column("memory_text")]
     public required string MemoryText { get; set; }
@@ -33,47 +54,17 @@ public sealed class SavePoint
     [Column("save_id")]
     public int SaveId { get; set; }
 
-    [Column("chapter")]
-    public int Chapter { get; set; }
+    [Column("branch_id")]
+    public required string BranchId { get; set; }
+
+    [Column("event_id")]
+    public required string EventId { get; set; }
+
+    [Column("world_epoch")]
+    public int WorldEpoch { get; set; }
 
     [Column("trigger_reason")]
     public required string TriggerReason { get; set; }
-
-    [Column("global_state_snapshot")]
-    public required string GlobalStateSnapshot { get; set; }
-
-    [Column("protagonist_snapshot")]
-    public required string ProtagonistSnapshot { get; set; }
-
-    [Column("world_map_snapshot")]
-    public required string WorldMapSnapshot { get; set; }
-
-    [Column("map_elements_snapshot")]
-    public required string MapElementsSnapshot { get; set; }
-
-    [Column("factions_snapshot")]
-    public required string FactionsSnapshot { get; set; }
-
-    [Column("npc_snapshot")]
-    public required string NpcSnapshot { get; set; }
-
-    [Column("inventory_snapshot")]
-    public required string InventorySnapshot { get; set; }
-
-    [Column("equipment_snapshot")]
-    public required string EquipmentSnapshot { get; set; }
-
-    [Column("quest_snapshot")]
-    public required string QuestSnapshot { get; set; }
-
-    /// <summary>编年史快照。仅 fork/重 roll 的「平行时间线」存档写入并回滚；
-    /// 死亡回归/旧存档为 null —— 此时 restore 不动 chronicle（append-only 元历史）。</summary>
-    [Column("chronicle_snapshot")]
-    public string? ChronicleSnapshot { get; set; }
-
-    /// <summary>角色记忆快照。语义同 <see cref="ChronicleSnapshot"/>：仅平行时间线存档回滚。</summary>
-    [Column("character_memory_snapshot")]
-    public string? CharacterMemorySnapshot { get; set; }
 
     [Column("created_at")]
     public required string CreatedAt { get; set; }
@@ -200,64 +191,27 @@ public sealed class ChatSession
     public int IsActive { get; set; } = 0;
 
     /// <summary>分支来源会话 ID（SillyTavern 式 branch）。null 表示根会话（非分支而来）。</summary>
-    [Column("parent_session_id")]
-    public int? ParentSessionId { get; set; }
-
     [Column("created_at")]
     public required string CreatedAt { get; set; }
 
-    [Column("global_state_snapshot")]
-    public string GlobalStateSnapshot { get; set; } = "{}";
+    [Column("game_mode")]
+    public required string GameMode { get; set; } = "RP";
 
-    [Column("protagonist_snapshot")]
-    public string ProtagonistSnapshot { get; set; } = "{}";
+    [Column("session_time_scale")]
+    public double SessionTimeScale { get; set; } = 1.0;
 
-    [Column("world_map_snapshot")]
-    public string WorldMapSnapshot { get; set; } = "[]";
+    [Column("input_slow_factor")]
+    public double InputSlowFactor { get; set; } = 1.0;
 
-    [Column("map_elements_snapshot")]
-    public string MapElementsSnapshot { get; set; } = "[]";
+    [Column("world_clock_anchor")]
+    public string? WorldClockAnchor { get; set; }
 
-    [Column("factions_snapshot")]
-    public string FactionsSnapshot { get; set; } = "[]";
+    [Column("is_paused")]
+    public int IsPaused { get; set; }
 
-    [Column("npc_snapshot")]
-    public string NpcSnapshot { get; set; } = "[]";
+    [Column("current_branch_id")]
+    public string? CurrentBranchId { get; set; }
 
-    [Column("inventory_snapshot")]
-    public string InventorySnapshot { get; set; } = "[]";
-
-    [Column("equipment_snapshot")]
-    public string EquipmentSnapshot { get; set; } = "[]";
-
-    [Column("quest_snapshot")]
-    public string QuestSnapshot { get; set; } = "[]";
-
-    [Column("chronicle_snapshot")]
-    public string ChronicleSnapshot { get; set; } = "[]";
-
-    [Column("character_memory_snapshot")]
-    public string CharacterMemorySnapshot { get; set; } = "[]";
-
-    [Column("death_return_log_snapshot")]
-    public string DeathReturnLogSnapshot { get; set; } = "[]";
-
-    [Column("save_points_snapshot")]
-    public string SavePointsSnapshot { get; set; } = "[]";
-
-    [Column("detailed_rounds_snapshot")]
-    public string DetailedRoundsSnapshot { get; set; } = "[]";
-
-    /// <summary>各回合的重 roll 变体集合（JSON：Dictionary&lt;RoundIndex, RoundVariantSet&gt;）。
-    /// 长期保留每个回合的 roll 记录；前端只在最新回合显示 swipe/重 roll，fork 回到某回合即可重现。</summary>
-    [Column("round_variants_snapshot")]
-    public string RoundVariantsSnapshot { get; set; } = "{}";
-
-    /// <summary>当前回合状态机段位（RoundPhase.ToString()）。算法化持久，重开 App 不靠猜。</summary>
-    [Column("current_round_phase")]
-    public string CurrentRoundPhase { get; set; } = "Idle";
-
-    /// <summary>停止时所处的段编号（1–6）；用于「继续」精确从断点接着跑。0 表示无断点。</summary>
-    [Column("interrupted_step")]
-    public int InterruptedStep { get; set; } = 0;
+    [Column("current_world_epoch")]
+    public int CurrentWorldEpoch { get; set; } = 1;
 }

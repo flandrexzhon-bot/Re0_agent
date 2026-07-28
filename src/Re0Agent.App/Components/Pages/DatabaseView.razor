@@ -9,8 +9,9 @@
 @using Re0Agent.Core.Models
 @inject Re0AgentDbContext DbContext
 @inject ProtagonistTemplateService TemplateService
-@inject FormAgent FormAgent
-@inject GameProgressService Progress
+@inject ChatSessionService SessionService
+@inject EventSingleWriter EventWriter
+@inject StateProjectionService StateProjection
 @inject LlmLogService LogService
 
 
@@ -229,15 +230,15 @@
         <div class="work-surface">
             <h2>独立记忆空间 (Character Memories)</h2>
             <p style="color: var(--color-text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
-                说明：每次大回合结束后，填表 Agent 会为每个在场角色写入独立记忆。在触发“死亡回归”时，<strong>除主角外的所有 NPC 的记忆都将被完全抹除</strong>。
+                说明：记忆按所有者隔离，每条都引用写入它的时间线事件与观察渠道。死亡回归时，<strong>只有世界规则指定的回归者保留被回滚循环的记忆</strong>，其余角色记忆随世界状态回滚。
             </p>
             
             <div class="table-responsive">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th style="width: 120px;">角色</th>
-                            <th style="width: 100px;">回合</th>
+                            <th style="width: 120px;">所有者</th>
+                            <th style="width: 100px;">来源事件</th>
                             <th>记忆文字</th>
                             <th style="width: 100px;">心境/情绪</th>
                             <th style="width: 180px;">记叙时间</th>
@@ -253,8 +254,8 @@
                         @foreach (var memory in memories)
                         {
                             <tr>
-                                <td style="font-family: var(--font-heading); color: var(--color-gold);">@memory.CharacterName</td>
-                                <td style="font-family: Consolas, monospace;">@memory.RoundIndex</td>
+                                <td style="font-family: var(--font-heading); color: var(--color-gold);">@memory.OwnerCharacterId</td>
+                                <td style="font-family: Consolas, monospace; font-size: 0.75rem;" title="@memory.SourceEventId">@ShortId(memory.SourceEventId)</td>
                                 <td style="font-size: 0.9rem; white-space: pre-wrap;">@memory.MemoryText</td>
                                 <td style="color: var(--color-text-secondary);">@memory.EmotionalState</td>
                                 <td style="font-size: 0.8rem; color: var(--color-text-secondary);">@memory.CreatedAt</td>
@@ -600,6 +601,10 @@
         _isDisposed = true;
     }
 
+    // 事件 ID 是 32 位 GUID，表格里只显示前 8 位，完整值放在 title。
+    private static string ShortId(string? id) =>
+        string.IsNullOrWhiteSpace(id) ? "—" : (id.Length <= 8 ? id : id[..8]);
+
     private void SafeStateHasChanged()
     {
         if (!_isDisposed)
@@ -717,8 +722,18 @@
         statusMessage = null;
         try
         {
-            await TemplateService.ApplyTemplateAsync(templateId);
-            statusMessage = "已成功应用主角模板，世界因果契约已更新！";
+            var session = await SessionService.GetActiveSessionAsync()
+                ?? throw new InvalidOperationException("没有活动会话。");
+            // 模板不再直接写表：它生成一份初始 StateChangeSet，
+            // 由事件单写者与 InitialProjection 事件原子提交，投影随之更新。
+            var stateChanges = await TemplateService.CreateInitialStateChangeSetAsync(templateId);
+            await EventWriter.CommitAsync(
+                session.SessionId,
+                "InitialProjection",
+                "{}",
+                stateChangeSet: stateChanges,
+                triggerCause: "template_apply");
+            statusMessage = "已提交初始投影事件，主角模板生效。";
             await RefreshDataAsync();
         }
         catch (Exception ex)
@@ -787,18 +802,13 @@
         }
     }
 
+    // 连续模式没有「回合结算」：以分支上最后一条已提交事件为来源，
+    // 让填表 Agent 提出结构化 StateChangeSet，再作为事件原子提交。
     private async Task ManualUpdateFormAsync()
     {
-        var latestRound = Progress.SessionRounds.LastOrDefault();
-        if (latestRound is null)
-        {
-            errorMessage = "当前会话暂无任何回合，请先开启冒险并完成首轮。";
-            return;
-        }
-
         LogService.IsManualFormFilling = true;
         LogService.ManualFormFillingError = null;
-        LogService.ManualFormFillingStatus = "正在请求填表Agent分析当前剧情并生成SQL指令...";
+        LogService.ManualFormFillingStatus = "正在请求填表 Agent 依据最新事件提出状态变更…";
 
         isBusy = true;
         errorMessage = null;
@@ -807,33 +817,16 @@
 
         try
         {
-            LogService.ManualFormFillingStatus = "正在请求填表Agent分析当前剧情并生成SQL指令...";
-            if (!_isDisposed) statusMessage = LogService.ManualFormFillingStatus;
-            SafeStateHasChanged();
+            var session = await SessionService.GetActiveSessionAsync()
+                ?? throw new InvalidOperationException("没有活动会话。");
+            var sourceEvent = await DbContext.TimelineEvents.AsNoTracking()
+                .Where(item => item.BranchId == session.CurrentBranchId && item.Status == "Committed" && item.Sequence != null)
+                .OrderByDescending(item => item.Sequence)
+                .FirstOrDefaultAsync()
+                ?? throw new InvalidOperationException("当前世界线还没有任何已提交事件。");
 
-            // 四块独立填表：每个分区各自生成 → 各自执行落库，失败的分区自动重新生成并重试
-            // （最多 3 次），成功的分区直接写入、不被其它分区拖累。
-            // 注意：内部会先把状态表回档到本回合起点基线（上一回合末态）再填，
-            // 避免在本回合已填好的表上再叠加一次本回合的变化。
-            var executions = await Progress.ManualRefillLatestRoundAsync(CancellationToken.None);
-
-            var totalExecuted = executions.Where(e => e.ErrorMessage is null).Sum(e => e.StatementsExecuted);
-            var failed = executions.Where(e => e.ErrorMessage is not null).ToList();
-
-            if (failed.Count == 0)
-            {
-                LogService.ManualFormFillingStatus = $"手动填表更新成功！四个分区共执行 {totalExecuted} 条SQL指令。";
-            }
-            else
-            {
-                var detail = string.Join("；", failed.Select(e => $"{FormAgent.DescribePartition(e.Partition)}：{e.ErrorMessage}"));
-                LogService.ManualFormFillingStatus = $"部分分区已更新（共 {totalExecuted} 条SQL）。以下分区填表失败（已重试），可稍后再次手动重试：{detail}";
-                // 全部分区失败时，向上抛出以走错误提示样式。
-                if (totalExecuted == 0)
-                {
-                    throw new InvalidOperationException(LogService.ManualFormFillingStatus);
-                }
-            }
+            var committed = await StateProjection.ProposeAndCommitAsync(session.SessionId, sourceEvent);
+            LogService.ManualFormFillingStatus = $"状态变更已提交（事件 {ShortId(committed.EventId)}，来源 {ShortId(sourceEvent.EventId)}）。";
 
             if (!_isDisposed)
             {

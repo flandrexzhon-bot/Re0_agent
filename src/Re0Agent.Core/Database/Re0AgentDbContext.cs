@@ -16,7 +16,26 @@ public sealed class Re0AgentDbContext(DbContextOptions<Re0AgentDbContext> option
     public DbSet<Quest> Quests => Set<Quest>();
     public DbSet<ChronicleEntry> Chronicle => Set<ChronicleEntry>();
     public DbSet<CharacterMemory> CharacterMemory => Set<CharacterMemory>();
+    public DbSet<TimelineBranch> TimelineBranches => Set<TimelineBranch>();
+    public DbSet<TimelineEvent> TimelineEvents => Set<TimelineEvent>();
     public DbSet<SavePoint> SavePoints => Set<SavePoint>();
+    public DbSet<ProjectionCheckpoint> ProjectionCheckpoints => Set<ProjectionCheckpoint>();
+    public DbSet<ProjectionEntityVersion> ProjectionEntityVersions => Set<ProjectionEntityVersion>();
+    public DbSet<ProjectionCommandLog> ProjectionCommandLogs => Set<ProjectionCommandLog>();
+    public DbSet<WorldSchedulerJob> WorldSchedulerJobs => Set<WorldSchedulerJob>();
+    public DbSet<WorldRuntimeState> WorldRuntimeStates => Set<WorldRuntimeState>();
+    public DbSet<PendingDirection> PendingDirections => Set<PendingDirection>();
+    public DbSet<RevealQueueItem> RevealQueue => Set<RevealQueueItem>();
+    public DbSet<LorebookConditionEntry> LorebookConditionEntries => Set<LorebookConditionEntry>();
+    public DbSet<CharacterCardSource> CharacterCardSources => Set<CharacterCardSource>();
+    public DbSet<LorebookSource> LorebookSources => Set<LorebookSource>();
+    public DbSet<SceneState> SceneStates => Set<SceneState>();
+    public DbSet<CharacterAgencyState> CharacterAgencyStates => Set<CharacterAgencyState>();
+    public DbSet<StoryThread> StoryThreads => Set<StoryThread>();
+    public DbSet<MemoryEmbedding> MemoryEmbeddings => Set<MemoryEmbedding>();
+    public DbSet<PacingStateCache> PacingStateCache => Set<PacingStateCache>();
+    public DbSet<DirectorPlanVersion> DirectorPlanVersions => Set<DirectorPlanVersion>();
+    public DbSet<DirectorPulse> DirectorPulses => Set<DirectorPulse>();
     public DbSet<DeathReturnLog> DeathReturnLog => Set<DeathReturnLog>();
     public DbSet<AgentConfig> AgentConfig => Set<AgentConfig>();
     public DbSet<ProtagonistTemplate> ProtagonistTemplates => Set<ProtagonistTemplate>();
@@ -29,5 +48,20 @@ public sealed class Re0AgentDbContext(DbContextOptions<Re0AgentDbContext> option
             .HasOne<SavePoint>()
             .WithMany()
             .HasForeignKey(log => log.SavePointId);
+
+        modelBuilder.Entity<TimelineEvent>()
+            .HasIndex(item => new { item.BranchId, item.Sequence })
+            .IsUnique();
+
+        modelBuilder.Entity<ProjectionCheckpoint>()
+            .HasIndex(item => new { item.BranchId, item.EventSequence, item.WorldEpoch })
+            .IsUnique();
+
+        modelBuilder.Entity<LorebookConditionEntry>()
+            .HasIndex(item => new { item.SourceKey, item.SourceOrder, item.LegacyCondition, item.Content })
+            .IsUnique();
+
+        modelBuilder.Entity<DirectorPulse>()
+            .HasIndex(item => new { item.SessionId, item.Status });
     }
 }

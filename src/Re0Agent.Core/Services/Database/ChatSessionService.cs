@@ -1,218 +1,95 @@
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Re0Agent.Core.Database;
 using Re0Agent.Core.Entities;
-using Re0Agent.Core.Models;
 
 namespace Re0Agent.Core.Services.Database;
 
 public sealed class ChatSessionService(
     Re0AgentDbContext dbContext,
-    ProtagonistTemplateService templateService)
+    ProtagonistTemplateService templateService,
+    ProjectionReplayer projectionReplayer,
+    EventSingleWriter eventWriter,
+    Re0Agent.Core.Services.Agent.RevealQueueService revealQueueService)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
-
     public async Task EnsureDefaultSessionAsync(CancellationToken cancellationToken = default)
     {
         await DatabaseInitializer.InitializeAsync(dbContext, cancellationToken);
-
-        var anySession = await dbContext.ChatSessions.AnyAsync(cancellationToken);
-        if (anySession)
+        if (await dbContext.ChatSessions.AnyAsync(cancellationToken))
         {
             return;
         }
 
-        // Initialize sandbox with default Subaru template
         await templateService.EnsureDefaultTemplateAsync(cancellationToken);
-        var defaultTemplate = await dbContext.ProtagonistTemplates
-            .FirstOrDefaultAsync(t => t.IsDefault == 1, cancellationToken);
-        
-        if (defaultTemplate is not null)
+        var template = await dbContext.ProtagonistTemplates
+            .FirstOrDefaultAsync(item => item.IsDefault == 1, cancellationToken);
+        var session = await CreateSessionAsync("默认会话", "RP", activate: true, cancellationToken);
+        if (template is not null)
         {
-            await ClearSandboxTablesAsync(cancellationToken);
-            await templateService.ApplyTemplateAsync(defaultTemplate.TemplateId, cancellationToken);
+            await InitializeSessionAsync(session, template.TemplateId, cancellationToken);
         }
-
-        // Create the default session
-        var defaultSession = new ChatSession
-        {
-            SessionName = "默认会话",
-            IsActive = 1,
-            CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm"),
-            DetailedRoundsSnapshot = "[]"
-        };
-
-        // Take snapshot of current state
-        await CaptureSnapshotsAsync(defaultSession, cancellationToken);
-
-        dbContext.ChatSessions.Add(defaultSession);
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<ChatSession>> ListSessionsAsync(CancellationToken cancellationToken = default)
     {
         await EnsureDefaultSessionAsync(cancellationToken);
-        return await dbContext.ChatSessions
-            .OrderByDescending(s => s.SessionId)
-            .ToListAsync(cancellationToken);
+        return await dbContext.ChatSessions.OrderByDescending(item => item.SessionId).ToListAsync(cancellationToken);
     }
 
     public async Task<ChatSession?> GetActiveSessionAsync(CancellationToken cancellationToken = default)
     {
         await EnsureDefaultSessionAsync(cancellationToken);
-        return await dbContext.ChatSessions
-            .FirstOrDefaultAsync(s => s.IsActive == 1, cancellationToken);
+        return await dbContext.ChatSessions.FirstOrDefaultAsync(item => item.IsActive == 1, cancellationToken);
     }
 
-    public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, CancellationToken cancellationToken = default)
-        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson: null, phase: null, interruptedStep: null, cancellationToken);
-
-    public async Task SaveActiveSessionStateAsync(string detailedRoundsJson, string? roundVariantsJson, CancellationToken cancellationToken = default)
-        => await SaveActiveSessionStateAsync(detailedRoundsJson, roundVariantsJson, phase: null, interruptedStep: null, cancellationToken);
-
-    /// <summary>
-    /// 落盘当前活动会话：回合明细 + 13 表快照，并可选地带上各回合重 roll 变体集合、
-    /// 状态机段位与断点段（<paramref name="roundVariantsJson"/>/<paramref name="phase"/>/
-    /// <paramref name="interruptedStep"/> 为 null 时保留库中原值不动）。
-    /// </summary>
-    public async Task SaveActiveSessionStateAsync(
-        string detailedRoundsJson,
-        string? roundVariantsJson,
-        string? phase,
-        int? interruptedStep,
+    public async Task<ChatSession> CreateSessionAsync(
+        string sessionName,
+        string gameMode,
+        bool activate = true,
         CancellationToken cancellationToken = default)
     {
-        var activeSession = await GetActiveSessionAsync(cancellationToken);
-        if (activeSession is null)
+        if (gameMode is not ("RP" or "Theater"))
         {
-            return;
+            throw new ArgumentOutOfRangeException(nameof(gameMode), "游戏模式必须为 RP 或 Theater。");
         }
 
-        activeSession.DetailedRoundsSnapshot = detailedRoundsJson;
-        if (roundVariantsJson is not null)
-        {
-            activeSession.RoundVariantsSnapshot = roundVariantsJson;
-        }
-        if (phase is not null)
-        {
-            activeSession.CurrentRoundPhase = phase;
-        }
-        if (interruptedStep is not null)
-        {
-            activeSession.InterruptedStep = interruptedStep.Value;
-        }
-        await CaptureSnapshotsAsync(activeSession, cancellationToken);
-
-        dbContext.Entry(activeSession).State = EntityState.Modified;
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task<(string DetailedRoundsJson, string RoundVariantsJson, string Phase, int InterruptedStep)> SwitchSessionAsync(int targetSessionId, string currentDetailedRoundsJson, string? currentRoundVariantsJson, string? currentPhase, int? currentInterruptedStep, CancellationToken cancellationToken = default)
-    {
-        // 1. Save current active session
-        await SaveActiveSessionStateAsync(currentDetailedRoundsJson, currentRoundVariantsJson, currentPhase, currentInterruptedStep, cancellationToken);
-
-        // 2. Perform switch
         var transaction = dbContext.Database.CurrentTransaction is null
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
             : null;
         try
         {
-            var targetSession = await dbContext.ChatSessions
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.SessionId == targetSessionId, cancellationToken);
-            
-            if (targetSession is null)
+            if (activate)
             {
-                throw new InvalidOperationException("找不到目标会话。");
+                await dbContext.ChatSessions.ExecuteUpdateAsync(
+                    setters => setters.SetProperty(item => item.IsActive, 0), cancellationToken);
             }
 
-            // Restore target session's sandbox tables
-            await ClearSandboxTablesAsync(cancellationToken);
-            await RestoreSandboxSnapshotsAsync(targetSession, cancellationToken);
-
-            // Now that sandbox is restored and ChangeTracker is cleared,
-            // load, modify, and save the session active states
-            var sessions = await dbContext.ChatSessions.ToListAsync(cancellationToken);
-            foreach (var s in sessions)
+            var session = new ChatSession
             {
-                s.IsActive = s.SessionId == targetSessionId ? 1 : 0;
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-            }
-
-            return (targetSession.DetailedRoundsSnapshot, targetSession.RoundVariantsSnapshot, targetSession.CurrentRoundPhase, targetSession.InterruptedStep);
-        }
-        catch
-        {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
-            throw;
-        }
-    }
-
-    public async Task<string> CreateNewSessionAsync(string sessionName, CancellationToken cancellationToken = default)
-    {
-        // 1. Save current active session (with empty/current rounds snapshot)
-        var activeSession = await GetActiveSessionAsync(cancellationToken);
-        string currentRounds = activeSession?.DetailedRoundsSnapshot ?? "[]";
-        await SaveActiveSessionStateAsync(currentRounds, cancellationToken);
-
-        // 2. Create new session state
-        var transaction = dbContext.Database.CurrentTransaction is null
-            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        try
-        {
-            // Clear database sandbox
-            await ClearSandboxTablesAsync(cancellationToken);
-
-            // Apply default Subaru template
-            await templateService.EnsureDefaultTemplateAsync(cancellationToken);
-            var defaultTemplate = await dbContext.ProtagonistTemplates
-                .FirstOrDefaultAsync(t => t.IsDefault == 1, cancellationToken);
-            
-            if (defaultTemplate is not null)
-            {
-                await templateService.ApplyTemplateAsync(defaultTemplate.TemplateId, cancellationToken);
-            }
-
-            // Now load sessions, deactivate, and add the new session
-            var sessions = await dbContext.ChatSessions.ToListAsync(cancellationToken);
-            foreach (var s in sessions)
-            {
-                s.IsActive = 0;
-            }
-
-            // Create new ChatSession
-            var newSession = new ChatSession
-            {
-                SessionName = string.IsNullOrWhiteSpace(sessionName) ? "未命名会话" : sessionName,
-                IsActive = 1,
-                CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm"),
-                DetailedRoundsSnapshot = "[]"
+                SessionName = string.IsNullOrWhiteSpace(sessionName) ? "未命名会话" : sessionName.Trim(),
+                IsActive = activate ? 1 : 0,
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O"),
+                GameMode = gameMode,
+                WorldClockAnchor = DateTimeOffset.UtcNow.ToString("O")
             };
-
-            await CaptureSnapshotsAsync(newSession, cancellationToken);
-            dbContext.ChatSessions.Add(newSession);
-
+            dbContext.ChatSessions.Add(session);
             await dbContext.SaveChangesAsync(cancellationToken);
+
+            var branch = new TimelineBranch
+            {
+                BranchId = Guid.NewGuid().ToString("N"),
+                SessionId = session.SessionId,
+                BranchReason = "session_start",
+                CreatedAt = DateTimeOffset.UtcNow.ToString("O")
+            };
+            dbContext.TimelineBranches.Add(branch);
+            session.CurrentBranchId = branch.BranchId;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
             if (transaction is not null)
             {
                 await transaction.CommitAsync(cancellationToken);
             }
-
-            return "[]";
+            return session;
         }
         catch
         {
@@ -224,289 +101,121 @@ public sealed class ChatSessionService(
         }
     }
 
-    /// <summary>
-    /// SillyTavern 式 branch：把源会话克隆为一个新会话，回合历史与世界快照截断到 fork 回合
-    /// （含该回合）。<strong>不</strong>触碰当前 live sandbox、<strong>不</strong>改源会话——纯快照→快照拼装。
-    /// </summary>
-    /// <param name="sourceSessionId">分支来源会话。</param>
-    /// <param name="truncatedRoundsJson">已截断到 fork 回合（含）的 DetailedRounds JSON。</param>
-    /// <param name="endSavePointId">fork 回合结束时的存档 ID（决定世界状态截断点）；null 则整盘复制源快照。</param>
-    /// <param name="newName">新分支会话名。</param>
-    /// <returns>新会话 SessionId。</returns>
+    public async Task<ChatSession> CreateNewSessionAsync(
+        string sessionName,
+        string gameMode,
+        CancellationToken cancellationToken = default)
+    {
+        await templateService.EnsureDefaultTemplateAsync(cancellationToken);
+        var template = await dbContext.ProtagonistTemplates
+            .FirstOrDefaultAsync(item => item.IsDefault == 1, cancellationToken);
+        var session = await CreateSessionAsync(sessionName, gameMode, activate: true, cancellationToken);
+        if (template is not null)
+        {
+            await InitializeSessionAsync(session, template.TemplateId, cancellationToken);
+        }
+        return session;
+    }
+
+    public async Task SwitchSessionAsync(int targetSessionId, CancellationToken cancellationToken = default)
+    {
+        var target = await dbContext.ChatSessions.SingleOrDefaultAsync(item => item.SessionId == targetSessionId, cancellationToken);
+        if (target is null || string.IsNullOrWhiteSpace(target.CurrentBranchId))
+        {
+            throw new InvalidOperationException("找不到目标会话。");
+        }
+
+        await dbContext.ChatSessions.ExecuteUpdateAsync(
+            setters => setters.SetProperty(item => item.IsActive, item => item.SessionId == targetSessionId ? 1 : 0),
+            cancellationToken);
+        var cursor = await dbContext.TimelineEvents.Where(item => item.BranchId == target.CurrentBranchId && item.Status == "Committed")
+            .OrderByDescending(item => item.Sequence).Select(item => item.EventId).FirstOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(cursor))
+        {
+            await projectionReplayer.ReplayToEventAsync(target.CurrentBranchId, cursor, cancellationToken);
+        }
+        await revealQueueService.RebuildStatusesFromEventsAsync(targetSessionId, cancellationToken);
+    }
+
     public async Task<int> BranchSessionAsync(
         int sourceSessionId,
-        string truncatedRoundsJson,
-        int? endSavePointId,
+        string parentEventId,
         string newName,
-        IReadOnlyCollection<string>? keptRoundIndices,
+        string branchReason,
         CancellationToken cancellationToken = default)
     {
-        await EnsureDefaultSessionAsync(cancellationToken);
-
         var source = await dbContext.ChatSessions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.SessionId == sourceSessionId, cancellationToken)
+            .FirstOrDefaultAsync(item => item.SessionId == sourceSessionId, cancellationToken)
             ?? throw new InvalidOperationException("找不到分支来源会话。");
-
-        var branch = new ChatSession
+        if (string.IsNullOrWhiteSpace(source.CurrentBranchId))
         {
-            SessionName = string.IsNullOrWhiteSpace(newName) ? "未命名分支" : newName,
-            IsActive = 0,
-            ParentSessionId = sourceSessionId,
-            CreatedAt = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm"),
-            DetailedRoundsSnapshot = string.IsNullOrWhiteSpace(truncatedRoundsJson) ? "[]" : truncatedRoundsJson,
-            // death_return_log 原样复制（循环纪事是跨分支的元历史）。
-            DeathReturnLogSnapshot = source.DeathReturnLogSnapshot,
-            // 重 roll 变体：仅复制保留回合（RoundIndex ≤ fork 回合）的变体集合，
-            // 使分支保留这些回合的历史 roll；fork 回合成为分支最新回合后其变体自动重现。
-            RoundVariantsSnapshot = FilterRoundVariants(source.RoundVariantsSnapshot, keptRoundIndices)
-        };
-
-        // 选定 fork 回合结束时的存档：决定 9 表 + chronicle + 记忆的截断状态。
-        var savePoints = DeserializeList<SavePoint>(source.SavePointsSnapshot);
-        var anchor = endSavePointId is int endId
-            ? savePoints.FirstOrDefault(sp => sp.SaveId == endId)
-            : savePoints.OrderByDescending(sp => sp.SaveId).FirstOrDefault();
-
-        if (anchor is null)
-        {
-            // 无可用存档锚点：整盘复制源会话快照兜底（至少世界状态与源一致，回合已截断）。
-            branch.GlobalStateSnapshot = source.GlobalStateSnapshot;
-            branch.ProtagonistSnapshot = source.ProtagonistSnapshot;
-            branch.WorldMapSnapshot = source.WorldMapSnapshot;
-            branch.MapElementsSnapshot = source.MapElementsSnapshot;
-            branch.FactionsSnapshot = source.FactionsSnapshot;
-            branch.NpcSnapshot = source.NpcSnapshot;
-            branch.InventorySnapshot = source.InventorySnapshot;
-            branch.EquipmentSnapshot = source.EquipmentSnapshot;
-            branch.QuestSnapshot = source.QuestSnapshot;
-            branch.ChronicleSnapshot = source.ChronicleSnapshot;
-            branch.CharacterMemorySnapshot = source.CharacterMemorySnapshot;
-            branch.SavePointsSnapshot = source.SavePointsSnapshot;
-        }
-        else
-        {
-            // 用锚点存档覆盖各表快照（存档本身就是 9 表 + chronicle + 记忆的整盘快照）。
-            branch.GlobalStateSnapshot = anchor.GlobalStateSnapshot;
-            branch.ProtagonistSnapshot = anchor.ProtagonistSnapshot;
-            branch.WorldMapSnapshot = anchor.WorldMapSnapshot;
-            branch.MapElementsSnapshot = anchor.MapElementsSnapshot;
-            branch.FactionsSnapshot = anchor.FactionsSnapshot;
-            branch.NpcSnapshot = anchor.NpcSnapshot;
-            branch.InventorySnapshot = anchor.InventorySnapshot;
-            branch.EquipmentSnapshot = anchor.EquipmentSnapshot;
-            branch.QuestSnapshot = anchor.QuestSnapshot;
-            // 锚点存档的 chronicle/memory 快照在加列前可能为 null，回退到源会话快照。
-            branch.ChronicleSnapshot = anchor.ChronicleSnapshot ?? source.ChronicleSnapshot;
-            branch.CharacterMemorySnapshot = anchor.CharacterMemorySnapshot ?? source.CharacterMemorySnapshot;
-            // save_points 截断到锚点（含）为止——分支不该看到 fork 点之后的存档。
-            var keptSavePoints = savePoints.Where(sp => sp.SaveId <= anchor.SaveId).ToList();
-            branch.SavePointsSnapshot = JsonSerializer.Serialize(keptSavePoints, JsonOptions);
+            throw new InvalidOperationException("来源会话没有有效时间线分支。");
         }
 
-        dbContext.ChatSessions.Add(branch);
+        var parentEventExists = await dbContext.TimelineEvents.AnyAsync(
+            item => item.EventId == parentEventId && item.BranchId == source.CurrentBranchId && item.Status == "Committed",
+            cancellationToken);
+        if (!parentEventExists)
+        {
+            throw new InvalidOperationException("分支游标不属于来源会话的当前分支。");
+        }
+        var session = await CreateSessionAsync(newName, source.GameMode, activate: false, cancellationToken);
+        var rootBranch = await dbContext.TimelineBranches
+            .SingleAsync(item => item.BranchId == session.CurrentBranchId, cancellationToken);
+        rootBranch.ParentBranchId = source.CurrentBranchId;
+        rootBranch.ParentEventId = parentEventId;
+        rootBranch.BranchReason = branchReason;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return branch.SessionId;
-    }
-
-    private static List<T> DeserializeList<T>(string json)
-        => string.IsNullOrWhiteSpace(json)
-            ? []
-            : JsonSerializer.Deserialize<List<T>>(json, JsonOptions) ?? [];
-
-    /// <summary>
-    /// 从源会话的「各回合变体」JSON（Dictionary&lt;RoundIndex, RoundVariantSet&gt;）里，
-    /// 只保留 <paramref name="keptRoundIndices"/> 指定的回合条目。null 表示全部保留。
-    /// 解析失败或为空时回退到 "{}"。
-    /// </summary>
-    private static string FilterRoundVariants(string sourceJson, IReadOnlyCollection<string>? keptRoundIndices)
-    {
-        if (string.IsNullOrWhiteSpace(sourceJson) || sourceJson == "{}")
-        {
-            return "{}";
-        }
-        if (keptRoundIndices is null)
-        {
-            return sourceJson;
-        }
-
-        try
-        {
-            var all = JsonSerializer.Deserialize<Dictionary<string, RoundVariantSet>>(sourceJson, JsonOptions);
-            if (all is null || all.Count == 0)
-            {
-                return "{}";
-            }
-            var keep = new HashSet<string>(keptRoundIndices, StringComparer.Ordinal);
-            var filtered = all.Where(kvp => keep.Contains(kvp.Key))
-                .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-            return JsonSerializer.Serialize(filtered, JsonOptions);
-        }
-        catch (JsonException)
-        {
-            return "{}";
-        }
+        await SwitchSessionAsync(session.SessionId, cancellationToken);
+        return session.SessionId;
     }
 
     public async Task DeleteSessionAsync(int sessionId, CancellationToken cancellationToken = default)
     {
-        var targetSession = await dbContext.ChatSessions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken);
-        if (targetSession is null)
+        var session = await dbContext.ChatSessions.FindAsync([sessionId], cancellationToken);
+        if (session is null)
         {
             return;
         }
-
-        var totalSessionsCount = await dbContext.ChatSessions.CountAsync(cancellationToken);
-        if (totalSessionsCount <= 1)
+        if (await dbContext.ChatSessions.CountAsync(cancellationToken) <= 1)
         {
             throw new InvalidOperationException("无法删除唯一的聊天记录。");
         }
 
-        var transaction = dbContext.Database.CurrentTransaction is null
-            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-        try
+        if (session.IsActive == 1)
         {
-            if (targetSession.IsActive == 1)
-            {
-                // Find another session to switch to
-                var otherSession = await dbContext.ChatSessions
-                    .AsNoTracking()
-                    .Where(s => s.SessionId != sessionId)
-                    .OrderByDescending(s => s.SessionId)
-                    .FirstAsync(cancellationToken);
-
-                // Clear and restore first
-                await ClearSandboxTablesAsync(cancellationToken);
-                await RestoreSandboxSnapshotsAsync(otherSession, cancellationToken);
-
-                // Now load and mark otherSession active, and save
-                var sessions = await dbContext.ChatSessions.ToListAsync(cancellationToken);
-                foreach (var s in sessions)
-                {
-                    s.IsActive = s.SessionId == otherSession.SessionId ? 1 : 0;
-                }
-            }
-
-            // Remove target
-            var toRemove = await dbContext.ChatSessions.FirstOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken);
-            if (toRemove is not null)
-            {
-                dbContext.ChatSessions.Remove(toRemove);
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-            {
-                await transaction.CommitAsync(cancellationToken);
-            }
+            var replacement = await dbContext.ChatSessions
+                .Where(item => item.SessionId != sessionId)
+                .OrderByDescending(item => item.SessionId)
+                .FirstAsync(cancellationToken);
+            replacement.IsActive = 1;
         }
-        catch
-        {
-            if (transaction is not null)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-            }
-            throw;
-        }
-    }
 
-    private async Task ClearSandboxTablesAsync(CancellationToken cancellationToken)
-    {
-        dbContext.ChangeTracker.Clear();
-        await dbContext.GlobalStates.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.WorldMapPoints.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.MapElements.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Factions.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.ProtagonistInfo.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.ImportantNpcs.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Inventory.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Equipment.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Quests.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.Chronicle.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.CharacterMemory.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.DeathReturnLog.ExecuteDeleteAsync(cancellationToken);
-        await dbContext.SavePoints.ExecuteDeleteAsync(cancellationToken);
+        var branchIds = await dbContext.TimelineBranches.Where(item => item.SessionId == sessionId)
+            .Select(item => item.BranchId).ToListAsync(cancellationToken);
+        var eventIds = await dbContext.TimelineEvents.Where(item => branchIds.Contains(item.BranchId))
+            .Select(item => item.EventId).ToListAsync(cancellationToken);
+        var saveIds = await dbContext.SavePoints.Where(item => branchIds.Contains(item.BranchId))
+            .Select(item => item.SaveId).ToListAsync(cancellationToken);
+        await dbContext.DeathReturnLog.Where(item => item.SavePointId != null && saveIds.Contains(item.SavePointId.Value)).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.SavePoints.Where(item => branchIds.Contains(item.BranchId)).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ProjectionCommandLogs.Where(item => eventIds.Contains(item.EventId)).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.TimelineEvents.Where(item => branchIds.Contains(item.BranchId)).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.ProjectionCheckpoints.Where(item => branchIds.Contains(item.BranchId)).ExecuteDeleteAsync(cancellationToken);
+        await dbContext.TimelineBranches.Where(item => item.SessionId == sessionId).ExecuteDeleteAsync(cancellationToken);
+        dbContext.ChatSessions.Remove(session);
         await dbContext.SaveChangesAsync(cancellationToken);
-        dbContext.ChangeTracker.Clear();
     }
 
-    private async Task CaptureSnapshotsAsync(ChatSession session, CancellationToken cancellationToken)
+    private async Task InitializeSessionAsync(ChatSession session, int templateId, CancellationToken cancellationToken)
     {
-        var globalState = await dbContext.GlobalStates.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var protagonist = await dbContext.ProtagonistInfo.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-        var worldMap = await dbContext.WorldMapPoints.AsNoTracking().ToListAsync(cancellationToken);
-        var mapElements = await dbContext.MapElements.AsNoTracking().ToListAsync(cancellationToken);
-        var factions = await dbContext.Factions.AsNoTracking().ToListAsync(cancellationToken);
-        var npcs = await dbContext.ImportantNpcs.AsNoTracking().ToListAsync(cancellationToken);
-        var inventory = await dbContext.Inventory.AsNoTracking().ToListAsync(cancellationToken);
-        var equipment = await dbContext.Equipment.AsNoTracking().ToListAsync(cancellationToken);
-        var quests = await dbContext.Quests.AsNoTracking().ToListAsync(cancellationToken);
-        var chronicle = await dbContext.Chronicle.AsNoTracking().ToListAsync(cancellationToken);
-        var memory = await dbContext.CharacterMemory.AsNoTracking().ToListAsync(cancellationToken);
-        var deathReturn = await dbContext.DeathReturnLog.AsNoTracking().ToListAsync(cancellationToken);
-        var savePoints = await dbContext.SavePoints.AsNoTracking().ToListAsync(cancellationToken);
-
-        session.GlobalStateSnapshot = JsonSerializer.Serialize(globalState, JsonOptions);
-        session.ProtagonistSnapshot = JsonSerializer.Serialize(protagonist, JsonOptions);
-        session.WorldMapSnapshot = JsonSerializer.Serialize(worldMap, JsonOptions);
-        session.MapElementsSnapshot = JsonSerializer.Serialize(mapElements, JsonOptions);
-        session.FactionsSnapshot = JsonSerializer.Serialize(factions, JsonOptions);
-        session.NpcSnapshot = JsonSerializer.Serialize(npcs, JsonOptions);
-        session.InventorySnapshot = JsonSerializer.Serialize(inventory, JsonOptions);
-        session.EquipmentSnapshot = JsonSerializer.Serialize(equipment, JsonOptions);
-        session.QuestSnapshot = JsonSerializer.Serialize(quests, JsonOptions);
-        session.ChronicleSnapshot = JsonSerializer.Serialize(chronicle, JsonOptions);
-        session.CharacterMemorySnapshot = JsonSerializer.Serialize(memory, JsonOptions);
-        session.DeathReturnLogSnapshot = JsonSerializer.Serialize(deathReturn, JsonOptions);
-        session.SavePointsSnapshot = JsonSerializer.Serialize(savePoints, JsonOptions);
-    }
-
-    private async Task RestoreSandboxSnapshotsAsync(ChatSession session, CancellationToken cancellationToken)
-    {
-        dbContext.ChangeTracker.Clear();
-
-        var globalState = JsonSerializer.Deserialize<GlobalState>(session.GlobalStateSnapshot, JsonOptions);
-        if (globalState is not null) dbContext.GlobalStates.Add(globalState);
-
-        var protagonist = JsonSerializer.Deserialize<ProtagonistInfo>(session.ProtagonistSnapshot, JsonOptions);
-        if (protagonist is not null) dbContext.ProtagonistInfo.Add(protagonist);
-
-        var worldMap = JsonSerializer.Deserialize<List<WorldMapPoint>>(session.WorldMapSnapshot, JsonOptions);
-        if (worldMap is not null) dbContext.WorldMapPoints.AddRange(worldMap);
-
-        var mapElements = JsonSerializer.Deserialize<List<MapElement>>(session.MapElementsSnapshot, JsonOptions);
-        if (mapElements is not null) dbContext.MapElements.AddRange(mapElements);
-
-        var factions = JsonSerializer.Deserialize<List<Faction>>(session.FactionsSnapshot, JsonOptions);
-        if (factions is not null) dbContext.Factions.AddRange(factions);
-
-        var npcs = JsonSerializer.Deserialize<List<ImportantNpc>>(session.NpcSnapshot, JsonOptions);
-        if (npcs is not null) dbContext.ImportantNpcs.AddRange(npcs);
-
-        var inventory = JsonSerializer.Deserialize<List<InventoryItem>>(session.InventorySnapshot, JsonOptions);
-        if (inventory is not null) dbContext.Inventory.AddRange(inventory);
-
-        var equipment = JsonSerializer.Deserialize<List<EquipmentItem>>(session.EquipmentSnapshot, JsonOptions);
-        if (equipment is not null) dbContext.Equipment.AddRange(equipment);
-
-        var quests = JsonSerializer.Deserialize<List<Quest>>(session.QuestSnapshot, JsonOptions);
-        if (quests is not null) dbContext.Quests.AddRange(quests);
-
-        var chronicle = JsonSerializer.Deserialize<List<ChronicleEntry>>(session.ChronicleSnapshot, JsonOptions);
-        if (chronicle is not null) dbContext.Chronicle.AddRange(chronicle);
-
-        var memory = JsonSerializer.Deserialize<List<CharacterMemory>>(session.CharacterMemorySnapshot, JsonOptions);
-        if (memory is not null) dbContext.CharacterMemory.AddRange(memory);
-
-        var deathReturn = JsonSerializer.Deserialize<List<DeathReturnLog>>(session.DeathReturnLogSnapshot, JsonOptions);
-        if (deathReturn is not null) dbContext.DeathReturnLog.AddRange(deathReturn);
-
-        var savePoints = JsonSerializer.Deserialize<List<SavePoint>>(session.SavePointsSnapshot, JsonOptions);
-        if (savePoints is not null) dbContext.SavePoints.AddRange(savePoints);
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        dbContext.ChangeTracker.Clear();
+        var stateChanges = await templateService.CreateInitialStateChangeSetAsync(templateId, cancellationToken: cancellationToken);
+        await eventWriter.CommitAsync(
+            session.SessionId,
+            "InitialProjection",
+            "{}",
+            stateChangeSet: stateChanges,
+            triggerCause: "template_initialization",
+            cancellationToken: cancellationToken);
     }
 }
