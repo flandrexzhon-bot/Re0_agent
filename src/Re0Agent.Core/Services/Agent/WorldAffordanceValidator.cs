@@ -6,6 +6,15 @@ namespace Re0Agent.Core.Services.Agent;
 
 public sealed class WorldAffordanceValidator(Re0AgentDbContext dbContext)
 {
+    public void ValidateInitialSceneProposal(InitialSceneProposal proposal, string protagonistName)
+    {
+        if (string.IsNullOrWhiteSpace(proposal.SceneId) || proposal.SceneId == "unknown")
+            throw new InvalidOperationException("初始场景提案缺少确定性地点。");
+        if (proposal.PresentCharacterNames.Count == 0 || !proposal.PresentCharacterNames.Contains(protagonistName, StringComparer.Ordinal))
+            throw new InvalidOperationException("初始场景提案缺少玩家主角。");
+        if (proposal.Conflicts.Count > 0)
+            throw new InvalidOperationException("导入角色卡的初始事实与世界事实冲突：" + string.Join("；", proposal.Conflicts));
+    }
     public async Task ValidateBeatPlanAsync(
         int sessionId,
         BeatPlan plan,

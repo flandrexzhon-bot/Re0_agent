@@ -11,7 +11,8 @@ public sealed class ImportedGreetingService(
     Re0AgentDbContext dbContext,
     EventSingleWriter eventWriter,
     ObservabilityComputer observabilityComputer,
-    InitialSceneProposalService proposalService)
+    InitialSceneProposalService proposalService,
+    WorldAffordanceValidator affordanceValidator)
 {
     public async Task<string> CommitAsync(
         int sessionId,
@@ -43,6 +44,7 @@ public sealed class ImportedGreetingService(
             triggerCause: "authored_prologue",
             cancellationToken: cancellationToken);
         var proposal = proposalService.Build(card, protagonist.Name);
+        affordanceValidator.ValidateInitialSceneProposal(proposal, protagonist.Name);
         var now = DateTimeOffset.UtcNow.ToString("O");
         var sceneExists = await dbContext.SceneStates.AnyAsync(item => item.SceneId == proposal.SceneId, cancellationToken);
         var changes = new StateChangeSet
@@ -54,6 +56,18 @@ public sealed class ImportedGreetingService(
                     ["is_foreground"] = JsonSerializer.SerializeToElement(1),
                     ["summary"] = JsonSerializer.SerializeToElement(JsonSerializer.Serialize(new { proposal.SourceKey, proposal.PresentCharacterNames })),
                     ["last_world_time"] = JsonSerializer.SerializeToElement(proposal.LogicalWorldTime)
+                }, "imported_scene_proposal"),
+            new StateChangeCommand(
+                Guid.NewGuid().ToString("N"), "global_state", "1", "update", null,
+                new Dictionary<string, JsonElement>
+                {
+                    ["current_location"] = JsonSerializer.SerializeToElement(proposal.SceneId)
+                }, "imported_scene_proposal"),
+            new StateChangeCommand(
+                Guid.NewGuid().ToString("N"), "protagonist_info", protagonist.RowId.ToString(), "update", null,
+                new Dictionary<string, JsonElement>
+                {
+                    ["location_name"] = JsonSerializer.SerializeToElement(proposal.SceneId)
                 }, "imported_scene_proposal")
         ]);
         await eventWriter.CommitAsync(
